@@ -38,7 +38,7 @@ export const QODER_CONFIG = { ...PROVIDER_OAUTH["qoder"] };
 // iFlow OAuth Configuration (Authorization Code)
 export const IFLOW_CONFIG = { ...PROVIDER_OAUTH["iflow"] };
 
-// QWEN OAuth Configuration (Device Code Flow with PKCE) — ported from krouter9-v3
+// QWEN OAuth Configuration (Device Code Flow with PKCE) — ported from 9router-v3
 // NOTE: no open-sse registry entry yet (executor falls back to DefaultExecutor);
 // add providers/registry/qwen.js for full catalog integration later.
 export const QWEN_CONFIG = {

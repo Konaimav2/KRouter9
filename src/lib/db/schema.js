@@ -159,7 +159,7 @@ export const TABLES = {
       "CREATE INDEX IF NOT EXISTS idx_rd_conn ON requestDetails(connectionId)",
     ],
   },
-  // KRouter9 automation tables (ported from krouter9-v3)
+  // KRouter9 automation tables (ported from 9router-v3)
   codebuddyAccounts: {
     columns: {
       id: "INTEGER PRIMARY KEY AUTOINCREMENT",

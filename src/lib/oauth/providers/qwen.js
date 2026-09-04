@@ -1,6 +1,6 @@
 import { QWEN_CONFIG } from "../constants/oauth.js";
 
-// QWEN OAuth (Device Code Flow with PKCE) — ported from krouter9-v3
+// QWEN OAuth (Device Code Flow with PKCE) — ported from 9router-v3
 const qwen = {
   config: QWEN_CONFIG,
   flowType: "device_code",
