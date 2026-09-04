@@ -1,0 +1,15 @@
+services:
+  krouter9:
+    build: .
+    image: krouter9:latest
+    container_name: krouter9
+    restart: unless-stopped
+    ports:
+      - "20128:20128"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - DATA_DIR=/app/data
+      - PORT=20128
+      - INITIAL_PASSWORD=change-me
+      - JWT_SECRET=change-me-to-a-long-random-secret
