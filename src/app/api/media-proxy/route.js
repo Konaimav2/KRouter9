@@ -27,7 +27,7 @@ function isAllowedUrl(urlStr) {
 }
 
 // GET /api/media-proxy?url=<encoded_url>
-// Server-side proxy for CDN URLs (bypass CORS). Ported from krouter9-v3 (Next-native).
+// Server-side proxy for CDN URLs (bypass CORS). Ported from 9router-v3 (Next-native).
 export async function GET(req) {
     try {
         const searchParams = new URL(req.url).searchParams;

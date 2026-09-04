@@ -50,6 +50,8 @@ logs/*
 source/*
 .cursor/*
 docs/*
+!docs/API-AUTOMATION.md
+!docs/FEATURES.md
 !docs/ARCHITECTURE.md
 test/*
 open-sse/test/*
@@ -92,3 +94,6 @@ graphify-out/*
 
 # compose bind-mount data dir
 /data/_backup_files/
+
+# internal port/dev logs
+PORT_*.md

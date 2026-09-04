@@ -7,7 +7,7 @@
 
   It routes AI coding tools (Claude Code, Cursor, Antigravity, Copilot, Codex, Gemini, OpenCode, Cline) across 40+ providers, and adds credit accounting, a circuit breaker, guardrails, semantic caching, account automation, and webhook events on top of the base router.
 
-  [Quick start](#quick-start) · [What's added](#whats-added-over-9router) · [Migration](#migrate-from-another-router) · [API docs](./docs/API-AUTOMATION.md) · [Feature details](./docs/KROUTER9-FEATURES.md)
+  [Quick start](#quick-start) · [What's added](#whats-added-over-9router) · [Migration](#migrate-from-another-router) · [API docs](./docs/API-AUTOMATION.md) · [Feature details](./docs/FEATURES.md)
 
 </div>
 
@@ -80,7 +80,7 @@ Coming from another router? One command moves your accounts, keys, and combos ov
 
 ## What's added over 9router
 
-Everything below was ported from source and tested against a running instance. File paths and per-feature notes are in [docs/KROUTER9-FEATURES.md](./docs/KROUTER9-FEATURES.md).
+Everything below was ported from source and tested against a running instance. File paths and per-feature notes are in [docs/FEATURES.md](./docs/FEATURES.md).
 
 ### From srouter
 
@@ -181,6 +181,51 @@ curl -b c.txt "http://127.0.0.1:20128/api/models/smart?q=deepseek&limit=5"
 
 ---
 
+## Connect your coding tool
+
+The router speaks the OpenAI Chat Completions format and also accepts Claude and Gemini request shapes, so most tools work by pointing them at one URL.
+
+The dashboard's CLI Tools page writes the config for you. Supported tools: Claude Code, Codex, GitHub Copilot, Cline, OpenClaw, OpenCode, Antigravity, Droid, Grok, Kilo, DeepSeek TUI, and more.
+
+| Tool | How to connect |
+|---|---|
+| Claude Code, Codex, Copilot, Cline, OpenCode, OpenClaw | Dashboard → CLI Tools → pick the tool → it writes the config |
+| Cursor / Windsurf | Settings → Models → OpenAI base URL `http://localhost:20128/v1` |
+| Anything OpenAI-compatible | Base URL `http://localhost:20128/v1` + an API key from the dashboard |
+
+Every key's quota, usage, and fallback behavior is visible in the dashboard.
+
+---
+
+## FAQ
+
+**Does this cost money?**
+The router itself is free and runs locally. Providers cost whatever they normally cost. Free and self-hosted providers work the same way as paid ones.
+
+**Where is my data?**
+Everything (accounts, keys, usage history, settings) lives in SQLite under `~/.krouter9/` (or `DATA_DIR`). Nothing leaves your machine except the requests you send to providers.
+
+**How is this different from running 9router?**
+Same core engine and dashboard. KRouter9 adds credit accounting per key, a circuit breaker, model-level fallback rules, guardrails, semantic caching, quota pools, account automation suites, webhook events, and several correctness fixes. The full list with file paths is in [docs/FEATURES.md](./docs/FEATURES.md).
+
+**Can I move my existing 9router setup over?**
+Yes. See [Migration](#migrate-from-another-router): accounts, keys, combos, and settings carry over in one command.
+
+**Windows support?**
+The CLI runs on Windows (it stores state under `AppData/Roaming/krouter9`). The dashboard and API work anywhere Node runs.
+
+## Documentation
+
+| Doc | Contents |
+|---|---|
+| [docs/FEATURES.md](./docs/FEATURES.md) | Every added feature with file paths |
+| [docs/API-AUTOMATION.md](./docs/API-AUTOMATION.md) | Full API reference for scripting and bots |
+| [DOCKER.md](./DOCKER.md) | Container guide: build, compose, ops, image publishing |
+| [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Upstream system architecture (still applies) |
+| [CHANGELOG.md](./CHANGELOG.md) | Upstream changelog through v0.5.65 |
+
+---
+
 ## Where the features came from
 
 | Source repo | What was taken | Where it landed |
@@ -190,7 +235,7 @@ curl -b c.txt "http://127.0.0.1:20128/api/models/smart?q=deepseek&limit=5"
 | [9router-v3](https://github.com/adnan-afk/9router-v3) | QWEN OAuth, opencode-go, codebuddy/ammail/CF automation, AgentRouter proxy, media-proxy | /api/automation/*, executors |
 | [ZenRouter](https://github.com/ZenRouter/ZenRouter) | TOML RTK engine, dev filters, tool compressor, streamMode/prefill/deferred-tool fixes, clientVersions, quota-aware, scheduler, correlation | open-sse engine hardening |
 
-Each port keeps its MIT attribution header. The upstream audit with per-feature evidence paths is in [docs/KROUTER9-FEATURES.md](./docs/KROUTER9-FEATURES.md).
+Each port keeps its MIT attribution header. The upstream audit with per-feature evidence paths is in [docs/FEATURES.md](./docs/FEATURES.md).
 
 ---
 

@@ -6,7 +6,7 @@ import { getAmmailClientFromSettings } from "@/lib/automation/ammailClient.js";
 
 export const dynamic = "force-dynamic";
 
-// GET /api/automation/ammail — status + inboxes + recent OTPs (ported from krouter9-v3)
+// GET /api/automation/ammail — status + inboxes + recent OTPs (ported from 9router-v3)
 export async function GET() {
   try {
     const settings = await getSettings();
