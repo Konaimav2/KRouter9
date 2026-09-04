@@ -18,34 +18,25 @@
 **1. Install and start:**
 
 ```bash
-git clone https://github.com/Konaimav2/krouter9.git
-cd krouter9
-cp .env.example .env
-npm install
-PORT=20128 NEXT_PUBLIC_BASE_URL=http://localhost:20128 npm run dev
+npm install -g krouter9
+krouter9
 ```
 
 The dashboard opens at `http://localhost:20128`, the API at `http://localhost:20128/v1`.
+Default dashboard password is `123456`; change it in Settings.
 
-Production mode:
-
-```bash
-npm run build
-PORT=20128 HOSTNAME=0.0.0.0 NEXT_PUBLIC_BASE_URL=http://localhost:20128 npm run start
-```
-
-Docker instead:
+Docker:
 
 ```bash
-docker build -t krouter9 .
 docker run -d --name krouter9 --restart unless-stopped \
   -p 20128:20128 \
   -v "$HOME/.krouter9:/app/data" \
   -e DATA_DIR=/app/data \
-  krouter9
+  ghcr.io/konaimav2/krouter9:latest
 ```
 
-Or `docker compose up -d`. See [DOCKER.md](./DOCKER.md) for the full container guide.
+Or build the image yourself: `docker build -t krouter9 .` then run it with the same flags.
+`docker compose up -d` also works. See [DOCKER.md](./DOCKER.md) for the full container guide.
 
 **2. Connect a free provider (no signup needed):**
 
@@ -60,7 +51,42 @@ Claude Code / Codex / Cursor / Cline settings:
   Model:    kr/claude-sonnet-4.5
 ```
 
-Details per tool are in [Connect your coding tool](#connect-your-coding-tool) below.
+That is the whole setup. Details per tool are in [Connect your coding tool](#connect-your-coding-tool) below.
+
+Coming from another router? One command moves your accounts, keys, and combos over. See [Migration](#migrate-from-another-router).
+
+---
+
+## Run from source
+
+For development or if you prefer not to use the published package:
+
+```bash
+git clone https://github.com/Konaimav2/krouter9.git
+cd krouter9
+cp .env.example .env
+npm install
+PORT=20128 NEXT_PUBLIC_BASE_URL=http://localhost:20128 npm run dev
+```
+
+Production mode from source:
+
+```bash
+npm run build
+PORT=20128 HOSTNAME=0.0.0.0 NEXT_PUBLIC_BASE_URL=http://localhost:20128 npm run start
+```
+
+Then connect a provider and your tools:
+
+1. Open `http://localhost:20128/dashboard`. The default password is `123456`; change it in Settings.
+2. Go to Providers and connect an account (OAuth or API key).
+3. Point your coding tool at the router:
+
+```
+Endpoint: http://localhost:20128/v1
+API Key:  [copy from dashboard, Endpoint & Key page]
+Model:    <provider>/<model>   e.g. antigravity/claude-sonnet-4-6
+```
 
 Running from source, for development:
 

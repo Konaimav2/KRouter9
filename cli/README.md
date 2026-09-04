@@ -1,125 +1,49 @@
-# 9Router - FREE AI Router & Token Saver
+# krouter9
 
-**Never stop coding. Save 20-40% tokens with RTK + auto-fallback to FREE & cheap AI models.**
+FREE AI router & token saver. Connect Claude Code, Codex, Cursor, Cline, OpenCode, Antigravity,
+Copilot, and any OpenAI-compatible tool to 40+ providers, with auto-fallback and RTK token saving.
 
-**Connect All AI Code Tools (Claude Code, Cursor, Antigravity, Copilot, Codex, Gemini, OpenCode, Cline, OpenClaw...) to 40+ AI Providers & 100+ Models.**
+Built on [decolua/9router](https://github.com/decolua/9router) v0.5.65 with 30 merged features
+from srouter, OmniRoute, 9router-v3, and ZenRouter. Full docs:
+[github.com/Konaimav2/krouter9](https://github.com/Konaimav2/krouter9).
 
-[![npm](https://img.shields.io/npm/v/9router.svg)](https://www.npmjs.com/package/9router)
-[![Downloads](https://img.shields.io/npm/dm/9router.svg)](https://www.npmjs.com/package/9router)
-[![Docker Pulls](https://img.shields.io/docker/pulls/decolua/9router.svg?logo=docker&label=Docker%20pulls)](https://hub.docker.com/r/decolua/9router)
-[![GHCR](https://img.shields.io/badge/GHCR-decolua%2F9router-blue?logo=github)](https://github.com/decolua/9router/pkgs/container/9router)
-[![License](https://img.shields.io/npm/l/9router.svg)](https://github.com/decolua/9router/blob/main/LICENSE)
-
-<a href="https://trendshift.io/repositories/22628" target="_blank"><img src="https://trendshift.io/api/badge/repositories/22628" alt="decolua%2F9router | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-
-[🌐 Website](https://9router.com) • [📖 Full Docs](https://github.com/decolua/9router)
-
----
-
-## 🤔 Why 9Router?
-
-**Stop wasting money, tokens and hitting limits:**
-
-- ❌ Subscription quota expires unused every month
-- ❌ Rate limits stop you mid-coding
-- ❌ Tool outputs (git diff, grep, ls...) burn tokens fast
-- ❌ Expensive APIs ($20-50/month per provider)
-
-**9Router solves this:**
-
-- ✅ **RTK Token Saver** - Auto-compress tool_result, save 20-40% tokens
-- ✅ **Maximize subscriptions** - Track quota, use every bit before reset
-- ✅ **Auto fallback** - Subscription → Cheap → Free, zero downtime
-- ✅ **Multi-account** - Round-robin between accounts per provider
-- ✅ **Universal** - Works with any OpenAI/Claude-compatible CLI
-
----
-
-## ⚡ Quick Start
-
-**Option 1 — npm (recommended for desktop):**
+## Install
 
 ```bash
-npm install -g 9router
-9router
-
-# Or run directly with npx
-npx 9router
+npm install -g krouter9
+krouter9
 ```
 
-**Option 2 — Docker (server/VPS):**
+The dashboard opens at `http://localhost:20128`, the API at `http://localhost:20128/v1`.
 
-```bash
-docker run -d --name 9router -p 20128:20128 \
-  -v "$HOME/.9router:/app/data" -e DATA_DIR=/app/data \
-  decolua/9router:latest
-```
+Default dashboard password is `123456`; change it in Settings.
 
-Published images: [Docker Hub](https://hub.docker.com/r/decolua/9router) • [GHCR](https://github.com/decolua/9router/pkgs/container/9router) (multi-platform amd64/arm64).
-
-🎉 Dashboard opens at `http://localhost:20128`
-
-**2. Connect a FREE provider (no signup needed):**
-
-Dashboard → Providers → Connect **Kiro AI** (free Claude unlimited) or **OpenCode Free** (no auth) → Done!
-
-**3. Use in your CLI tool:**
+## Use it in your coding tool
 
 ```
-Claude Code/Codex/OpenClaw/Cursor/Cline Settings:
+Claude Code / Codex / Cursor / Cline settings:
   Endpoint: http://localhost:20128/v1
   API Key:  [copy from dashboard]
-  Model:    kr/claude-sonnet-4.5
+  Model:    provider/model   e.g. antigravity/claude-sonnet-4-6
 ```
 
-That's it! Start coding with FREE AI models.
+## What the CLI does
 
----
+`krouter9` starts the full router: dashboard, OpenAI-compatible API, RTK token saver,
+account fallback, and background schedulers. State lives in `~/.krouter9/`
+(`DATA_DIR` overrides it). The CLI downloads and manages its runtime; it does not need
+this repository cloned.
 
-## 🚀 CLI Options
+## Docker
 
 ```bash
-9router                    # Start with default settings
-9router --port 8080        # Custom port
-9router --no-browser       # Don't open browser
-9router --skip-update      # Skip auto-update check
-9router --help             # Show all options
+docker run -d --name krouter9 --restart unless-stopped \
+  -p 20128:20128 \
+  -v "$HOME/.krouter9:/app/data" \
+  -e DATA_DIR=/app/data \
+  ghcr.io/konaimav2/krouter9:latest
 ```
 
-**Dashboard**: `http://localhost:20128/dashboard`
+## License
 
----
-
-## 🛠️ Supported CLI Tools
-
-Claude-Code • OpenClaw • Codex • OpenCode • Cursor • Antigravity • Cline • Continue • Droid • Roo • Copilot • Kilo Code • Gemini CLI • Qwen Code • iFlow • Crush • Crusher • Aider
-
-Any tool supporting OpenAI/Claude-compatible API works.
-
----
-
-## 💾 Data Location
-
-- **macOS/Linux**: `~/.9router/db/data.sqlite`
-- **Windows**: `%APPDATA%/9router/db/data.sqlite`
-- **Docker**: `/app/data/db/data.sqlite` (mount `$HOME/.9router` to persist)
-
----
-
-## 📚 Documentation
-
-Full docs, advanced setup, video tutorials & development guide:
-
-- **GitHub**: https://github.com/decolua/9router
-- **Full README**: https://github.com/decolua/9router/blob/main/app/README.md
-- **Website**: https://9router.com
-
----
-
-## 🙏 Acknowledgments
-
-- **[CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)** - Original Go implementation
-
-## 📄 License
-
-MIT License - see [LICENSE](LICENSE) for details.
+MIT. Carries upstream [decolua/9router](https://github.com/decolua/9router) attribution.
