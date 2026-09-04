@@ -293,6 +293,13 @@ export async function buildModelsList(kindFilter, options = {}) {
   const models = [];
 
   // Combos first (filtered by kind). Web combos expose `kind` so AI knows search vs fetch.
+  // Each combo is emitted twice: bare name and kr/-prefixed. Clients that validate
+  // the configured model against this list (hermes, some OpenAI SDKs) may qualify
+  // every model with the router prefix; chat-side resolution strips the prefix
+  // and matches the bare combo name, so both ids resolve to the same combo.
+  // The kr/-prefixed entry wins the dedupe later only if emitted first; bare name
+  // is the canonical id, so prefix entries are added AFTER the bare ones.
+  const comboPrefixEntries = [];
   for (const combo of combos) {
     if (!comboMatchesKinds(combo, kindFilter)) continue;
     const entry = {
@@ -304,7 +311,9 @@ export async function buildModelsList(kindFilter, options = {}) {
       entry.kind = combo.kind;
     }
     models.push(entry);
+    comboPrefixEntries.push({ ...entry, id: `kr/${combo.name}` });
   }
+  models.push(...comboPrefixEntries);
 
   if (connections.length === 0) {
     // DB unavailable -> return static models, filtered by per-model kind

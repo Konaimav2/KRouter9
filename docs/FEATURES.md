@@ -284,7 +284,29 @@ refreshed every 15 minutes) for AgentRouter-fronted providers.
 **How it works.** `src/lib/proxy-agentrouter/engine.js`: `startAgentRouterProxy()` spawns a local
 proxy; import it from a route or script. No dashboard UI.
 
-### 20. Media proxy
+### 20. Custom request headers and User-Agent per connection
+
+**What.** Any provider connection (API-key, OAuth, compatible-node) can send custom request
+headers and a User-Agent override on every upstream request.
+
+**How to use.**
+- Dashboard: Providers -> Add/Edit connection -> "User-Agent override" and
+  "Custom request headers (JSON)" fields.
+- [API] POST /api/providers or PUT /api/providers/:id with:
+  `{"customHeaders": {"X-Title": "myapp", "HTTP-Referer": "https://my.app"}, "userAgent": "myapp/1.0"}`.
+  Empty object clears custom headers; empty string clears the User-Agent.
+
+**How it works.** Stored in the connection's `providerSpecificData` (`customHeaders`, `userAgent`).
+`open-sse/executors/base.js` `buildHeaders` applies them last, so they can deliberately override
+auth headers and default User-Agents.
+
+**Files.** `open-sse/executors/base.js`, `src/app/api/providers/route.js`,
+`src/app/api/providers/[id]/route.js`, dashboard modals.
+
+**Verify.** Set a custom header, send one chat request, inspect the upstream receipt or a
+request-echo endpoint to see the header arrive.
+
+### 20b. Media proxy
 
 **What.** Server-side proxy for CDN URLs that blocks CORS.
 

@@ -116,6 +116,20 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ error: proxyPoolResult.error }, { status: 400 });
     }
 
+    // Custom per-connection request headers and User-Agent (any provider type).
+    const customHeadersUpdate = {};
+    let hasCustomHeadersUpdate = false;
+    if (body.customHeaders !== undefined) {
+      hasCustomHeadersUpdate = true;
+      if (body.customHeaders && typeof body.customHeaders === "object" && !Array.isArray(body.customHeaders)) {
+        for (const [k, v] of Object.entries(body.customHeaders)) {
+          if (typeof k === "string" && k.trim() && v != null) customHeadersUpdate[k.trim()] = String(v);
+        }
+      }
+    }
+    const userAgentUpdate = typeof body.userAgent === "string" ? body.userAgent.trim() : undefined;
+    const hasUserAgentUpdate = body.userAgent !== undefined;
+
     const updateData = {};
     if (name !== undefined) updateData.name = name;
     if (priority !== undefined) updateData.priority = priority;
@@ -128,6 +142,8 @@ export async function PUT(request, { params }) {
     if (lastErrorAt !== undefined) updateData.lastErrorAt = lastErrorAt;
 
     if (
+      hasCustomHeadersUpdate ||
+      hasUserAgentUpdate ||
       shouldMergeProviderSpecificData(
         existing.providerSpecificData,
         providerSpecificData,
@@ -151,6 +167,21 @@ export async function PUT(request, { params }) {
           delete updateData.providerSpecificData.proxyPoolId;
         } else {
           updateData.providerSpecificData.proxyPoolId = proxyPoolResult.proxyPoolId;
+        }
+      }
+
+      if (hasCustomHeadersUpdate) {
+        if (Object.keys(customHeadersUpdate).length > 0) {
+          updateData.providerSpecificData.customHeaders = customHeadersUpdate;
+        } else {
+          delete updateData.providerSpecificData.customHeaders;
+        }
+      }
+      if (hasUserAgentUpdate) {
+        if (userAgentUpdate) {
+          updateData.providerSpecificData.userAgent = userAgentUpdate;
+        } else {
+          delete updateData.providerSpecificData.userAgent;
         }
       }
     }

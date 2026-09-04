@@ -168,6 +168,18 @@ export async function POST(request) {
       connectionNoProxy: proxyConfig.connectionNoProxy,
     };
 
+    // Custom per-connection request headers and User-Agent (any provider type).
+    if (body.customHeaders && typeof body.customHeaders === "object" && !Array.isArray(body.customHeaders)) {
+      const clean = {};
+      for (const [k, v] of Object.entries(body.customHeaders)) {
+        if (typeof k === "string" && k.trim() && v != null) clean[k.trim()] = String(v);
+      }
+      if (Object.keys(clean).length > 0) mergedProviderSpecificData.customHeaders = clean;
+    }
+    if (typeof body.userAgent === "string" && body.userAgent.trim()) {
+      mergedProviderSpecificData.userAgent = body.userAgent.trim();
+    }
+
     if (proxyPoolId !== null) {
       mergedProviderSpecificData.proxyPoolId = proxyPoolId;
     }

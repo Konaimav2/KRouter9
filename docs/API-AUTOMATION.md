@@ -15,6 +15,20 @@ curl -c cookies.txt -X POST http://127.0.0.1:20128/api/auth/login \
 
 ## 2. Accounts (provider connections)
 
+### Custom request headers and User-Agent (per connection)
+```bash
+# set on create or update (any provider type):
+curl -b cookies.txt -X PUT http://127.0.0.1:20128/api/providers/PROVIDER_ID \
+  -H 'Content-Type: application/json' \
+  -d '{"customHeaders": {"X-Title": "myapp", "HTTP-Referer": "https://my.app"}, "userAgent": "myapp/1.0"}'
+# clear: customHeaders: {} and userAgent: ""
+# Applied last in buildHeaders, so they can deliberately override auth headers and default UA.
+```
+
+### Combo model ids
+Combos appear in `/v1/models` both bare (`my-combo`) and prefixed (`kr/my-combo`).
+Requests may use either id: the prefix is stripped and the bare combo resolves.
+
 ### List accounts + status
 ```bash
 curl -b cookies.txt http://127.0.0.1:20128/api/providers
@@ -33,6 +47,20 @@ curl -b cookies.txt -X POST http://127.0.0.1:20128/api/providers \
 ```bash
 curl -b cookies.txt -X DELETE http://127.0.0.1:20128/api/providers/PROVIDER_ID
 ```
+
+### Custom request headers and User-Agent (per connection)
+```bash
+# set on create or update (any provider type):
+curl -b cookies.txt -X PUT http://127.0.0.1:20128/api/providers/PROVIDER_ID \
+  -H 'Content-Type: application/json' \
+  -d '{"customHeaders": {"X-Title": "myapp", "HTTP-Referer": "https://my.app"}, "userAgent": "myapp/1.0"}'
+# clear: customHeaders: {} and userAgent: ""
+# Applied last in buildHeaders, so they can deliberately override auth headers and default UA.
+```
+
+### Combo model ids
+Combos appear in `/v1/models` both bare (`my-combo`) and prefixed (`kr/my-combo`).
+Requests may use either id: the prefix is stripped and the bare combo resolves.
 
 ### OAuth accounts (antigravity/claude/codex/gemini-cli/qwen/iflow/kimi/...)
 ```bash
