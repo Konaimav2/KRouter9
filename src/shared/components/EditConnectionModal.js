@@ -23,6 +23,9 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
   });
   const [cloudflareData, setCloudflareData] = useState({ accountId: "" });
   const [region, setRegion] = useState("");
+  const [customHeadersText, setCustomHeadersText] = useState("");
+  const [userAgent, setUserAgent] = useState("");
+  const [headersError, setHeadersError] = useState(null);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
   const [validating, setValidating] = useState(false);
@@ -48,6 +51,11 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
       if (connection.provider === "cloudflare-ai" && connection.providerSpecificData) {
         setCloudflareData({ accountId: connection.providerSpecificData.accountId || "" });
       }
+      // Load custom headers / UA overrides
+      const psd = connection.providerSpecificData || {};
+      setCustomHeadersText(psd.customHeaders ? JSON.stringify(psd.customHeaders, null, 2) : "");
+      setUserAgent(psd.userAgent || "");
+      setHeadersError(null);
       // Load region for providers that support it (e.g. xiaomi-tokenplan)
       const providerCfg = AI_PROVIDERS?.[connection.provider];
       if (providerCfg?.regions) {
@@ -171,7 +179,24 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
       if (providerRegions && region) {
         updates.providerSpecificData = buildRegionSpecificData();
       }
-      
+
+      // Custom headers / UA: send explicit fields; empty JSON clears them.
+      setHeadersError(null);
+      if (customHeadersText.trim()) {
+        try {
+          const parsed = JSON.parse(customHeadersText);
+          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("bad");
+          updates.customHeaders = parsed;
+        } catch {
+          setHeadersError('Custom headers must be a JSON object like {"X-Title": "myapp"}');
+          setSaving(false);
+          return;
+        }
+      } else {
+        updates.customHeaders = {};
+      }
+      updates.userAgent = userAgent.trim();
+
       await onSave(updates);
     } finally {
       setSaving(false);
@@ -272,6 +297,21 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
             options={providerRegions.map((r) => ({ value: r.id, label: r.label }))}
           />
         )}
+
+        <Input
+          label="User-Agent override"
+          value={userAgent}
+          onChange={(e) => setUserAgent(e.target.value)}
+          placeholder="Optional, e.g. myapp/1.0"
+        />
+
+        <Input
+          label="Custom request headers (JSON)"
+          value={customHeadersText}
+          onChange={(e) => setCustomHeadersText(e.target.value)}
+          placeholder='{"X-Title": "myapp"}'
+        />
+        {headersError && <p className="text-xs text-error">{headersError}</p>}
 
         {!isCompatible && !isAzure && !isCloudflareAi && (
           <div className="flex items-center gap-3">

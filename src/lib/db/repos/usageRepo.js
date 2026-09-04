@@ -763,9 +763,18 @@ export async function getRecentLogs(limit = 200) {
       for (const c of connections) connMap[c.id] = c.name || c.email || "";
     } catch {}
 
+    // Resolve provider-node ids ("openai-compatible-chat-<uuid>") to human node
+    // names so the log shows "OMA-GPT" instead of a UUID blob.
+    const nodeMap = {};
+    try {
+      const { getProviderNodes } = await import("./nodesRepo.js");
+      const nodes = await getProviderNodes();
+      for (const n of nodes) nodeMap[n.id] = n.name || n.id;
+    } catch {}
+
     return rows.map((r) => {
       const ts = formatLogDate(new Date(r.timestamp));
-      const p = r.provider?.toUpperCase() || "-";
+      const p = (nodeMap[r.provider] || r.provider || "").toUpperCase() || "-";
       const m = r.model || "-";
       const account = connMap[r.connectionId] || (r.connectionId ? r.connectionId.slice(0, 8) : "-");
       const tk = r.tokens ? parseJson(r.tokens, {}) : {};

@@ -38,6 +38,18 @@ export async function resolveModelAlias(alias) {
 export async function getModelInfo(modelStr) {
   const parsed = parseModel(modelStr);
 
+  // Combo names may be qualified with a provider-style prefix (e.g. "kr/my-combo").
+  // Check the trailing segment against combos BEFORE provider resolution so
+  // clients that qualify every model with a prefix (hermes, some OpenAI SDKs)
+  // still resolve to the combo.
+  if (modelStr.includes("/") && !parsed.isAlias) {
+    const tail = modelStr.split("/").pop();
+    const prefixedCombo = await getComboByName(tail);
+    if (prefixedCombo) {
+      return { provider: null, model: tail };
+    }
+  }
+
   if (!parsed.isAlias) {
     // Provider-node prefixes are user-defined. They must not override built-in
     // provider ids/aliases such as `cf`, `cloudflare-ai`, `openai`, or `hf`.
@@ -83,10 +95,19 @@ export async function getModelInfo(modelStr) {
  * @returns {Promise<string[]|null>} Array of models or null if not a combo
  */
 export async function getComboModels(modelStr) {
-  // Only check if it's not in provider/model format
-  if (modelStr.includes("/")) return null;
+  // Exact combo name (no slash), or a prefixed combo like "kr/my-combo":
+  // strip the prefix and re-check so prefixed requests resolve as combos.
+  let comboName = modelStr;
+  if (modelStr.includes("/")) {
+    const tail = modelStr.split("/").pop();
+    const combo = await getComboByName(tail);
+    if (combo && combo.models && combo.models.length > 0) {
+      return combo.models;
+    }
+    return null;
+  }
 
-  const combo = await getComboByName(modelStr);
+  const combo = await getComboByName(comboName);
   if (combo && combo.models && combo.models.length > 0) {
     return combo.models;
   }

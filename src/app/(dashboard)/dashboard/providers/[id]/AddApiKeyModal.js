@@ -31,6 +31,9 @@ export default function AddApiKeyModal({ isOpen, provider, providerName, isCompa
     proxyPoolId: NONE_PROXY_POOL_VALUE,
     ollamaHostUrl: "",
   });
+  const [customHeadersText, setCustomHeadersText] = useState("");
+  const [userAgent, setUserAgent] = useState("");
+  const [headersError, setHeadersError] = useState(null);
   const [azureData, setAzureData] = useState({
     azureEndpoint: "",
     apiVersion: "2024-10-01-preview",
@@ -119,6 +122,21 @@ export default function AddApiKeyModal({ isOpen, provider, providerName, isCompa
         setValidating(false);
       }
 
+      let parsedCustomHeaders;
+      setHeadersError(null);
+      if (customHeadersText.trim()) {
+        try {
+          parsedCustomHeaders = JSON.parse(customHeadersText);
+          if (!parsedCustomHeaders || typeof parsedCustomHeaders !== "object" || Array.isArray(parsedCustomHeaders)) {
+            throw new Error("not an object");
+          }
+        } catch {
+          setHeadersError('Custom headers must be a JSON object like {"X-Title": "myapp"}');
+          setSaving(false);
+          return;
+        }
+      }
+
       await onSave({
         name: formData.name || (isOllamaLocal ? "Ollama Local" : ""),
         apiKey: formData.apiKey,
@@ -126,7 +144,9 @@ export default function AddApiKeyModal({ isOpen, provider, providerName, isCompa
         priority: formData.priority,
         proxyPoolId: formData.proxyPoolId === NONE_PROXY_POOL_VALUE ? null : formData.proxyPoolId,
         testStatus: isValid ? "active" : "unknown",
-        providerSpecificData: buildProviderSpecificData()
+        providerSpecificData: buildProviderSpecificData(),
+        customHeaders: parsedCustomHeaders,
+        userAgent: userAgent.trim() || undefined
       });
     } finally {
       setSaving(false);
@@ -387,6 +407,25 @@ export default function AddApiKeyModal({ isOpen, provider, providerName, isCompa
             No active proxy pools available. Create one in Proxy Pools page first.
           </p>
         )}
+
+        <Input
+          label="User-Agent override"
+          value={userAgent}
+          onChange={(e) => setUserAgent(e.target.value)}
+          placeholder="Optional, e.g. myapp/1.0"
+        />
+
+        <Input
+          label="Custom request headers (JSON)"
+          value={customHeadersText}
+          onChange={(e) => setCustomHeadersText(e.target.value)}
+          placeholder='{"X-Title": "myapp", "HTTP-Referer": "https://my.app"}'
+        />
+        {headersError && <p className="text-xs text-error">{headersError}</p>}
+
+        <p className="text-xs text-text-muted">
+          Sent with every upstream request from this connection; overrides defaults.
+        </p>
 
         <p className="text-xs text-text-muted">
           Legacy manual proxy fields are still accepted by API for backward compatibility.
