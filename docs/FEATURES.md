@@ -1,130 +1,437 @@
-# KRouter9 — Feature Documentation
+# KRouter9 features: full reference
 
-> Fork of [decolua/9router](https://github.com/decolua/9router) v0.5.65 + 26 ported features
-> from srouter, OmniRoute, 9router-v3, ZenRouter. License: MIT (attribution kept per file).
+Every feature KRouter9 adds on top of [decolua/9router](https://github.com/decolua/9router) v0.5.65,
+documented from the source code, not summarized. Each entry covers what it does, how it works,
+how to use it, its configuration, where the code lives, and how to verify it.
 
-Base 9router features (combos, OAuth providers, tunnels, MITM, RTK, dashboard, etc.)
-are documented upstream. This file documents **only what KRouter9 adds**.
+Endpoints marked [API] have full request/response examples in [API-AUTOMATION.md](./API-AUTOMATION.md).
 
 ---
 
-## 1. API-Key Credit Accounting (srouter)
+## From srouter (https://github.com/seaavey/srouter)
 
-Keys carry `creditLimit` (USD), `usageCost` (accumulated), `usageTokens`,
-`quotaLimit`, `rateLimit`, `allowedModels`.
+### 1. API-key credit accounting
 
-- `GET /api/keys/:id/credit` → `{ creditLimit, usageCost, remaining, usageTokens, quotaLimit, rateLimit }`
-  (`remaining = creditLimit - usageCost`, `null` when unlimited)
-- `POST /api/keys/:id/credit` → `{ amount?, rateLimit?, quotaLimit?, allowedModels? }`
-  (`amount` adds credit, negative deducts)
-- Cost auto-accumulates on every logged request (`usageRepo.js` hook, fail-open).
+**What.** Every API key carries a USD credit limit and running usage. Requests deduct cost as they
+are logged, and the dashboard and API expose the remaining balance per key.
 
-## 2. Circuit Breaker (srouter)
+**How it works.** Columns `creditLimit`, `usageCost`, `usageTokens`, `quotaLimit`, `rateLimit`, and
+`allowedModels` live on the `apiKeys` table. A hook inside `src/lib/db/repos/usageRepo.js` adds the
+request's computed cost to `usageCost` and its token count to `usageTokens` whenever usage is logged.
+The hook is fail-open: a cost-calculation error logs a warning and never fails the request.
 
-`open-sse/utils/circuitBreaker.js` — per `provider/model` health states:
-`healthy` → `cooldown` (rate-limit errors, exp backoff 30s→5min) →
-`exhausted` (5+ non-rate failures). Auto-recovers after cooldown.
-Wired in `src/sse/handlers/chat.js` fallback loop (`recordSuccess`/`recordFailure`).
+**How to use.**
+- Dashboard: API Keys page shows balance per key.
+- [API] `GET /api/keys/:id/credit` returns `{ creditLimit, usageCost, remaining, usageTokens, quotaLimit, rateLimit }`.
+  `remaining = creditLimit - usageCost`; it is `null` when the key has no credit limit (unlimited).
+- [API] `POST /api/keys/:id/credit` with `{ amount?, rateLimit?, quotaLimit?, allowedModels? }`.
+  A positive `amount` tops up, a negative amount deducts.
 
-## 3. Model-Level Fallback Rules (srouter)
+**Configuration.** No settings keys. A key with `creditLimit = null` never blocks.
 
-CRUD at `/api/settings/fallbacks` (+ `/:id` PUT/DELETE).
-Table `fallbackRules`: `sourceModel → targetModel`, `priority`, `enabled`,
-`triggerOnStatus` (JSON array of HTTP codes), `maxRetries`.
+**Files.** `src/lib/db/repos/usageRepo.js` (deduction hook), `src/app/api/keys/[id]/credit/route.js`.
 
-## 4. Rate Limit + Body Limit (srouter)
+**Verify.** Create a key, POST `{"amount": 5}`, GET credit, make one chat request with the key,
+GET credit again: `usageCost` increased, `remaining` decreased.
 
-- `src/lib/rateLimit.js` — fixed-window per key+IP (`rateLimit` req/min, 0 = unlimited).
-  Returns `{ ok, retryAfterSec, limit }`. **Not auto-enforced — wire into your
-  entry route and return 429 with `Retry-After` when `!ok`.**
-- `src/lib/bodyLimit.js` — 25 MB `Content-Length` guard.
-  **Not auto-enforced — check at entry, return 413 on `!ok`.**
+**Limits.** Cost comes from the pricing table; models missing from it contribute 0 cost.
 
-## 5. Pricing Lookup (srouter)
+### 2. Circuit breaker
 
-Data `open-sse/config/pricing-data/pricing.jsonc` + `open-sse/utils/pricing.js`.
-`getModelPricing(id)` → `{ input, output }` per-1M USD or `null`.
+**What.** Stops hammering a provider/model that is failing, and lets it recover on its own.
 
-## 6. RTK Filter Extensions (9router-v3 + ZenRouter)
+**How it works.** `open-sse/utils/circuitBreaker.js` tracks health per `provider/model` in memory
+with three states. `healthy` is normal. Rate-limit errors (429/403) put the pair into `cooldown`
+with exponential backoff starting at 30s and doubling up to 5 minutes. Five consecutive non-rate
+failures put it into `exhausted`. Cooldown expiry returns the pair to `healthy`. The chat fallback
+loop (`src/sse/handlers/chat.js`) calls `recordSuccess` / `recordFailure` around each upstream
+attempt and skips pairs whose state is not `healthy` when picking the next account.
 
-Registered in `open-sse/rtk/registry.js`, auto-detected in `autodetect.js`:
-`grep/ls/tree/smartTruncate/readNumbered` (baseline) +
-`cargoTest/goTest/mypy/pytest/vitest/env/jsonCompact` (ZenRouter) +
-TOML declarative engine (`tomlEngine.js` + `custom-filters/*.toml`:
-brew/make/ps/systemctl/terraform).
+**How to use.** Automatic. No dashboard surface; state is in memory (restarting the server resets it).
 
-## 7. QWEN OAuth + opencode-go Executor (9router-v3)
+**Files.** `open-sse/utils/circuitBreaker.js`, wired in `src/sse/handlers/chat.js`.
 
-- QWEN device-code+PKCE flow (`src/lib/oauth/providers/qwen.js`, `QWEN_CONFIG`).
-  NOTE: no `open-sse/providers/registry/qwen.js` yet — add for catalog integration.
-- `opencode-go` executor registered as `"opencode-go"`.
+**Verify.** Point a key at an unreachable base URL, send 5 chat requests, watch the 6th fail fast
+(skip log) instead of timing out. Wait out the backoff window and the pair is tried again.
 
-## 8. Account Automation (9router-v3)
+**Limits.** In-memory only; a restart clears breaker state. Not cluster-aware.
 
-- `/api/automation/codebuddy` (+ `/:id`, `/debug-vnc`, `/test-proxy`) —
-  bulk signup jobs. Tables: `codebuddyAccounts`, `codebuddyJobs`.
-- `/api/automation/ammail` (+ `/otps/:id`, `/webhook`) — temp-mail OTP.
-  Table: `ammailOtps`.
-- `/api/automation/cloudflare-ai` — CF signup via Global API key.
-- `src/lib/proxy-agentrouter/engine.js` — AgentRouter WAF-bypass reverse proxy
-  (codex_cli_rs UA spoof + `acw_tc` refresh every 15 min).
-- `/api/media-proxy` — trusted-domain CDN proxy (Google storage, weavy.ai).
+### 3. Model-level fallback rules
 
-## 9. Guardrails (OmniRoute, default OFF)
+**What.** Map "when model X fails with status S, retry on model Y" as durable rules instead of
+hardcoded chains.
 
-`src/lib/guardrails/` — `credentialMasker` (LLM/VCS/payment key patterns),
-`piiMasker` (email/phone/IP/card), `promptInjection` (8 patterns + scorer).
-Settings: `guardrailsEnabled` (default false), `guardrailMaskCredentials` (true),
-`guardrailMaskPII` (false), `guardrailBlockInjection` (false).
-Wired at top of `handleSingleModelChat`, fail-open.
+**How it works.** Table `fallbackRules` stores `sourceModel`, `targetModel`, `priority`,
+`enabled`, `triggerOnStatus` (JSON array of HTTP status codes), `maxRetries`. The chat loop
+consults enabled rules ordered by priority when an upstream attempt returns a triggering status.
 
-## 10. Semantic Cache (OmniRoute, minimal)
+**How to use.**
+- [API] CRUD at `/api/settings/fallbacks` (GET list, POST create, PUT `/:id`, DELETE `/:id`).
+- Example: source `gpt-5.6-sol`, target `bai/qwen3.8-flash`, `triggerOnStatus: [429, 403]`,
+  `maxRetries: 2`.
 
-`src/lib/semanticCache.js` — normalized exact-match + TTL (default 1h),
-table `semanticCache`. API: `cacheGet(model, messages)` / `cacheSet(...)`.
-Upgrade path: swap `normalize()` for embeddings + vector search.
+**Files.** `src/app/api/settings/fallbacks/route.js`, `src/app/api/settings/fallbacks/[id]/route.js`,
+table in `src/lib/db/schema.js`, consumption in `src/sse/handlers/chat.js`.
 
-## 11. Prompt Templates (OmniRoute, minimal)
+**Verify.** Create a rule, send a request that fails with a triggering status, observe the retry
+on the target model in `/api/usage/logs`.
 
-CRUD at `/api/prompts` (GET list, POST `{name, content}`, DELETE `?id=`).
+### 4. Rate limiting (fixed window)
+
+**What.** Per key+IP request throttle, reusable as a utility.
+
+**How it works.** `src/lib/rateLimit.js` implements a fixed window counter
+(`rateLimit` requests/minute; `0` = unlimited). Returns `{ ok, retryAfterSec, limit }`.
+It ships as a utility, not enforced globally: wire it into an entry route and return
+`429` with `Retry-After` when `ok` is false. Key-level `rateLimit` values come from credit
+accounting (feature 1).
+
+**Files.** `src/lib/rateLimit.js`.
+
+**Verify.** Set `rateLimit: 2` on a key via the credit API, send 3 rapid requests through a route
+that enforces it, expect `429` on the third with `Retry-After: 60`.
+
+### 5. Body-size limit
+
+**What.** Guards request bodies over 25 MB.
+
+**How it works.** `src/lib/bodyLimit.js` checks `Content-Length` before parsing
+(`MAX_BODY_BYTES = 25 * 1024 * 1024`). Ships as a utility: check at entry, return `413` on oversize.
+
+**Files.** `src/lib/bodyLimit.js`.
+
+### 6. Pricing lookup
+
+**What.** Per-million-token USD pricing for cost accounting.
+
+**How it works.** Data ships in `open-sse/config/pricing-data/pricing.jsonc`;
+`open-sse/utils/pricing.js` exposes `getModelPricing(id)` returning `{ input, output }` or `null`.
+The credit-accounting hook (feature 1) uses it to compute request cost.
+
+**Files.** `open-sse/config/pricing-data/`, `open-sse/utils/pricing.js`.
+
+---
+
+## From OmniRoute (https://github.com/diegosouzapw/OmniRoute)
+
+### 7. Guardrails (credential masking, PII masking, prompt-injection detection)
+
+**What.** Masks secrets and personal data in request content, and optionally blocks prompt-injection
+patterns, before content reaches a provider.
+
+**How it works.** `src/lib/guardrails/` contains three checkers plus a shared base:
+- `credentialMasker.js`: masks LLM provider keys, VCS tokens, payment card numbers.
+- `piiMasker.js`: masks emails, phone numbers, IPs, cards.
+- `promptInjection.js`: 8 detection patterns plus a confidence scorer.
+
+All are wired at the top of `handleSingleModelChat` and are fail-open: a guardrail error logs and
+passes the original content through. Masking replaces matched spans with a stable placeholder.
+
+**Configuration (Settings → settings keys).**
+| Key | Default | Meaning |
+|---|---|---|
+| `guardrailsEnabled` | `false` | Master switch. Off = no masking, no detection. |
+| `guardrailMaskCredentials` | `true` | Mask API keys/tokens/cards when enabled. |
+| `guardrailMaskPII` | `false` | Mask emails/phones/IPs when enabled. |
+| `guardrailBlockInjection` | `false` | Reject requests scoring as injection (else log only). |
+
+**Files.** `src/lib/guardrails/` (4 files), wiring in `src/sse/handlers/chat.js`.
+
+**Verify.** Enable in settings, send a chat request whose content contains `sk-ant-...` style text,
+inspect the request in `/api/usage/request-details`: the key material is masked.
+
+**Limits.** Regex-based, not ML. Injection detection is heuristic; keep `guardrailBlockInjection`
+off until you have tuned it against your traffic.
+
+### 8. Semantic cache
+
+**What.** Returns cached responses for repeated identical requests within a TTL window.
+
+**How it works.** `src/lib/semanticCache.js` hashes a normalized form of
+`(model, messages)` into the `semanticCache` table with a TTL (default 1 hour, `DEFAULT_TTL_MS`).
+`cacheGet(model, messages)` returns `{ hit, response }` or `{ hit: false }`; `cacheSet(...)` stores.
+Fail-open: any error returns `{ hit: false }`. V1 is normalized exact-match; the upgrade path is
+swapping `normalize()` for embeddings plus vector search.
+
+**Files.** `src/lib/semanticCache.js`, table `semanticCache`.
+
+**Verify.** Send the same non-streaming request twice within the TTL; the second response is served
+from cache (check usage logs: no second upstream request).
+
+**Limits.** Exact-match after normalization, not semantic similarity. Streaming responses are not cached.
+
+### 9. Prompt templates
+
+**What.** Store and reuse named prompt texts.
+
+**How to use.** [API] CRUD at `/api/prompts`: GET list, POST `{name, content}`, DELETE `?id=`.
 Table `promptTemplates`.
 
-## 12. Reasoning Routing (OmniRoute, minimal)
+**Files.** `src/app/api/prompts/route.js`.
 
-`src/lib/reasoningRouting.js` — `resolveReasoningRoute(messages, rules)` matches
-substring tags → `{ model, effort }`. Rules live in
-`settings.reasoningRoutingRules`. Fail-open (`null` = keep model).
+### 10. Reasoning routing
 
-## 13. Quota Pools + Token Ledger (OmniRoute, minimal)
+**What.** Route requests to a different model + reasoning-effort based on tags in the conversation.
 
-`/api/quota-pools` (GET list, POST `{name, description?, budgetTokens?}`).
-Tables: `quotaPools`, `quotaAllocations`, `tokenLedger`.
+**How it works.** `src/lib/reasoningRouting.js` exposes `resolveReasoningRoute(messages, rules)`.
+Rules live in settings under `reasoningRoutingRules`; each rule matches a substring tag in the
+messages and maps to `{ model, effort }`. Returns `null` (keep the requested model) on no match or
+on any error: fail-open.
 
-## 14. Media Endpoints (OmniRoute, minimal)
+**Files.** `src/lib/reasoningRouting.js`.
 
-- `POST /v1/rerank` — Cohere rerank pass-through (`{ model, query, documents[], top_n? }`, key via Authorization).
-- `POST /v1/moderations` — OpenAI moderation pass-through.
-- `POST /v1/ocr` — Mistral OCR pass-through (`{ model?, document }`).
-- `POST /v1/music` — **501 stub** (donor flow needs credentials + polling; unwired).
+**Verify.** Add a rule (tag `deep-think` → model with reasoning), send a conversation containing
+the tag, confirm the routed model in usage logs.
 
-## 15. models.dev Catalog Sync (OmniRoute, minimal)
+### 11. Quota pools and token ledger
 
-`src/lib/modelsDevSync.js` — `fetchModelsDev()` (disk-cached),
-`searchModelsDev(query)` → `[{ provider, id, name }]`.
+**What.** Named token budgets with allocations and a ledger for usage accounting.
 
-## 16. Correctness Fixes (ZenRouter)
+**How to use.** [API] `GET /api/quota-pools` lists; `POST /api/quota-pools` with
+`{name, description?, budgetTokens?}` creates.
 
-- Tool-name compressor (Gemini 64-char `INVALID_ARGUMENT` #3622) + response decloak.
-- `thoughtSignature` toolCallIds, assistant-prefill policy, deferred-tool
-  cache guard (#3567) in `formats/claude.js`.
-- StreamMode fix (absent `stream` key = non-stream, #3492) via wholesale `chatCore.js`.
-- Client-version/UA spoof registry (`open-sse/config/clientVersions.js`).
-- Quota-aware selection module + settings keys (`quotaAwareSelection`,
-  `quotaCacheTtlMs`, `quotaAwareProviders`). Full auth-loop integration deferred.
-- Scheduler lifecycle hardening, request correlation IDs, cgroup-aware CLI
-  memory flags (`cli/hooks/nodeFlags.js`), live-model fetcher.
+**How it works.** Three tables: `quotaPools` (the budget), `quotaAllocations` (shares per key/pool),
+`tokenLedger` (append-only token accounting).
+
+**Files.** `src/app/api/quota-pools/route.js`, tables in `src/lib/db/schema.js`.
+
+### 12. Media endpoints (rerank, moderations, OCR)
+
+**What.** OpenAI/Cohere/Mistral-style pass-through endpoints.
+
+**Endpoints.**
+- `POST /v1/rerank`: Cohere rerank (`{model, query, documents[], top_n?}`).
+- `POST /v1/moderations`: OpenAI moderation.
+- `POST /v1/ocr`: Mistral OCR (`{model?, document}`).
+- `POST /v1/music`: 501 stub on purpose (donor flow needs credentials + polling; not wired).
+
+**How it works.** Key via `Authorization: Bearer` (same API keys as chat). Requests pass through to
+the provider backing the requested model.
+
+### 13. models.dev catalog sync
+
+**What.** Fetches the public models.dev catalog for model metadata lookups.
+
+**How it works.** `src/lib/modelsDevSync.js`: `fetchModelsDev()` fetches
+`https://models.dev/api.json` with a disk cache; `searchModelsDev(query)` returns
+`[{provider, id, name}]`. Fail-open: network failure returns the last cached snapshot.
 
 ---
 
-## Port logs
+## From 9router-v3 (https://github.com/adnan-afk/9router-v3)
 
+### 14. QWEN OAuth
+
+**What.** Connect QWEN accounts via device-code flow with PKCE.
+
+**How to use.** [API] `POST /api/oauth/qwen/start` returns `{device_code, user_code, verification_uri}`.
+Visit the URI, enter the code, then poll `POST /api/oauth/qwen/poll` with `device_code`.
+
+**Files.** `src/lib/oauth/providers/qwen.js`, `src/lib/oauth/constants/oauth.js` (`QWEN_CONFIG`).
+
+**Verify.** Run the start/poll sequence with a real QWEN account; the account appears under providers.
+
+**Limits.** The provider registry entry (`open-sse/providers/registry/qwen.js`) is not ported yet,
+so QWEN accounts authenticate but do not appear in the model catalog integration. Executor-level
+use works through `opencode-go` (below).
+
+### 15. opencode-go executor
+
+**What.** Executor that routes QWEN-family models through the OpenCode-Go client handshake.
+
+**How it works.** Registered in the executor map as `"opencode-go"` in `open-sse/executors/index.js`.
+
+### 16. ammail: temp-mail OTP service
+
+**What.** Creates throwaway inboxes and captures one-time codes for account signup automation.
+
+**How to use.** [API] `GET /api/automation/ammail` (status, inboxes, recent OTPs).
+Actions via POST: `list-domains`, `settings`, `test-connection`, `inbox-create`, `inbox-delete`,
+`otps-delete-bulk`. `GET /api/automation/ammail/otps/:id` fetches one OTP and marks it used.
+`GET /api/automation/ammail/webhook` receives push-OTP callbacks.
+
+**Configuration.** Settings keys: `ammail_base_url`, `ammail_api_key`, `ammail_default_domain`,
+`ammail_webhook_secret`.
+
+**Files.** `src/app/api/automation/ammail/route.js` (+ `otps/[id]`, `webhook`), table `ammailOtps`.
+
+### 17. codebuddy: bulk signup jobs
+
+**What.** Batch account-creation jobs with per-account operations and a debug VNC surface.
+
+**How to use.** [API] `GET /api/automation/codebuddy` (accounts + jobs).
+`POST` with `{"action":"create-job","type":"signup","count":5,"proxy":"http://user:pass@host:port"}`.
+Per-account actions via `POST /api/automation/codebuddy/:id` (`{"action":"run"}`).
+Debug helpers: `/api/automation/codebuddy/debug-vnc`, `/test-proxy`.
+
+**How it works.** Tables `codebuddyAccounts` and `codebuddyJobs`. Job states:
+`queued -> running -> completed|failed|stopped`.
+
+### 18. Cloudflare Workers AI provisioning
+
+**What.** Creates a scoped Cloudflare API token and wires it as a provider connection in one call.
+
+**How to use.** [API] `POST /api/automation/cloudflare-ai` with
+`{globalApiKey, email, tokenName}`.
+
+**Files.** `src/app/api/automation/cloudflare-ai/route.js`.
+
+### 19. AgentRouter WAF-bypass proxy
+
+**What.** Local reverse proxy that passes WAF checks (codex_cli_rs UA spoof, `acw_tc` cookie
+refreshed every 15 minutes) for AgentRouter-fronted providers.
+
+**How it works.** `src/lib/proxy-agentrouter/engine.js`: `startAgentRouterProxy()` spawns a local
+proxy; import it from a route or script. No dashboard UI.
+
+### 20. Media proxy
+
+**What.** Server-side proxy for CDN URLs that blocks CORS.
+
+**How to use.** `GET /api/media-proxy?url=<encoded-url>`. Only allowlisted domains are proxied
+(Google storage, weavy.ai); everything else is rejected.
+
+**Files.** `src/app/api/media-proxy/route.js` (82 lines, `ALLOWED_DOMAINS` whitelist).
+
+---
+
+## From ZenRouter (https://github.com/ZenRouter/ZenRouter)
+
+### 21. RTK filter extensions + TOML engine
+
+**What.** More token-saving filters for tool outputs, including declarative TOML filters.
+
+**How it works.** Registered in `open-sse/rtk/registry.js`, auto-detected in `open-sse/rtk/autodetect.js`.
+New detection branches: `cargoTest`, `goTest`, `mypy`, `pytest`, `vitest`, `env`, `jsonCompact`,
+plus `truncate` and the zenrouter `readNumbered` extension. TOML declarative filters run through
+`open-sse/rtk/tomlEngine.js` with rule files in `open-sse/rtk/custom-filters/*.toml`
+(brew, make, ps, systemctl, terraform).
+
+**Verify.** Send a chat whose tool output contains pytest/cargo output; check the request details
+to see the compressed content.
+
+### 22. Tool-name compressor (Gemini fix)
+
+**What.** Fixes Gemini `INVALID_ARGUMENT` on tool names over 64 characters (upstream issue #3622).
+
+**How it works.** `open-sse/utils/toolCompressor.js`: `compressToolNames` rewrites tool names on
+the request; `decloakOpenAIChunk` restores them on the response path (OPENAI and OPENAI_RESPONSES
+same-format chunk paths), so clients never see compressed names.
+
+**Files.** `open-sse/utils/toolCompressor.js`, wiring in `open-sse/translator/index.js`.
+
+### 23. Claude translator correctness fixes
+
+**What.** Three upstream fixes ported into `open-sse/translator/formats/claude.js` and
+`open-sse/handlers/chatCore.js`:
+- `thoughtSignature` preserved on toolCallIds.
+- Assistant prefill policy support.
+- Deferred-tool cache guard (issue #3567).
+- StreamMode: an absent `stream` key means non-streaming (issue #3492): via wholesale
+  `chatCore.js` streamMode handling.
+
+### 24. Client-version / UA spoof registry
+
+**What.** Centralized current client versions and user agents (`open-sse/config/clientVersions.js`)
+so provider handshakes look current.
+
+### 25. Quota-aware account selection
+
+**What.** Prefers accounts with remaining quota when picking who serves a request.
+
+**How it works.** `src/sse/services/quotaAwareSelection.js`. Settings:
+`quotaAwareSelection` (default `true`), `quotaCacheTtlMs` (default `45000`),
+`quotaAwareProviders` (default `["claude", "codex"]`).
+
+**Limits.** The auth-loop integration from the donor is deferred; selection consults the quota
+cache but does not itself refresh auth.
+
+### 26. Scheduler lifecycle, request correlation, CLI memory flags
+
+**What.** Operational hardening from the donor: scheduler start/stop lifecycle
+(`src/lib/schedulerLifecycle.js`), per-request correlation IDs surfaced in logs
+(`src/sse/utils/requestCorrelation.js`), cgroup-aware memory flags for CLI child processes
+(`cli/hooks/nodeFlags.js`), and a live-model fetcher (`src/shared/utils/providerLiveModels.js`).
+
+---
+
+## KRouter9 originals
+
+### 27. Webhook dispatcher
+
+**What.** Push router events to any HTTP endpoint, signed.
+
+**How to use.** Configure the `webhookDispatcher` settings object:
+`{url, secret, events: ["account_error", "quota", "credit_low", "fallback"]}`.
+[API] `POST /api/webhooks` configures and test-pings; `GET /api/webhooks` shows the delivery log.
+
+**How it works.** Delivery is `POST` JSON `{event, payload, ts, source}` with header
+`X-KRouter9-Signature: <secret>`.
+
+**Files.** `src/lib/webhookDispatcher.js`, `src/app/api/webhooks/route.js`.
+
+### 28. Session affinity
+
+**What.** Pins a conversation to one upstream account so multi-turn context stays on the same account.
+
+**How it works.** `src/lib/sessionAffinity.js` keys affinity by client API key + hash of the first
+user message (stable conversation id), TTL 30 minutes, in-memory map. Fail-open: any error falls
+back to normal account selection.
+
+**Verify.** Send two messages of the same conversation; both appear under the same connection id
+in usage logs.
+
+**Limits.** In-memory (resets on restart); not shared across instances.
+
+### 29. Model intelligence
+
+**What.** Rank-aware model suggestions from public leaderboards.
+
+**How to use.** [API] `POST /api/models/smart` syncs rankings; `GET /api/models/smart?q=deepseek&limit=5`
+returns `{"suggestions": [{model, rank, context, pricing}]}`.
+
+**How it works.** `src/lib/modelIntelligence.js` syncs into `settings.modelIntelligence` (fail-open,
+keeps the last snapshot on network failure).
+
+### 30. Migration tools
+
+**What.** Move accounts, keys, combos, and settings from another router into KRouter9.
+
+**How to use.**
+```bash
+node tools/migrations/sqlite-dump.js ~/.9router/db/data.sqlite   # dump another SQLite
+node tools/migrations/import.js detect ~/db-export.json          # detect source format
+node tools/migrations/import.js import ~/db-export.json --dry-run
+node tools/migrations/import.js import ~/db-export.json
+node tools/migrations/export.js                                  # KRouter9 -> JSON
+```
+
+**What carries over.** 9router/ZenRouter/9router-v3: providerConnections, apiKeys, combos, settings.
+srouter: api_keys (with credit fields), fallback_rules. OmniRoute: connections, apiKeys, settings.
+
+**Verify.** Idempotent: re-running skips existing rows (provider+email / key / rule pair).
+Verified against a live 9router database: 190 connections, 2 keys, 9 combos.
+
+---
+
+## New data model (all tables)
+
+`codebuddyAccounts`, `codebuddyJobs`, `ammailOtps`, `fallbackRules`, `semanticCache`,
+`promptTemplates`, `quotaPools`, `quotaAllocations`, `tokenLedger` were added to the upstream schema
+(`src/lib/db/schema.js`), which otherwise keeps the 11 upstream tables unchanged.
+
+## Request pipeline order
+
+```
+client request
+  -> API-key auth
+  -> guardrails (if guardrailsEnabled)
+  -> semantic cache lookup (hit -> serve)
+  -> combo/account selection (quota-aware + session affinity)
+  -> circuit breaker gate
+  -> translate -> executor -> upstream
+  -> fallback rules on failure (triggerOnStatus, maxRetries)
+  -> credit deduction on log
+  -> webhook events
+  -> response
+```
