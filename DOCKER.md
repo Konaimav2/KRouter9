@@ -6,7 +6,7 @@ from source (no published image yet — see "Publishing your own image" below).
 ## Build from source
 
 ```bash
-git clone https://github.com/Konaimav2/KRouter9.git
+git clone https://github.com/Konaimav2/krouter9.git
 cd KRouter9
 docker build -t krouter9 .
 docker run -d \

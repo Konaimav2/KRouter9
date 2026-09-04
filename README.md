@@ -15,26 +15,28 @@
 
 ## Quick start
 
-Install globally:
+**1. Install and start:**
 
 ```bash
-npm install -g krouter9
-krouter9
+git clone https://github.com/Konaimav2/krouter9.git
+cd krouter9
+cp .env.example .env
+npm install
+PORT=20128 NEXT_PUBLIC_BASE_URL=http://localhost:20128 npm run dev
 ```
 
 The dashboard opens at `http://localhost:20128`, the API at `http://localhost:20128/v1`.
 
-Or run it without installing:
+Production mode:
 
 ```bash
-npx krouter9
+npm run build
+PORT=20128 HOSTNAME=0.0.0.0 NEXT_PUBLIC_BASE_URL=http://localhost:20128 npm run start
 ```
 
-Docker:
+Docker instead:
 
 ```bash
-git clone https://github.com/Konaimav2/KRouter9.git
-cd KRouter9
 docker build -t krouter9 .
 docker run -d --name krouter9 --restart unless-stopped \
   -p 20128:20128 \
@@ -43,12 +45,27 @@ docker run -d --name krouter9 --restart unless-stopped \
   krouter9
 ```
 
-Or `docker compose up -d` (the compose file is in the repo). See [DOCKER.md](./DOCKER.md) for the full container guide.
+Or `docker compose up -d`. See [DOCKER.md](./DOCKER.md) for the full container guide.
+
+**2. Connect a free provider (no signup needed):**
+
+Dashboard → Providers → Connect Kiro AI (free monthly credits: Claude, GLM, MiniMax) or OpenCode Free (no auth) → Done.
+
+**3. Use it in your coding tool:**
+
+```
+Claude Code / Codex / Cursor / Cline settings:
+  Endpoint: http://localhost:20128/v1
+  API Key:  [copy from dashboard]
+  Model:    kr/claude-sonnet-4.5
+```
+
+Details per tool are in [Connect your coding tool](#connect-your-coding-tool) below.
 
 Running from source, for development:
 
 ```bash
-git clone https://github.com/Konaimav2/KRouter9.git
+git clone https://github.com/Konaimav2/krouter9.git
 cd KRouter9
 cp .env.example .env
 npm install
