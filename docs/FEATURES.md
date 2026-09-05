@@ -8,7 +8,7 @@ Endpoints marked [API] have full request/response examples in [API-AUTOMATION.md
 
 ---
 
-## From srouter (https://github.com/seaavey/srouter)
+## From SRouter (https://github.com/seaavey/srouter)
 
 ### 1. API-key credit accounting
 
@@ -429,7 +429,7 @@ node tools/migrations/export.js                                  # KRouter9 -> J
 ```
 
 **What carries over.** 9router/ZenRouter/9router-v3: providerConnections, apiKeys, combos, settings.
-srouter: api_keys (with credit fields), fallback_rules. OmniRoute: connections, apiKeys, settings.
+SRouter: api_keys (with credit fields), fallback_rules. OmniRoute: connections, apiKeys, settings.
 
 **Verify.** Idempotent: re-running skips existing rows (provider+email / key / rule pair).
 Verified against a live 9router database: 190 connections, 2 keys, 9 combos.

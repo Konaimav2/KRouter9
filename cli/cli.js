@@ -67,8 +67,19 @@ const { ensureSqliteRuntime, buildEnvWithRuntime } = require("./hooks/sqliteRunt
 const { ensureTrayRuntime } = require("./hooks/trayRuntime");
 const args = process.argv.slice(2);
 
-// Subcommands (`krouter9 xai video …`) run against an already-running gateway
-// and bypass the launcher flow (no runtime self-heal, no server spawn).
+// Subcommands (`krouter9 xai video …`, `krouter9 migrate …`) bypass the
+// launcher flow (no runtime self-heal, no server spawn).
+if (args[0] === "migrate") {
+  const { run } = require("./src/cli/commands/migrate");
+  run(args.slice(1))
+    .then((code) => process.exit(code))
+    .catch((err) => {
+      console.error(`❌ ${err?.message || err}`);
+      process.exit(1);
+    });
+  return;
+}
+
 if (args[0] === "xai" && args[1] === "video") {
   const { run } = require("./src/cli/commands/xaiVideo");
   run(args.slice(2))
