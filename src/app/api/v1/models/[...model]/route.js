@@ -1,4 +1,5 @@
 import { buildModelsList } from "../route.js";
+import { getComboByName } from "@/lib/localDb";
 
 // URL slug → service kind(s). `web` covers both webSearch and webFetch.
 const KIND_SLUG_MAP = {
@@ -52,7 +53,20 @@ export async function GET(_request, { params }) {
     // Match the same LLM catalog exposed by GET /v1/models. A catch-all
     // parameter is required because provider-prefixed IDs contain a slash.
     const models = await buildModelsList([LLM_KIND]);
-    const matchedModel = models.find((candidate) => candidate.id === identifier);
+    let matchedModel = models.find((candidate) => candidate.id === identifier);
+
+    // Slug-qualified combo ("kiro/my-combo", legacy "kr/my-combo") or legacy
+    // kiro alias ("kr/<model>"): resolve through the same chains chat uses.
+    if (!matchedModel && identifier.includes("/")) {
+      const tail = identifier.split("/").pop();
+      const combo = await getComboByName(tail);
+      if (combo) {
+        matchedModel = { id: tail, object: "model", owned_by: "combo" };
+      } else if (identifier.startsWith("kr/")) {
+        const krTarget = identifier.slice(3);
+        matchedModel = models.find((candidate) => candidate.id === `kiro/${krTarget}`);
+      }
+    }
 
     if (!matchedModel) {
       return json(
