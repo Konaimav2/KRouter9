@@ -7,6 +7,7 @@ import { reasoningDelta } from "../concerns/reasoning.js";
 import { encodeDataUri } from "../concerns/image.js";
 import { toOpenAIFinish } from "../concerns/finishReason.js";
 import { buildToolCallId } from "../concerns/thoughtSignature.js";
+import { storeGeminiThoughtSignature } from "../../services/thoughtSignatureStore.js";
 
 // Build chunk meta for current gemini state
 function chunkMeta(state) {
@@ -14,7 +15,7 @@ function chunkMeta(state) {
 }
 
 // Build a tool_call chunk from a gemini functionCall part (shared by sig/non-sig branches)
-function emitFunctionCall(functionCall, state) {
+function emitFunctionCall(functionCall, state, signature = null) {
   const rawName = functionCall.name;
   const functionCallWithSignature = {
     ...functionCall,
@@ -31,6 +32,11 @@ function emitFunctionCall(functionCall, state) {
     type: OPENAI_BLOCK.FUNCTION,
     function: { name: fcName, arguments: JSON.stringify(fcArgs) },
   };
+  // Server-side backup store (upstream c08efdb): request side reads the embedded sig
+  // first (splitToolCallId), falls back to this store when the id was rewritten.
+  if (thoughtSignature) {
+    storeGeminiThoughtSignature(toolCall.id, thoughtSignature, null);
+  }
   // Keep Gemini bookkeeping separate from the shared translator state.toolCalls map.
   // The downstream OpenAI→Claude translator uses state.toolCalls for Claude block
   // metadata; pre-populating it here makes Anthropic tool deltas lose index.
@@ -63,13 +69,21 @@ export function geminiToOpenAIResponse(chunk, state) {
   if (content?.parts) {
     for (const part of content.parts) {
       const hasThoughtSig = part.thoughtSignature || part.thought_signature;
+      if (hasThoughtSig && typeof hasThoughtSig === "string") {
+        state.pendingThoughtSignature = hasThoughtSig;
+      }
       const isThought = part.thought === true;
-      
+
       // Handle thought signature (thinking mode)
       if (hasThoughtSig) {
         const hasTextContent = part.text !== undefined && part.text !== "";
         const hasFunctionCall = !!part.functionCall;
-        
+
+        // Standalone thoughtSignature part (no text, no functionCall): keep pending for next functionCall
+        if (!hasTextContent && !hasFunctionCall) {
+          continue;
+        }
+
         if (hasTextContent) {
           results.push(buildChunk(
             chunkMeta(state),
@@ -77,7 +91,7 @@ export function geminiToOpenAIResponse(chunk, state) {
             null
           ));
         }
-        
+
         if (hasFunctionCall) {
           results.push(emitFunctionCall({ ...part.functionCall, thoughtSignature: hasThoughtSig }, state));
           state.pendingThoughtSignature = null;
