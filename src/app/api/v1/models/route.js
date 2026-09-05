@@ -293,12 +293,9 @@ export async function buildModelsList(kindFilter, options = {}) {
   const models = [];
 
   // Combos first (filtered by kind). Web combos expose `kind` so AI knows search vs fetch.
-  // Combos use their bare names only. The bare id never starts with "kr/" — that
-  // prefix belongs to the Kiro AI provider ("kr" is its registry alias), so
-  // emitting kr/<combo> duplicates would mix combos into the kiro model rows.
-  // Prefixed combo requests (kr/my-combo from clients that qualify every model)
-  // still resolve: chat-side model resolution strips the prefix when the
-  // trailing segment matches a combo name.
+  // Combos use their bare names only. Clients that slug-qualify model ids
+  // ("<slug>/<model>") still resolve: chat-side model resolution strips the
+  // prefix when the trailing segment matches a combo name.
   for (const combo of combos) {
     if (!comboMatchesKinds(combo, kindFilter)) continue;
     const entry = {

@@ -1,8 +1,9 @@
 export default {
   id: "kiro",
   priority: 10,
-  alias: "kr",
-  uiAlias: "kr",
+  alias: "kiro",
+  uiAlias: "kiro",
+  aliases: ["kr"],
   display: {
     name: "Kiro AI",
     icon: "psychology_alt",
