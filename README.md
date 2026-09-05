@@ -1,46 +1,104 @@
 <div align="center">
   <img src="./images/krouter9.svg" alt="KRouter9" width="140"/>
 
-  # KRouter9
+  # KRouter9 🔀
 
-  Built on [decolua/9router](https://github.com/decolua/9router) v0.5.65 with 30 features merged in from srouter, OmniRoute, 9router-v3, and ZenRouter.
+  **The AI router that pays for itself. Every feature you wish 9router had, already merged.**
 
-  It routes AI coding tools (Claude Code, Cursor, Antigravity, Copilot, Codex, Gemini, OpenCode, Cline) across 40+ providers, and adds credit accounting, a circuit breaker, guardrails, semantic caching, account automation, and webhook events on top of the base router.
+  One local endpoint for Claude Code, Codex, Cursor, Antigravity, Copilot, Cline, OpenCode and 40+ providers — with per-key credit accounting, a circuit breaker, guardrails, semantic caching, and account automation built in. 30 features merged from SRouter, OmniRoute, 9router-v3, and ZenRouter.
 
-  [Quick start](#quick-start) · [What's added](#whats-added-over-9router) · [Migration](#migrate-from-another-router) · [API docs](./docs/API-AUTOMATION.md) · [Feature details](./docs/FEATURES.md)
+  [![GitHub](https://img.shields.io/badge/GitHub-Konaimav2%2FKRouter9-181717?logo=github)](https://github.com/Konaimav2/KRouter9)
+  [![License](https://img.shields.io/badge/license-MIT-22c55e?style=flat-square)](./LICENSE)
+  [![Base](https://img.shields.io/badge/built%20on-9router%20v0.5.65-6366f1?style=flat-square)](https://github.com/decolua/9router)
+  [![Node](https://img.shields.io/badge/node-%3E%3D22-339933?style=flat-square&logo=node.js)](https://nodejs.org/)
+
+  [🚀 Quick Start](#-quick-start) • [⚡ What's New](#-whats-added-over-9router) • [📦 Migrate](#-migrate-from-another-router) • [🔌 API](./docs/API-AUTOMATION.md) • [📚 Docs](#-documentation)
 
 </div>
 
 ---
 
-## Quick start
+## 🤔 Why KRouter9?
+
+**9router is great. It's also missing things you hit the moment you share it with a team:**
+
+- ❌ No way to cap how much a key can spend
+- ❌ One dead provider hangs your coding session
+- ❌ Logs show a model but never WHICH account served it
+- ❌ Secrets in prompts go straight to the upstream provider
+- ❌ Migrating means hand-editing databases
+
+**KRouter9 solves this:**
+
+- ✅ **Credit accounting** — every API key carries a USD limit, deducted per request
+- ✅ **Circuit breaker** — dead providers cool down and recover on their own
+- ✅ **Fallback rules** — "when model X 429s, retry on Y", no code
+- ✅ **Guardrails** — mask credentials and PII before they leave your machine
+- ✅ **One-command migration** — `krouter9 migrate` moves everything over
+- ✅ **Everything 9router has** — combos, OAuth, tunnels, RTK token saver, the whole dashboard
+
+---
+
+## 🔄 How It Works
+
+```
+┌─────────────┐
+│  Your CLI   │  Claude Code · Codex · Cursor · Cline · OpenCode · Antigravity
+└──────┬──────┘
+       │  http://localhost:20128/v1
+       ▼
+┌──────────────────────────────────────────────────┐
+│                   KRouter9                        │
+│  guardrails → semantic cache → combo/fallback    │
+│  → circuit breaker → credit deduction → webhooks │
+└──────┬───────────────────────────────────────────┘
+       ▼
+┌─────────────────┐ ┌─────────────────┐ ┌──────────────┐
+│  Antigravity    │ │  Codex          │ │  Kiro / GLM  │  ... 40+ more
+│  (OAuth)        │ │  (OAuth)        │ │  (free)      │
+└─────────────────┘ └─────────────────┘ └──────────────┘
+```
+
+---
+
+## 🚀 Quick Start
 
 **1. Install and start:**
 
 ```bash
-npm install -g krouter9
-krouter9
+git clone https://github.com/Konaimav2/KRouter9.git
+cd KRouter9
+cp .env.example .env
+npm install
+PORT=20128 NEXT_PUBLIC_BASE_URL=http://localhost:20128 npm run dev
 ```
 
 The dashboard opens at `http://localhost:20128`, the API at `http://localhost:20128/v1`.
-Default dashboard password is `123456`; change it in Settings.
+Default dashboard password is `123456` — change it in Settings.
 
 Docker:
 
 ```bash
+docker build -t krouter9 .
 docker run -d --name krouter9 --restart unless-stopped \
   -p 20128:20128 \
   -v "$HOME/.krouter9:/app/data" \
   -e DATA_DIR=/app/data \
-  ghcr.io/konaimav2/krouter9:latest
+  krouter9
 ```
 
-Or build the image yourself: `docker build -t krouter9 .` then run it with the same flags.
-`docker compose up -d` also works. See [DOCKER.md](./DOCKER.md) for the full container guide.
+Or `docker compose up -d`. See [DOCKER.md](./DOCKER.md) for the full container guide.
 
-**2. Connect a free provider (no signup needed):**
+Production mode:
 
-Dashboard → Providers → Connect Kiro AI (free monthly credits: Claude, GLM, MiniMax) or OpenCode Free (no auth) → Done.
+```bash
+npm run build
+PORT=20128 HOSTNAME=0.0.0.0 NEXT_PUBLIC_BASE_URL=http://localhost:20128 npm run start
+```
+
+**2. Connect a FREE provider (no signup needed):**
+
+Dashboard → Providers → Connect **Kiro AI** (free monthly credits: Claude, GLM, MiniMax) or **OpenCode Free** (no auth) → Done!
 
 **3. Use it in your coding tool:**
 
@@ -51,157 +109,90 @@ Claude Code / Codex / Cursor / Cline settings:
   Model:    kiro/claude-sonnet-4.5
 ```
 
-That is the whole setup. Details per tool are in [Connect your coding tool](#connect-your-coding-tool) below.
+**That's it!** Point Claude Code at it and start coding.
 
-Coming from another router? One command moves your accounts, keys, and combos over. See [Migration](#migrate-from-another-router).
-
----
-
-## Run from source
-
-For development or if you prefer not to use the published package:
-
-```bash
-git clone https://github.com/Konaimav2/krouter9.git
-cd krouter9
-cp .env.example .env
-npm install
-PORT=20128 NEXT_PUBLIC_BASE_URL=http://localhost:20128 npm run dev
-```
-
-Production mode from source:
-
-```bash
-npm run build
-PORT=20128 HOSTNAME=0.0.0.0 NEXT_PUBLIC_BASE_URL=http://localhost:20128 npm run start
-```
-
-Then connect a provider and your tools:
-
-1. Open `http://localhost:20128/dashboard`. The default password is `123456`; change it in Settings.
-2. Go to Providers and connect an account (OAuth or API key).
-3. Point your coding tool at the router:
-
-```
-Endpoint: http://localhost:20128/v1
-API Key:  [copy from dashboard, Endpoint & Key page]
-Model:    <provider>/<model>   e.g. antigravity/claude-sonnet-4-6
-```
-
-Running from source, for development:
-
-```bash
-git clone https://github.com/Konaimav2/krouter9.git
-cd KRouter9
-cp .env.example .env
-npm install
-PORT=20128 NEXT_PUBLIC_BASE_URL=http://localhost:20128 npm run dev
-```
-
-For production, build and start:
-
-```bash
-npm run build
-PORT=20128 HOSTNAME=0.0.0.0 NEXT_PUBLIC_BASE_URL=http://localhost:20128 npm run start
-```
-
-Then connect a provider and your tools:
-
-1. Open `http://localhost:20128/dashboard`. The default password is `123456`; change it in Settings.
-2. Go to Providers and connect an account (OAuth or API key).
-3. Point your coding tool at the router:
-
-```
-Endpoint: http://localhost:20128/v1
-API Key:  [copy from dashboard, Endpoint & Key page]
-Model:    <provider>/<model>   e.g. antigravity/claude-sonnet-4-6
-```
-
-Coming from another router? One command moves your accounts, keys, and combos over. See [Migration](#migrate-from-another-router).
+Coming from another router? One command moves your accounts, keys, and combos over — see [📦 Migrate](#-migrate-from-another-router).
 
 ---
 
-## What's added over 9router
+## ⚡ What's Added Over 9router
 
-Everything below was ported from source and tested against a running instance. File paths and per-feature notes are in [docs/FEATURES.md](./docs/FEATURES.md).
+Everything below was ported from source and tested against a running instance. Full per-feature docs (config, endpoints, verification steps) in [docs/FEATURES.md](./docs/FEATURES.md).
 
-### From srouter
+### From SRouter
 
-Per-API-key credit accounting: `creditLimit`, `usageCost`, and `usageTokens` on every key, deducted as requests are logged. Balance and top-ups at `GET/POST /api/keys/:id/credit`.
-
-A circuit breaker per provider/model: healthy, then cooldown with 30s to 5min exponential backoff on rate limits, then exhausted after 5 consecutive failures. It recovers on its own and sits inside the account fallback loop.
-
-Model-level fallback rules with full CRUD at `/api/settings/fallbacks`: map a source model to a target model, trigger on specific status codes like 429 or 403, set priority and max retries.
-
-Rate limiting (fixed window, per key and IP) and a 25 MB body-size guard, as reusable utilities in `src/lib/rateLimit.js` and `src/lib/bodyLimit.js`.
-
-A pricing dataset with a lookup function for per-million-token USD costs.
+- 💰 **Credit accounting per key** — `creditLimit` in USD, `usageCost` deducted as requests are logged, balance and top-ups at `GET/POST /api/keys/:id/credit`
+- 🔌 **Circuit breaker** — healthy → cooldown (30s→5min exponential backoff on 429/403) → exhausted after 5 failures, auto-recovers
+- 🔀 **Model-level fallback rules** — full CRUD at `/api/settings/fallbacks`: source model, target model, trigger status codes, priority, retries
+- 🚦 **Rate limiting + body guard** — fixed-window per key+IP, 25 MB body cap, reusable utilities
+- 🏷️ **Pricing dataset** — per-million-token USD lookup for cost math
 
 ### From OmniRoute
 
-Guardrails: credential masking (LLM, VCS, payment keys), PII masking, and a prompt-injection detector. Off by default, configurable in settings, wired at the top of the chat handler, and fail-open.
-
-A semantic cache (normalized exact match with TTL, stored in the `semanticCache` table) plus prompt template CRUD at `/api/prompts`.
-
-Reasoning routing rules that map tag patterns in a conversation to a model and effort level.
-
-Quota pools, allocations, and a token ledger (three tables, one API at `/api/quota-pools`).
-
-Extra media endpoints: `/v1/rerank` (Cohere), `/v1/moderations` (OpenAI), `/v1/ocr` (Mistral), all pass-through. Plus a models.dev catalog sync with ranked suggestions at `/api/models/smart`.
+- 🛡️ **Guardrails** — credential masking (LLM/VCS/payment keys), PII masking, prompt-injection detection. Off by default, fail-open
+- ⚡ **Semantic cache** — normalized exact-match with TTL, stored in SQLite
+- 📝 **Prompt templates** — CRUD at `/api/prompts`
+- 🧠 **Reasoning routing** — tag-in-conversation → model + effort
+- 🏊 **Quota pools** — token budgets, allocations, and an append-only ledger
+- 🎨 **Media endpoints** — `/v1/rerank` (Cohere), `/v1/moderations` (OpenAI), `/v1/ocr` (Mistral)
+- 📡 **models.dev sync** — ranked model catalog, search at `/api/models/smart`
 
 ### From 9router-v3
 
-Account automation: codebuddy bulk signup jobs, the ammail temp-mail OTP service with a push webhook, and Cloudflare Workers AI token provisioning.
-
-An AgentRouter WAF-bypass reverse proxy (UA spoofing with automatic `acw_tc` cookie refresh) and a media proxy with a domain allowlist.
-
-QWEN OAuth (device code flow with PKCE) and an opencode-go executor.
+- 🤖 **Account automation** — codebuddy bulk signup jobs, ammail temp-mail OTP with push webhook, Cloudflare Workers AI provisioning
+- 🕵️ **AgentRouter WAF-bypass proxy** — UA spoofing, `acw_tc` cookie auto-refresh
+- 🖼️ **Media proxy** — CDN proxy with domain allowlist
+- 🔑 **QWEN OAuth** (device code + PKCE) and the opencode-go executor
 
 ### From ZenRouter
 
-Correctness fixes: a TOML engine for declarative RTK filters, eight dev-output RTK filters (cargoTest, goTest, mypy, pytest, vitest, env, jsonCompact, truncate), the Gemini 64-char tool-name fix (issue #3622), the deferred-tool cache guard (#3567), the StreamMode framing fix (#3492), thought-signature tool call IDs, an assistant prefill policy, a client-version/UA spoof registry, quota-aware account selection, scheduler lifecycle hardening, request correlation IDs, and cgroup-aware CLI memory limits.
+- 🗜️ **RTK filter extensions** — cargoTest, goTest, mypy, pytest, vitest, env, jsonCompact + declarative TOML filters (brew, make, ps, systemctl, terraform)
+- 🐛 **Gemini 64-char tool-name fix** (#3622), deferred-tool cache guard (#3567), StreamMode framing fix (#3492)
+- 🎭 **thoughtSignature toolCallIds, assistant prefill, client-version/UA spoof registry**
+- ⚖️ **Quota-aware account selection** — prefer accounts with remaining quota
+- 🔧 **Scheduler lifecycle, request correlation IDs, cgroup-aware CLI memory flags**
 
-### KRouter9 originals
+### KRouter9 Originals
 
-A webhook dispatcher that pushes signed events (account_error, quota, credit_low, fallback) to any endpoint.
-
-Session affinity, which pins a conversation to one account so multi-turn context doesn't shift between upstream accounts.
-
-Model intelligence: an OpenRouter rankings sync with search over 150 ranked models.
+- 📢 **Webhook dispatcher** — signed events (account_error, quota, credit_low, fallback) to any endpoint
+- 📌 **Session affinity** — pin a conversation to one account so multi-turn context stays put
+- 🏆 **Model intelligence** — OpenRouter rankings sync, search 150 ranked models
+- 🔀 **Slug-qualified combos** — `kiro/my-combo` and `my-combo` both resolve; combo ids never collide with providers
 
 ---
 
-## Migrate from another router
+## 📦 Migrate from Another Router
 
-One tool handles it, and it detects the source format on its own.
-
-Dump the old router's SQLite database (works for 9router, ZenRouter, and 9router-v3):
+One command. No scripts to download, no node invocations to remember:
 
 ```bash
-node tools/migrations/sqlite-dump.js ~/.9router/db/data.sqlite
+krouter9 migrate
 ```
 
-Then import. Dry-run first to see what would move:
+That finds the foreign database, dumps it, detects the source format, previews what moves, and imports. Dry-run first if you're cautious:
 
 ```bash
-node tools/migrations/import.js detect  ~/.9router/db-export.json
-node tools/migrations/import.js import  ~/.9router/db-export.json --dry-run
-node tools/migrations/import.js import  ~/.9router/db-export.json
+krouter9 migrate --dry-run
+```
+
+Explicit sources:
+
+```bash
+krouter9 migrate --sqlite ~/.9router/db/data.sqlite
+krouter9 migrate --file ~/db-export.json
 ```
 
 | Source | What carries over |
 |---|---|
 | 9router / ZenRouter / 9router-v3 | providerConnections (accounts), apiKeys, combos, settings |
-| srouter | api_keys (with credit fields), fallback_rules |
+| SRouter | api_keys (with credit fields), fallback_rules |
 | OmniRoute | connections, apiKeys, settings |
 
-The import is idempotent: re-running skips rows that already exist. For backups between KRouter9 instances, use `node tools/migrations/export.js` and import the resulting JSON.
-
-This was verified against a live 9router database: 190 connections, 2 keys, and 9 combos moved over cleanly.
+The import is idempotent: re-running skips rows that already exist. Verified against a live 9router database: 190 connections, 2 keys, and 9 combos moved over cleanly.
 
 ---
 
-## API for automation
+## 🔌 API for Automation
 
 The full endpoint reference (loading accounts, checking balances and quota, driving the automation suites) is in [docs/API-AUTOMATION.md](./docs/API-AUTOMATION.md).
 
@@ -220,15 +211,18 @@ curl -b c.txt http://127.0.0.1:20128/api/keys/KEY_ID/credit
 
 # ranked model suggestions
 curl -b c.txt "http://127.0.0.1:20128/api/models/smart?q=deepseek&limit=5"
+
+# custom headers / UA on any connection
+curl -b c.txt -X PUT http://127.0.0.1:20128/api/providers/PROVIDER_ID \
+  -H 'Content-Type: application/json' \
+  -d '{"customHeaders": {"X-Title": "myapp"}, "userAgent": "myapp/1.0"}'
 ```
 
 ---
 
-## Connect your coding tool
+## 🖥️ Connect Your Coding Tool
 
-The router speaks the OpenAI Chat Completions format and also accepts Claude and Gemini request shapes, so most tools work by pointing them at one URL.
-
-The dashboard's CLI Tools page writes the config for you. Supported tools: Claude Code, Codex, GitHub Copilot, Cline, OpenClaw, OpenCode, Antigravity, Droid, Grok, Kilo, DeepSeek TUI, and more.
+The dashboard's CLI Tools page writes the config for you. Supported: Claude Code, Codex, GitHub Copilot, Cline, OpenClaw, OpenCode, Antigravity, Droid, Grok, Kilo, DeepSeek TUI, and more.
 
 | Tool | How to connect |
 |---|---|
@@ -240,7 +234,7 @@ Every key's quota, usage, and fallback behavior is visible in the dashboard.
 
 ---
 
-## FAQ
+## ❓ FAQ
 
 **Does this cost money?**
 The router itself is free and runs locally. Providers cost whatever they normally cost. Free and self-hosted providers work the same way as paid ones.
@@ -252,16 +246,18 @@ Everything (accounts, keys, usage history, settings) lives in SQLite under `~/.k
 Same core engine and dashboard. KRouter9 adds credit accounting per key, a circuit breaker, model-level fallback rules, guardrails, semantic caching, quota pools, account automation suites, webhook events, and several correctness fixes. The full list with file paths is in [docs/FEATURES.md](./docs/FEATURES.md).
 
 **Can I move my existing 9router setup over?**
-Yes. See [Migration](#migrate-from-another-router): accounts, keys, combos, and settings carry over in one command.
+Yes: `krouter9 migrate`. Accounts, keys, combos, and settings carry over in one command.
 
 **Windows support?**
-The CLI runs on Windows (it stores state under `AppData/Roaming/krouter9`). The dashboard and API work anywhere Node runs.
+The CLI runs on Windows (state under `AppData/Roaming/krouter9`). The dashboard and API work anywhere Node runs.
 
-## Documentation
+---
+
+## 📚 Documentation
 
 | Doc | Contents |
 |---|---|
-| [docs/FEATURES.md](./docs/FEATURES.md) | Every added feature with file paths |
+| [docs/FEATURES.md](./docs/FEATURES.md) | Every added feature: config, endpoints, file paths, verification |
 | [docs/API-AUTOMATION.md](./docs/API-AUTOMATION.md) | Full API reference for scripting and bots |
 | [DOCKER.md](./DOCKER.md) | Container guide: build, compose, ops, image publishing |
 | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Upstream system architecture (still applies) |
@@ -269,20 +265,20 @@ The CLI runs on Windows (it stores state under `AppData/Roaming/krouter9`). The 
 
 ---
 
-## Where the features came from
+## 🧬 Where the Features Came From
 
 | Source repo | What was taken | Where it landed |
 |---|---|---|
-| [srouter](https://github.com/seaavey/srouter) | credit accounting, circuit breaker, fallback rules, rate/body limits, pricing | API keys, chat loop, middleware utils |
+| [SRouter](https://github.com/seaavey/SRouter) | credit accounting, circuit breaker, fallback rules, rate/body limits, pricing | API keys, chat loop, middleware utils |
 | [OmniRoute](https://github.com/diegosouzapw/OmniRoute) | guardrails, semantic cache, prompt templates, reasoning routing, quota pools, media endpoints, models.dev sync | chat pipeline, new tables, /v1/* routes |
 | [9router-v3](https://github.com/adnan-afk/9router-v3) | QWEN OAuth, opencode-go, codebuddy/ammail/CF automation, AgentRouter proxy, media-proxy | /api/automation/*, executors |
 | [ZenRouter](https://github.com/ZenRouter/ZenRouter) | TOML RTK engine, dev filters, tool compressor, streamMode/prefill/deferred-tool fixes, clientVersions, quota-aware, scheduler, correlation | open-sse engine hardening |
 
-Each port keeps its MIT attribution header. The upstream audit with per-feature evidence paths is in [docs/FEATURES.md](./docs/FEATURES.md).
+Each port keeps its MIT attribution header.
 
 ---
 
-## Architecture
+## 🏗️ Architecture
 
 Same shape as upstream: Next.js 16, the open-sse engine, SQLite. Upstream's docs still apply: [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) and [open-sse/AGENTS.md](./open-sse/AGENTS.md). The new parts sit in this order on every request:
 
@@ -295,6 +291,6 @@ client → auth → rate/body limit → guardrails → semantic cache
 
 ---
 
-## License
+## 📄 License
 
-MIT. This carries upstream [decolua/9router](https://github.com/decolua/9router) attribution, and the ported components keep their per-file headers.
+MIT. Built on [decolua/9router](https://github.com/decolua/9router) v0.5.65 — upstream attribution kept, and the ported components keep their per-file headers.

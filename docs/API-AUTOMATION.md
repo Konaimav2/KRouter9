@@ -223,10 +223,18 @@ fallback → circuit breaker → fallback rules → credit deduction → webhook
 
 ## 11. Migration (from other routers)
 
+Prefer the CLI command (no scripts):
+
+```bash
+krouter9 migrate                  # detect + preview + import
+krouter9 migrate --dry-run        # preview only
+krouter9 migrate --sqlite ~/.9router/db/data.sqlite
+```
+
 ```bash
 # A) dump another SQLite (9router/ZenRouter/9router-v3):
 node tools/migrations/sqlite-dump.js ~/.9router/db/data.sqlite
-# B) import (auto-detects 9router-family / srouter / OmniRoute shape):
+# B) import (auto-detects 9router-family / SRouter / OmniRoute shape):
 node tools/migrations/import.js detect  ~/dump-export.json
 node tools/migrations/import.js import  ~/dump-export.json --dry-run
 node tools/migrations/import.js import  ~/dump-export.json
