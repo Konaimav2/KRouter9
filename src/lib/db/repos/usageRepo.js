@@ -31,6 +31,8 @@ const lastErrorProvider = global._lastErrorProvider;
 const pendingTimers = global._pendingTimers;
 const recentRing = global._recentRing;
 const connCache = global._connectionMapCache;
+if (!global._nodeNameCache) global._nodeNameCache = { map: {}, ts: 0 };
+const nodeCache = global._nodeNameCache;
 const statsEmitTimers = global._statsEmitTimers;
 
 export const statsEmitter = global._statsEmitter;
@@ -102,6 +104,19 @@ function pushToRing(entry) {
   if (recentRing.items.length > RING_CAP) {
     recentRing.items = recentRing.items.slice(-RING_CAP);
   }
+}
+
+async function getNodeNameMapCached() {
+  if (Date.now() - nodeCache.ts < CONN_CACHE_TTL_MS) return nodeCache.map;
+  try {
+    const { getProviderNodes } = await import("./nodesRepo.js");
+    const nodes = await getProviderNodes();
+    const map = {};
+    for (const n of nodes) map[n.id] = n.name || n.id;
+    nodeCache.map = map;
+    nodeCache.ts = Date.now();
+  } catch {}
+  return nodeCache.map;
 }
 
 async function getConnectionMapCached() {
@@ -196,6 +211,7 @@ export function trackPendingRequest(model, provider, connectionId, started, erro
 export async function getActiveRequests() {
   const activeRequests = [];
   const connectionMap = await getConnectionMapCached();
+  const nodeNameMap = await getNodeNameMapCached();
 
   for (const [connectionId, models] of Object.entries(pendingRequests.byAccount)) {
     for (const [modelKey, count] of Object.entries(models)) {
@@ -218,7 +234,10 @@ export async function getActiveRequests() {
     .map((e) => {
       const t = e.tokens || {};
       return {
-        timestamp: e.timestamp, model: e.model, provider: e.provider || "",
+        timestamp: e.timestamp, model: e.model,
+        // Resolve provider-node ids to human node names for display
+        provider: nodeNameMap[e.provider] || e.provider || "",
+        account: connectionMap[e.connectionId] || (e.connectionId ? e.connectionId.slice(0, 8) : ""),
         promptTokens: t.prompt_tokens || t.input_tokens || 0,
         completionTokens: t.completion_tokens || t.output_tokens || 0,
         status: e.status || "ok",
@@ -383,7 +402,8 @@ export async function getUsageStats(period = "all") {
     .map((r) => {
       const t = parseJson(r.tokens, {}) || {};
       return {
-        timestamp: r.timestamp, model: r.model, provider: r.provider || "",
+        timestamp: r.timestamp, model: r.model,
+        provider: providerNodeNameMap[r.provider] || r.provider || "",
         promptTokens: t.prompt_tokens || t.input_tokens || 0,
         completionTokens: t.completion_tokens || t.output_tokens || 0,
         cachedTokens: t.cached_tokens || t.cache_read_input_tokens || 0,
