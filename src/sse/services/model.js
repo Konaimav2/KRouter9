@@ -38,10 +38,10 @@ export async function resolveModelAlias(alias) {
 export async function getModelInfo(modelStr) {
   const parsed = parseModel(modelStr);
 
-  // Combo names may be qualified with a provider-style prefix (e.g. "kr/my-combo").
-  // Check the trailing segment against combos BEFORE provider resolution so
-  // clients that qualify every model with a prefix (hermes, some OpenAI SDKs)
-  // still resolve to the combo.
+  // Some clients (hermes, some OpenAI SDKs) qualify every model id as <slug>/<model>.
+  // If the trailing segment matches a combo name, resolve as that combo BEFORE
+  // provider resolution — otherwise "<anything>/<combo>" would be parsed as a
+  // provider id and fail.
   if (modelStr.includes("/") && !parsed.isAlias) {
     const tail = modelStr.split("/").pop();
     const prefixedCombo = await getComboByName(tail);
@@ -95,9 +95,8 @@ export async function getModelInfo(modelStr) {
  * @returns {Promise<string[]|null>} Array of models or null if not a combo
  */
 export async function getComboModels(modelStr) {
-  // Exact combo name (no slash), or a prefixed combo like "kr/my-combo":
-  // strip the prefix and re-check so prefixed requests resolve as combos.
-  let comboName = modelStr;
+  // Exact combo name (no slash), or slug-qualified ("kiro/my-combo", "x/my-combo"):
+  // strip the prefix and re-check so qualified requests resolve as combos.
   if (modelStr.includes("/")) {
     const tail = modelStr.split("/").pop();
     const combo = await getComboByName(tail);
@@ -107,7 +106,7 @@ export async function getComboModels(modelStr) {
     return null;
   }
 
-  const combo = await getComboByName(comboName);
+  const combo = await getComboByName(modelStr);
   if (combo && combo.models && combo.models.length > 0) {
     return combo.models;
   }

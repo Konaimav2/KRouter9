@@ -48,7 +48,7 @@ Dashboard → Providers → Connect Kiro AI (free monthly credits: Claude, GLM, 
 Claude Code / Codex / Cursor / Cline settings:
   Endpoint: http://localhost:20128/v1
   API Key:  [copy from dashboard]
-  Model:    kr/claude-sonnet-4.5
+  Model:    kiro/claude-sonnet-4.5
 ```
 
 That is the whole setup. Details per tool are in [Connect your coding tool](#connect-your-coding-tool) below.
