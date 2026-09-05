@@ -293,13 +293,12 @@ export async function buildModelsList(kindFilter, options = {}) {
   const models = [];
 
   // Combos first (filtered by kind). Web combos expose `kind` so AI knows search vs fetch.
-  // Each combo is emitted twice: bare name and kr/-prefixed. Clients that validate
-  // the configured model against this list (hermes, some OpenAI SDKs) may qualify
-  // every model with the router prefix; chat-side resolution strips the prefix
-  // and matches the bare combo name, so both ids resolve to the same combo.
-  // The kr/-prefixed entry wins the dedupe later only if emitted first; bare name
-  // is the canonical id, so prefix entries are added AFTER the bare ones.
-  const comboPrefixEntries = [];
+  // Combos use their bare names only. The bare id never starts with "kr/" — that
+  // prefix belongs to the Kiro AI provider ("kr" is its registry alias), so
+  // emitting kr/<combo> duplicates would mix combos into the kiro model rows.
+  // Prefixed combo requests (kr/my-combo from clients that qualify every model)
+  // still resolve: chat-side model resolution strips the prefix when the
+  // trailing segment matches a combo name.
   for (const combo of combos) {
     if (!comboMatchesKinds(combo, kindFilter)) continue;
     const entry = {
@@ -311,9 +310,7 @@ export async function buildModelsList(kindFilter, options = {}) {
       entry.kind = combo.kind;
     }
     models.push(entry);
-    comboPrefixEntries.push({ ...entry, id: `kr/${combo.name}` });
   }
-  models.push(...comboPrefixEntries);
 
   if (connections.length === 0) {
     // DB unavailable -> return static models, filtered by per-model kind
