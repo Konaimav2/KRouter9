@@ -8,8 +8,9 @@
   One local endpoint for Claude Code, Codex, Cursor, Antigravity, Copilot, Cline, OpenCode and 40+ providers — with per-key credit accounting, a circuit breaker, guardrails, semantic caching, and account automation built in. 30 features merged from SRouter, OmniRoute, 9router-v3, and ZenRouter.
 
   [![GitHub](https://img.shields.io/badge/GitHub-Konaimav2%2FKRouter9-181717?logo=github)](https://github.com/Konaimav2/KRouter9)
+  [![npm](https://img.shields.io/badge/npm-krouter9%200.5.69-cb3837?logo=npm)](https://www.npmjs.com/package/krouter9)
   [![License](https://img.shields.io/badge/license-MIT-22c55e?style=flat-square)](./LICENSE)
-  [![Base](https://img.shields.io/badge/built%20on-9router%20v0.5.65-6366f1?style=flat-square)](https://github.com/decolua/9router)
+  [![Base](https://img.shields.io/badge/built%20on-9router%20v0.5.69-6366f1?style=flat-square)](https://github.com/decolua/9router)
   [![Node](https://img.shields.io/badge/node-%3E%3D22-339933?style=flat-square&logo=node.js)](https://nodejs.org/)
 
   [🚀 Quick Start](#-quick-start) • [⚡ What's New](#-whats-added-over-9router) • [📦 Migrate](#-migrate-from-another-router) • [🔌 API](./docs/API-AUTOMATION.md) • [📚 Docs](#-documentation)
@@ -66,15 +67,22 @@
 **1. Install and start:**
 
 ```bash
+npm install -g krouter9
+krouter9
+```
+
+The dashboard opens at `http://localhost:20128`, the API at `http://localhost:20128/v1`.
+Default dashboard password is `123456` — change it in Settings.
+
+Prefer from source?
+
+```bash
 git clone https://github.com/Konaimav2/KRouter9.git
 cd KRouter9
 cp .env.example .env
 npm install
 PORT=20128 NEXT_PUBLIC_BASE_URL=http://localhost:20128 npm run dev
 ```
-
-The dashboard opens at `http://localhost:20128`, the API at `http://localhost:20128/v1`.
-Default dashboard password is `123456` — change it in Settings.
 
 Docker:
 
@@ -261,7 +269,7 @@ The CLI runs on Windows (state under `AppData/Roaming/krouter9`). The dashboard 
 | [docs/API-AUTOMATION.md](./docs/API-AUTOMATION.md) | Full API reference for scripting and bots |
 | [DOCKER.md](./DOCKER.md) | Container guide: build, compose, ops, image publishing |
 | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Upstream system architecture (still applies) |
-| [CHANGELOG.md](./CHANGELOG.md) | Upstream changelog through v0.5.65 |
+| [CHANGELOG.md](./CHANGELOG.md) | Upstream changelog through v0.5.69 |
 
 ---
 
@@ -293,4 +301,4 @@ client → auth → rate/body limit → guardrails → semantic cache
 
 ## 📄 License
 
-MIT. Built on [decolua/9router](https://github.com/decolua/9router) v0.5.65 — upstream attribution kept, and the ported components keep their per-file headers.
+MIT. Built on [decolua/9router](https://github.com/decolua/9router) v0.5.69 — upstream attribution kept, and the ported components keep their per-file headers.
