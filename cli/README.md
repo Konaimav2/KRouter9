@@ -3,9 +3,9 @@
 FREE AI router & token saver. Connect Claude Code, Codex, Cursor, Cline, OpenCode, Antigravity,
 Copilot, and any OpenAI-compatible tool to 40+ providers, with auto-fallback and RTK token saving.
 
-Built on [decolua/9router](https://github.com/decolua/9router) v0.5.65 with 30 merged features
+Built on [decolua/9router](https://github.com/decolua/9router) v0.5.69 with 30 merged features
 from SRouter, OmniRoute, 9router-v3, and ZenRouter. Full docs:
-[github.com/Konaimav2/krouter9](https://github.com/Konaimav2/krouter9).
+[github.com/Konaimav2/KRouter9](https://github.com/Konaimav2/KRouter9).
 
 ## Install
 

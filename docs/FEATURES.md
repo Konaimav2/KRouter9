@@ -1,6 +1,6 @@
 # KRouter9 features: full reference
 
-Every feature KRouter9 adds on top of [decolua/9router](https://github.com/decolua/9router) v0.5.65,
+Every feature KRouter9 adds on top of [decolua/9router](https://github.com/decolua/9router) v0.5.69,
 documented from the source code, not summarized. Each entry covers what it does, how it works,
 how to use it, its configuration, where the code lives, and how to verify it.
 
