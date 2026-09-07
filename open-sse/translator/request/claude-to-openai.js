@@ -97,7 +97,7 @@ export function claudeToOpenAIRequest(model, body, stream) {
 function fixMissingToolResponsesOpenAI(messages) {
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
-    if (msg.role === ROLE.ASSISTANT && msg.tool_calls && msg.tool_calls.length > 0) {
+    if (msg.role === ROLE.ASSISTANT && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
       const toolCallIds = msg.tool_calls.map(tc => tc.id);
       
       // Collect all tool response IDs that IMMEDIATELY follow this assistant message
