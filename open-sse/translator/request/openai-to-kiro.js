@@ -181,7 +181,7 @@ function convertMessages(messages, model) {
         textContent = msg.content.trim();
       }
 
-      if (msg.tool_calls && msg.tool_calls.length > 0) {
+      if (Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
         toolUses = msg.tool_calls;
       }
 

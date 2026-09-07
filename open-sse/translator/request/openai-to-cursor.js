@@ -65,7 +65,7 @@ function convertMessages(messages) {
   };
 
   for (const msg of messages) {
-    if (msg.role === ROLE.ASSISTANT && msg.tool_calls) {
+    if (msg.role === ROLE.ASSISTANT && Array.isArray(msg.tool_calls)) {
       for (const tc of msg.tool_calls) {
         rememberToolMeta(tc.id || "", tc.function?.name || "tool");
       }
@@ -129,7 +129,7 @@ function convertMessages(messages) {
 
       const content = extractContent(msg.content);
 
-      if (msg.role === ROLE.ASSISTANT && msg.tool_calls && msg.tool_calls.length > 0) {
+      if (msg.role === ROLE.ASSISTANT && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
         const assistantMsg = { role: ROLE.ASSISTANT, content: content || "" };
         assistantMsg.tool_calls = msg.tool_calls.map(tc => {
           const { index, ...rest } = tc || {};

@@ -401,13 +401,14 @@ export default function ModelSelectModal({
     if (kindFilter || capFilter) return [];
     if (!searchQuery.trim()) return combos;
     const query = searchQuery.toLowerCase();
-    return combos.filter(c => c.name.toLowerCase().includes(query));
+    return combos.filter(c => (c?.name || "").toLowerCase().includes(query));
   }, [combos, searchQuery, kindFilter]);
 
   // Sort models alphabetically, with added models floated to top
   const sortModels = (models) => {
-    const added = models.filter(m => addedModelValues.includes(m.value)).sort((a, b) => a.name.localeCompare(b.name));
-    const rest = models.filter(m => !addedModelValues.includes(m.value)).sort((a, b) => a.name.localeCompare(b.name));
+    const getName = (m) => (m?.name || m?.id || m?.value || "");
+    const added = models.filter(m => addedModelValues.includes(m.value)).sort((a, b) => getName(a).localeCompare(getName(b)));
+    const rest = models.filter(m => !addedModelValues.includes(m.value)).sort((a, b) => getName(a).localeCompare(getName(b)));
     return [...added, ...rest];
   };
 
@@ -424,11 +425,11 @@ export default function ModelSelectModal({
         if (models.length === 0) return;
       }
       if (query) {
-        const providerNameMatches = group.name.toLowerCase().includes(query);
+        const providerNameMatches = (group.name || "").toLowerCase().includes(query);
         models = models.filter(
           (m) =>
-            m.name.toLowerCase().includes(query) ||
-            m.id.toLowerCase().includes(query)
+            (m?.name || m?.id || "").toLowerCase().includes(query) ||
+            (m?.id || "").toLowerCase().includes(query)
         );
         if (models.length === 0 && !providerNameMatches) return;
       }
