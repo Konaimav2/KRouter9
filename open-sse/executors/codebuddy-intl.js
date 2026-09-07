@@ -37,6 +37,36 @@ export class CodeBuddyIntlExecutor extends DefaultExecutor {
       }
     }
 
+    // response_format: CodeBuddy is stream-only and ignores/breaks on it — drop
+    // and mirror the schema/directive into the last user text. (srouter ac92a2b)
+    const rf = transformed.response_format;
+    if (rf && (rf.type === "json_schema" || rf.type === "json_object")) {
+      delete transformed.response_format;
+      let directive = rf.type === "json_object" ? "Respond only in valid JSON." : "";
+      if (rf.type === "json_schema") {
+        const schemaObj = rf.json_schema?.schema ?? rf.json_schema;
+        if (schemaObj) {
+          directive = "You must respond with valid JSON matching this schema:\\n" +
+            JSON.stringify(schemaObj, null, 2);
+        }
+      }
+      if (directive) {
+        const msgs = transformed.messages || [];
+        for (let i = msgs.length - 1; i >= 0; i--) {
+          const m = msgs[i];
+          if (m.role !== "user") continue;
+          if (typeof m.content === "string") {
+            m.content = m.content + "\\n\\n" + directive;
+          } else if (Array.isArray(m.content)) {
+            const lastText = [...m.content].reverse().find(b => b.type === "text");
+            if (lastText) lastText.text = lastText.text + "\\n\\n" + directive;
+            else m.content.push({ type: "text", text: directive });
+          }
+          break;
+        }
+      }
+    }
+
     return transformed;
   }
 }
