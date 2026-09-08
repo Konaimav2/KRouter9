@@ -1,6 +1,6 @@
 {
   "name": "krouter9",
-  "version": "0.5.69",
+  "version": "0.5.71",
   "description": "KRouter9 CLI - Start and manage KRouter9 server",
   "bin": {
     "krouter9": "./cli.js"
@@ -10,6 +10,7 @@
     "src",
     "hooks",
     "app",
+    "tools",
     "README.md",
     "LICENSE"
   ],
