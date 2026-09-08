@@ -457,3 +457,98 @@ client request
   -> webhook events
   -> response
 ```
+
+
+## Donor rounds (2026-09-07/08)
+
+### DB integrity gate (from ZenRouter 8db56e4)
+
+**What it does.** At startup, before any schema mutation or backup pruning, the migration entry runs
+`PRAGMA quick_check` against the SQLite file (`src/lib/db/integrity.js`). On corruption it throws
+`DatabaseCorruptionError` with a recovery message pointing at `~/.krouter9/db/backups/` candidates.
+
+**Why.** Previously the driver chain fell through to the next adapter on corruption and could boot
+with an empty database while backups were silently pruned.
+
+**Verify.** `tests/unit/db-integrity-safety.test.js`. Corrupt a copy of `data.sqlite`
+(`head -c 100 /dev/urandom > /tmp/bad.sqlite`), point `DATA_DIR` at it, boot: process exits with the
+integrity error instead of starting.
+
+### Combo first-chunk probe (regression: opus-4.8)
+
+**What it does.** When a request runs inside a combo, `handleStreamingResponse` reads the first SSE
+chunk from the upstream before committing. If the chunk is an error event (`data: {"error": …}`),
+the stream is empty (`done` before data), or nothing arrives within 15s, chatCore returns
+`success:false` with a JSON error — and `handleComboChat` advances to the next model.
+
+**Why.** Providers can answer 200 + SSE headers and still fail (capacity events mid-pipe). The combo
+loop only inspects `response.ok`, so those failures were invisible and the client got a broken
+stream instead of the next provider.
+
+**Verify.** `tests/unit/combo-first-chunk-probe.test.js`. Live: point a combo at a provider whose
+upstream returns `data: {"error": ...}` with HTTP 200 and watch `COMBO Trying model 2/N`.
+
+### Enforcing CSP (from ZenRouter d562bff)
+
+**What it does.** `next.config.mjs` gains a `headers()` block: strict
+`Content-Security-Policy` for `/api/*`, `/v1/*`, `/v1beta/*`
+(`default-src 'none'; frame-ancestors 'none'; base-uri 'none'`) and a working dashboard CSP
+(self + GA/Insights + jsdelivr for the Monaco editor on the translator page) plus
+`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` on everything else.
+
+**Verify.** `curl -sD - -o /dev/null http://127.0.0.1:20128/dashboard | grep -i content-security`.
+
+### Request logs: client IP + itemized cost (from SRouter 9ff62de)
+
+**What it does.** Every request detail row stores the client IP (from the unspoofable
+`x-9r-real-ip` header that `custom-server.js` derives from the TCP socket; XFF is trusted only from
+a loopback reverse proxy) and the per-request USD cost computed from the pricing table at stream
+completion. Both are visible in Usage → Request Details (IP column + cost in the JSON).
+
+**Verify.** Send a request through `/v1`, open Usage → Request Details: the row shows the caller IP;
+the row JSON contains `cost` matching the usageHistory cost for the same request.
+
+### All-time totals on request logs (from SRouter 5443f12)
+
+**What it does.** `GET /api/usage/request-details` returns `allTime` — requests, prompt/completion/
+cached tokens, and summed cost over the entire filtered dataset, not just the current page.
+
+**Verify.** `curl -b c.txt http://127.0.0.1:20128/api/usage/request-details | python3 -m json.tool |
+grep allTime` — the numbers match a manual `SELECT COUNT(*), SUM(...)` over the same filter.
+
+### Translator tool_calls guards (from OmniRoute 2b2d34eb)
+
+**What it does.** `openai-to-cursor.js` requires `Array.isArray(msg.tool_calls)` before iterating;
+the same hardening was applied to `openai-responses.js` (delta.tool_calls),
+`claude-to-openai.js`, and `openai-to-kiro.js`. A malformed
+`"tool_calls": "string"` from any client now degrades to "ignored" instead of a TypeError crash.
+
+**Verify.** POST a chat body with `{"role":"assistant","tool_calls":"x"}` to a cursor-target
+combo — response is a normal model error, never a stack trace.
+
+### Antigravity static model catalog (from ZenRouter 468ae8c)
+
+**What it does.** The Antigravity entry in `providers/[id]/models/route.js` no longer POSTs to
+`daily-cloudcode-pa.sandbox.googleapis.com` (403/404 for consumer accounts). It returns the static
+curated list from `getModelsByProviderId("antigravity")`.
+
+**Verify.** Open Providers → Antigravity → model list renders instantly with no upstream call.
+
+### CodeBuddy response_format mirror (from SRouter ac92a2b)
+
+**What it does.** CodeBuddy is stream-only and ignores — or answers prose to — `response_format`.
+Both `codebuddy-cn.js` and `codebuddy-intl.js` now delete `response_format` and append the JSON
+directive ("Respond only in valid JSON." or the full `json_schema` payload) to the last user
+message text.
+
+**Verify.** Send `{"response_format":{"type":"json_schema","json_schema":{...}}}` through a
+codebuddy combo member; the reply is valid JSON and the upstream body contains no
+`response_format` field.
+
+### Media-page combos (from ZenRouter b7adec9)
+
+**What it does.** `media-providers/[kind]/page.js` now lists all combo-capable kinds
+(embedding, image, imageToText, tts, stt, video, music) instead of an empty set that hid
+combos from every media page.
+
+**Verify.** Create a combo containing an image member — it appears on Dashboard → Media → Image.
