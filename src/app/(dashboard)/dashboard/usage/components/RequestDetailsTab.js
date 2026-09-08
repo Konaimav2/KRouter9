@@ -255,6 +255,7 @@ export default function RequestDetailsTab() {
                 <th className="text-left p-4 text-sm font-semibold text-text-main">Timestamp</th>
                 <th className="text-left p-4 text-sm font-semibold text-text-main">Model</th>
                 <th className="text-left p-4 text-sm font-semibold text-text-main">Provider</th>
+                <th className="text-left p-4 text-sm font-semibold text-text-main">IP</th>
                 <th className="text-right p-4 text-sm font-semibold text-text-main">Input Tokens</th>
                 <th className="text-right p-4 text-sm font-semibold text-text-main">Cached</th>
                 <th className="text-right p-4 text-sm font-semibold text-text-main">Cache Creation</th>
@@ -296,6 +297,9 @@ export default function RequestDetailsTab() {
                          {getProviderName(detail.provider, providerNameCache)}
                        </span>
                      </td>
+                    <td className="max-w-[140px] truncate p-4 font-mono text-sm text-text-muted" title={detail.clientIp || ""}>
+                      {detail.clientIp || "—"}
+                    </td>
                     <td className="p-4 text-sm text-text-main text-right font-mono">
                       {getInputTokens(detail.tokens).toLocaleString()}
                     </td>

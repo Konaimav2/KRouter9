@@ -69,6 +69,8 @@ export function buildRequestDetail(base, overrides = {}) {
     provider: base.provider || "unknown",
     model: base.model || "unknown",
     connectionId: base.connectionId || undefined,
+    clientIp: base.clientIp || undefined,
+    cost: typeof base.cost === "number" ? base.cost : undefined,
     timestamp: new Date().toISOString(),
     latency: base.latency || { ttft: 0, total: 0 },
     tokens: base.tokens || { prompt_tokens: 0, completion_tokens: 0 },

@@ -93,6 +93,41 @@ const nextConfig = {
         destination: "/api/v1"
       }
     ];
+  },
+  async headers() {
+    // Enforcing CSP for the dashboard (ported from ZenRouter). API/SSE are
+    // non-browser or same-origin fetch — minimal CSP, no inline needed.
+    const dashboardCsp = [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://static.cloudflareinsights.com https://cloudflareinsights.com https://cdn.jsdelivr.net",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net",
+      "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net",
+      "img-src 'self' data: blob: https:",
+      // GA4/Insights beacons; ws/wss for HMR in dev
+      "connect-src 'self' https://www.googletagmanager.com https://www.google-analytics.com https://region1.google-analytics.com https://static.cloudflareinsights.com https://cloudflareinsights.com https://cdn.jsdelivr.net ws: wss:",
+      "media-src 'self' blob: data:",
+      "worker-src 'self' blob:",
+      "object-src 'none'",
+      "frame-ancestors 'self'",
+      "base-uri 'self'",
+      "form-action 'self'",
+    ].join("; ");
+    const apiCsp = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'";
+    return [
+      { source: "/api/:path*", headers: [{ key: "Content-Security-Policy", value: apiCsp }] },
+      { source: "/v1/:path*", headers: [{ key: "Content-Security-Policy", value: apiCsp }] },
+      { source: "/v1beta/:path*", headers: [{ key: "Content-Security-Policy", value: apiCsp }] },
+      { source: "/v1beta", headers: [{ key: "Content-Security-Policy", value: apiCsp }] },
+      {
+        source: "/(.*)",
+        headers: [
+          { key: "Content-Security-Policy", value: dashboardCsp },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        ],
+      },
+    ];
   }
 };
 
