@@ -311,6 +311,15 @@ function buildCliPackage() {
   }
 
   // Step 7b: Copy standalone updater (headless Node process for install progress)
+  // Step 7c: Copy migration tools (krouter9 migrate needs tools/migrations next to the CLI).
+  const toolsSrc = path.join(rootDir, "tools", "migrations");
+  const toolsDest = path.join(cliDir, "tools", "migrations");
+  if (fs.existsSync(toolsSrc)) {
+    fs.mkdirSync(path.dirname(toolsDest), { recursive: true });
+    copyRecursive(toolsSrc, toolsDest);
+    console.log("✅ Copied migration tools");
+  }
+
   console.log("7️⃣ b Copying updater files...");
   const updaterSrc = path.join(appDir, "src", "lib", "updater");
   const updaterDest = path.join(cliAppDir, "src", "lib", "updater");
