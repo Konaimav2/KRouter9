@@ -186,8 +186,25 @@ export async function getRequestDetails(filter = {}) {
   );
   const details = rows.map((r) => parseJson(r.data, {}));
 
+  // All-time totals over the filtered dataset (SRouter-parity: cumulative
+  // requests/tokens/cost summary above the logs table). Token data lives in
+  // the JSON blob, so aggregate in JS over the full filtered set.
+  let allTime = { requests: totalItems, promptTokens: 0, completionTokens: 0, cachedTokens: 0, cost: 0 };
+  try {
+    const allRows = db.all(`SELECT data FROM requestDetails ${where}`, params);
+    for (const r of allRows) {
+      const d = parseJson(r.data, {});
+      const tk = d.tokens || {};
+      allTime.promptTokens += tk.prompt_tokens || tk.input_tokens || 0;
+      allTime.completionTokens += tk.completion_tokens || tk.output_tokens || 0;
+      allTime.cachedTokens += tk.cached_tokens || tk.cache_read_input_tokens || 0;
+      if (typeof d.cost === "number") allTime.cost += d.cost;
+    }
+  } catch {}
+
   return {
     details,
+    allTime,
     pagination: { page, pageSize, totalItems, totalPages, hasNext: page < totalPages, hasPrev: page > 1 },
   };
 }

@@ -43,7 +43,28 @@ function buildTransformStream({ provider, sourceFormat, targetFormat, userAgent,
 /**
  * Handle streaming response — pipe provider SSE through transform stream to client.
  */
-export async function handleStreamingResponse({ providerResponse, provider, model, sourceFormat, targetFormat, userAgent, body, stream, translatedBody, finalBody, requestStartTime, connectionId, apiKey, clientRawRequest, onRequestSuccess, reqLogger, toolNameMap, customToolNames, streamController, onStreamComplete, streamDetailId, pxpipe, reqTag, log, credentials }) {
+function reenqueueFirstChunk(bodyStream, firstChunkValue) {
+  const reader = bodyStream.getReader();
+  return new ReadableStream({
+    async start(controller) {
+      controller.enqueue(firstChunkValue);
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          controller.enqueue(value);
+        }
+      } catch (e) {
+        controller.error(e);
+      } finally {
+        controller.close();
+      }
+    },
+    cancel() { reader.cancel().catch(() => {}); },
+  });
+}
+
+export async function handleStreamingResponse({ providerResponse, provider, model, sourceFormat, targetFormat, userAgent, body, stream, translatedBody, finalBody, requestStartTime, connectionId, apiKey, clientRawRequest, onRequestSuccess, reqLogger, toolNameMap, customToolNames, streamController, onStreamComplete, streamDetailId, pxpipe, reqTag, log, credentials, comboName, clientIp }) {
   if (onRequestSuccess) {
     Promise.resolve()
       .then(onRequestSuccess)
@@ -85,10 +106,65 @@ export async function handleStreamingResponse({ providerResponse, provider, mode
   const isResponsesPassthrough = sourceFormat === FORMATS.OPENAI_RESPONSES && targetFormat === FORMATS.OPENAI_RESPONSES;
   const onAbortTerminal = isResponsesPassthrough ? buildAbortedResponsesTerminalBytes : null;
   const stallTimeoutMs = PROVIDERS[provider]?.stallTimeoutMs || STREAM_STALL_TIMEOUT_MS;
-  const transformedBody = pipeWithDisconnect(providerResponse, transformStream, streamController, onAbortTerminal, stallTimeoutMs);
+  // Combo safety: upstream 200 + SSE headers does NOT guarantee the stream
+  // carries data — providers (esp. capacity-limited ones) can return 200 and
+  // then emit an error event or die silently. Without a probe, handleComboChat
+  // sees success:true and never falls back (boss-report: combo opus-4.8).
+  // Solution: read the FIRST chunk before committing. Error event or timeout →
+  // success:false so the combo advances to the next model.
+  let bodyStream = providerResponse.body;
+  if (comboName) {
+    const reader = providerResponse.body.getReader();
+    let firstChunk = null;
+    try {
+      const timeoutMs = 15000;
+      firstChunk = await Promise.race([
+        reader.read(),
+        new Promise((_, rej) => setTimeout(() => rej(new Error("first chunk timeout")), timeoutMs)),
+      ]);
+    } catch (err) {
+      streamController?.handleError?.(err);
+      return {
+        success: false,
+        response: new Response(JSON.stringify({ error: { message: `[${provider}/${model}] upstream stream failed before first chunk: ${err.message}` } }), {
+          status: 504,
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        }),
+      };
+    }
+    if (firstChunk?.done) {
+      streamController?.handleError?.(new Error("upstream stream ended before first chunk"));
+      return {
+        success: false,
+        response: new Response(JSON.stringify({ error: { message: `[${provider}/${model}] upstream stream ended before first chunk` } }), {
+          status: 502,
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        }),
+      };
+    }
+    const chunkText = new TextDecoder().decode(firstChunk.value);
+    if (/^data:\s*\{"error"/m.test(chunkText) || /^data:\s*\[DONE\]/m.test(chunkText) && !/("delta"|"content_block_start"|"candidates"|"message_start"|"response\.output")/.test(chunkText)) {
+      streamController?.handleError?.(new Error("upstream first chunk is an error/empty event"));
+      // extract error message if present
+      let errMsg = "upstream returned an error event";
+      const em = chunkText.match(/"error"\s*:\s*\{[^}]*"message"\s*:\s*"([^"]{0,200})/);
+      if (em) errMsg = em[1];
+      return {
+        success: false,
+        response: new Response(JSON.stringify({ error: { message: `[${provider}/${model}] ${errMsg}` } }), {
+          status: 502,
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        }),
+      };
+    }
+    // good first chunk — re-wrap so the rest of the pipeline keeps streaming
+    bodyStream = reenqueueFirstChunk(providerResponse.body, firstChunk.value);
+  }
+
+  const transformedBody = pipeWithDisconnect(bodyStream, transformStream, streamController, onAbortTerminal, stallTimeoutMs);
 
   saveRequestDetail(buildRequestDetail({
-    provider, model, connectionId,
+    provider, model, connectionId, clientIp,
     latency: { ttft: 0, total: Date.now() - requestStartTime },
     tokens: { prompt_tokens: 0, completion_tokens: 0 },
     request: extractRequestConfig(body, stream),
@@ -113,7 +189,7 @@ export async function handleStreamingResponse({ providerResponse, provider, mode
 export function buildOnStreamComplete({ provider, model, connectionId, apiKey, requestStartTime, body, stream, finalBody, translatedBody, clientRawRequest, pxpipe, reqTag, log }) {
   const streamDetailId = `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
-  const onStreamComplete = (contentObj, usage, ttftAt) => {
+  const onStreamComplete = async (contentObj, usage, ttftAt) => {
     const latency = {
       ttft: ttftAt ? ttftAt - requestStartTime : Date.now() - requestStartTime,
       total: Date.now() - requestStartTime
@@ -121,9 +197,19 @@ export function buildOnStreamComplete({ provider, model, connectionId, apiKey, r
     const safeContent = contentObj?.content || "[Empty streaming response]";
     const safeThinking = contentObj?.thinking || null;
 
+    // Itemized per-request cost (SRouter parity) — single source of truth pricing.
+    let cost = 0;
+    try {
+      const { getPricingForModel } = await import("@/lib/db/repos/pricingRepo.js");
+      const { calculateCostFromTokens } = await import("open-sse/providers/pricing.js");
+      const pricing = await getPricingForModel(provider, model);
+      if (pricing) cost = calculateCostFromTokens(usage || {}, pricing);
+    } catch {}
+
     saveRequestDetail(buildRequestDetail({
       provider, model, connectionId,
       latency,
+      cost,
       tokens: usage || { prompt_tokens: 0, completion_tokens: 0 },
       request: extractRequestConfig(body, stream),
       providerRequest: finalBody || translatedBody || null,
