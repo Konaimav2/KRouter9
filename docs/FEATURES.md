@@ -508,6 +508,11 @@ completion. Both are visible in Usage → Request Details (IP column + cost in t
 **Verify.** Send a request through `/v1`, open Usage → Request Details: the row shows the caller IP;
 the row JSON contains `cost` matching the usageHistory cost for the same request.
 
+**Turning logging on.** Request Details writes only when observability is enabled. Precedence:
+`ENABLE_REQUEST_LOGS=true` (env, forces on) → dashboard Settings toggle (`enableObservability`)
+→ `OBSERVABILITY_ENABLED` env (default on). Note the dashboard toggle defaults to **off** in
+fresh installs — if the logs table is empty, flip the toggle or set the env var.
+
 ### All-time totals on request logs (from SRouter 5443f12)
 
 **What it does.** `GET /api/usage/request-details` returns `allTime` — requests, prompt/completion/
