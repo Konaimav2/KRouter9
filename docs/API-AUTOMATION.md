@@ -248,3 +248,32 @@ Idempotent — re-running skips existing rows (provider+email / key / rule pair)
 
 **Rate limits / body limits**: `src/lib/rateLimit.js` + `bodyLimit.js` are utilities — wire them
 into a custom entry route if you need per-key throttling (25 MB body cap, fixed-window per key+IP).
+
+## 12. Request logs (details, IP, cost)
+
+```bash
+# paginated request details (newest first)
+curl -b c.txt "http://127.0.0.1:20128/api/usage/request-details?page=1&pageSize=20"
+
+# filtered
+curl -b c.txt "http://127.0.0.1:20128/api/usage/request-details?provider=antigravity&status=success"
+
+# response shape
+{
+  "details": [ { "id": "...", "timestamp": "...", "provider": "...", "model": "...",
+                 "connectionId": "...", "status": "success",
+                 "clientIp": "1.2.3.4",            // socket-derived, XFF-hardened
+                 "cost": 0.0031,                   // per-request USD (pricing table)
+                 "tokens": { "prompt_tokens": 0, "completion_tokens": 0 },
+                 "latency": { "ttft": 0, "total": 0 }, "response": { ... } } ],
+  "allTime": { "requests": 0, "promptTokens": 0, "completionTokens": 0,
+               "cachedTokens": 0, "cost": 0 },
+  "pagination": { "page": 1, "pageSize": 20, "totalItems": 0, "totalPages": 0,
+                  "hasNext": false, "hasPrev": false }
+}
+```
+
+`allTime` aggregates over the entire filtered dataset (not just the current page).
+
+Recent text logs (Usage → Recent Requests) now include per-row cost:
+`timestamp | model | provider | account | sent | received | $cost | status`.

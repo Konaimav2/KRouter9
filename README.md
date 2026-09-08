@@ -84,18 +84,17 @@ npm install
 PORT=20128 NEXT_PUBLIC_BASE_URL=http://localhost:20128 npm run dev
 ```
 
-Docker:
+Docker (prebuilt image on ghcr.io):
 
 ```bash
-docker build -t krouter9 .
 docker run -d --name krouter9 --restart unless-stopped \
   -p 20128:20128 \
   -v "$HOME/.krouter9:/app/data" \
   -e DATA_DIR=/app/data \
-  krouter9
+  ghcr.io/konaimav2/krouter9:latest
 ```
 
-Or `docker compose up -d`. See [DOCKER.md](./DOCKER.md) for the full container guide.
+Or `docker compose up -d`, or build from source — see [DOCKER.md](./DOCKER.md) for the full container guide.
 
 Production mode:
 
@@ -166,6 +165,18 @@ Everything below was ported from source and tested against a running instance. F
 - 📌 **Session affinity** — pin a conversation to one account so multi-turn context stays put
 - 🏆 **Model intelligence** — OpenRouter rankings sync, search 150 ranked models
 - 🔀 **Slug-qualified combos** — `kiro/my-combo` and `my-combo` both resolve; combo ids never collide with providers
+
+### Donor Rounds (2026-09-07/08)
+
+- 🛡️ **DB integrity gate** — `PRAGMA quick_check` at startup; a corrupted SQLite stops boot before any schema mutation or backup pruning (ZenRouter)
+- 🕳️ **Combo first-chunk probe** — a provider that returns 200 then dies mid-stream no longer swallows the request; the combo advances to the next model
+- 🌐 **Enforcing CSP** — dashboard + strict API `Content-Security-Policy` headers (ZenRouter)
+- 📊 **Request logs: client IP + itemized cost** — unspoofable socket-derived IP and per-request USD cost stored and shown in the logs table
+- 📈 **All-time totals** — cumulative requests/tokens/cost summary over any filtered log view
+- 🧩 **Translator hardening** — non-array `tool_calls` can no longer crash the cursor/claude/kiro/openai-responses translators (OmniRoute)
+- 🖼️ **Antigravity static catalog** — model listing no longer pings the Google endpoint that 403s consumer accounts
+- 🧵 **CodeBuddy response_format mirror** — schema directives mirrored into the last user message instead of the ignored `response_format` field (SRouter)
+- 🧊 **Media-page combos** — image/tts/stt/video/music pages now list their combos instead of hiding them (ZenRouter)
 
 ---
 
