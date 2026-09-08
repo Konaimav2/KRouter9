@@ -281,7 +281,7 @@ export function translateNonStreamingResponse(responseBody, targetFormat, source
 /**
  * Handle non-streaming response from provider.
  */
-export async function handleNonStreamingResponse({ providerResponse, provider, model, sourceFormat, targetFormat, body, stream, translatedBody, finalBody, requestStartTime, connectionId, apiKey, clientRawRequest, onRequestSuccess, reqLogger, toolNameMap, customToolNames, trackDone, appendLog, pxpipe, reqTag, log }) {
+export async function handleNonStreamingResponse({ providerResponse, provider, model, sourceFormat, targetFormat, body, stream, translatedBody, finalBody, requestStartTime, connectionId, apiKey, clientRawRequest, onRequestSuccess, reqLogger, toolNameMap, customToolNames, trackDone, appendLog, pxpipe, reqTag, log, clientIp }) {
   trackDone();
   const contentType = providerResponse.headers.get("content-type") || "";
   let responseBody;
@@ -371,8 +371,17 @@ export async function handleNonStreamingResponse({ providerResponse, provider, m
   reqLogger.logConvertedResponse(translatedResponse);
 
   const totalLatency = Date.now() - requestStartTime;
+  // Itemized per-request cost (SRouter parity) — same source as streaming path.
+  let reqCost = 0;
+  try {
+    const { getPricingForModel } = await import("@/lib/db/repos/pricingRepo.js");
+    const { calculateCostFromTokens } = await import("open-sse/providers/pricing.js");
+    const pricing = await getPricingForModel(provider, model);
+    if (pricing) reqCost = calculateCostFromTokens(usage || {}, pricing);
+  } catch {}
   saveRequestDetail(buildRequestDetail({
     provider, model, connectionId, clientIp,
+    cost: reqCost,
     latency: { ttft: totalLatency, total: totalLatency },
     tokens: usage || { prompt_tokens: 0, completion_tokens: 0 },
     request: extractRequestConfig(body, stream),
