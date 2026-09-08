@@ -28,11 +28,12 @@ async function getObservabilityConfig() {
       cachedConfigTs = Date.now();
       return cachedConfig;
     }
+    // Precedence: ENABLE_REQUEST_LOGS=true forces ON (SRouter parity), then UI toggle,
+    // then OBSERVABILITY_ENABLED env (default on).
+    const envForce = process.env.ENABLE_REQUEST_LOGS?.toLowerCase() === "true";
     const envFallback = process.env.OBSERVABILITY_ENABLED !== "false";
     const uiFlag = typeof settings.enableObservability === "boolean";
-    const enabled = uiFlag
-      ? settings.enableObservability
-      : envFallback;
+    const enabled = envForce || (uiFlag ? settings.enableObservability : envFallback);
 
     cachedConfig = {
       enabled,
@@ -116,6 +117,8 @@ async function flushToDatabase() {
             providerResponse: truncateField(item.providerResponse, config.maxJsonSize),
             response: truncateField(item.response, config.maxJsonSize),
             pxpipe: item.pxpipe || undefined,
+            clientIp: item.clientIp || undefined,
+            cost: typeof item.cost === "number" ? item.cost : undefined,
           };
 
           db.run(
