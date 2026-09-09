@@ -98,7 +98,9 @@ async function importAll(data) {
   for (const r of conns) {
     if (!r.provider && !r.email) { summary.providerConnections.skipped++; continue; }
     const c = mapConnection(r);
-    const exists = db.get("SELECT id FROM providerConnections WHERE provider = ? AND email = ? AND email != ''", [c.provider, c.email]);
+    // dedupe: same source row already migrated (id), or same provider+email pair
+    const exists = db.get("SELECT id FROM providerConnections WHERE id = ? OR (provider = ? AND email = ? AND email != '')",
+                          [c.id, c.provider, c.email]);
     if (exists) { summary.providerConnections.skipped++; continue; }
     if (!dryRun) db.run("INSERT INTO providerConnections (id, provider, authType, name, email, priority, isActive, data, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [c.id, c.provider, c.authType, c.name, c.email, c.priority, c.isActive, c.data, c.createdAt, c.updatedAt]);
