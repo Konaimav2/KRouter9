@@ -15,6 +15,7 @@ export default function Input({
   required = false,
   className,
   inputClassName,
+  button,
   ...props
 }) {
   return (
@@ -40,7 +41,7 @@ export default function Input({
           className={cn(
             "w-full py-2.5 px-3 text-sm text-text-main bg-surface-2 rounded-[10px]",
             "border border-transparent placeholder-text-muted/70",
-            "focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500/40",
+            "focus:outline-none focus:ring-2 focus:ring-brand-500/25 focus:border-brand-500/50",
             "transition-all duration-150 ease-out disabled:opacity-50 disabled:cursor-not-allowed",
             // iOS zoom fix
             "text-[16px] sm:text-sm",
@@ -50,6 +51,7 @@ export default function Input({
           )}
           {...props}
         />
+        {button}
       </div>
       {error && (
         <p className="text-xs text-red-500 flex items-center gap-1">
