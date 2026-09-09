@@ -223,6 +223,16 @@ input, textarea {
   accent-color: var(--color-primary);
 }
 
+/* Kill browser default (purple/blue) autofill + focus styling on inputs */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--color-sidebar, #fff) inset;
+  -webkit-text-fill-color: var(--color-text-main, #111);
+  transition: background-color 9999s ease-in-out 0s;
+}
+input:-webkit-autofill + * { color: inherit; }
+
 /* Scrollbar (custom-scrollbar utility kept for compat) */
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
@@ -606,11 +616,12 @@ button:disabled,
 
 /* ===== KRouter9 UI polish (additive layer) ===== */
 :root {
-  --kr-accent: #9aa7ff;
+  --kr-accent: var(--color-brand-400, #ea7855);
   --kr-accent2: #6ee7d8;
-  --kr-surface: #12151f;
-  --kr-surface2: #1a1f2e;
-  --kr-border: #262c40;
+  --kr-border: var(--color-border, rgba(0,0,0,.08));
+}
+.dark {
+  --kr-border: rgba(255,255,255,.08);
 }
 /* Cards & panels: consistent rounding + subtle border */
 .bg-card, .card, [class*="rounded-xl"] {
@@ -621,15 +632,15 @@ button:not([class*="bg-red"]), .btn {
   transition: background-color .15s ease, border-color .15s ease, transform .1s ease;
 }
 button:not([class*="bg-red"]):active, .btn:active { transform: scale(.98); }
-/* Inputs: consistent focus ring in brand accent */
-input:focus-visible, select:focus-visible, textarea:focus-visible {
+/* Inputs: rely on component focus ring; keyboard users keep a brand outline */
+input:focus-visible:not(:focus), select:focus-visible:not(:focus) {
   outline: 2px solid var(--kr-accent);
   outline-offset: 1px;
 }
 /* Scrollbars: slim, dark */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--kr-border); border-radius: 8px; }
-::-webkit-scrollbar-thumb:hover { background: #323a55; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-border); }
 ::-webkit-scrollbar-track { background: transparent; }
 /* Tables: row hover */
 tbody tr { transition: background-color .12s ease; }

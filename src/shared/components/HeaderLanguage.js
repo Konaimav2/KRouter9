@@ -30,7 +30,7 @@ export default function HeaderLanguage() {
         title="Language"
         data-i18n-skip="true"
       >
-        <span className="text-lg leading-none">{LOCALE_FLAGS[locale] || "🌐"}</span>
+        <span className="material-symbols-outlined text-[20px] leading-none">translate</span>
       </button>
 
       <LanguageSwitcher
