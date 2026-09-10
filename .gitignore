@@ -100,3 +100,6 @@ PORT_*.md
 
 _backup_files/
 cli/krouter9-*.tgz
+
+# agent handover (local only)
+HANDOVER.md
