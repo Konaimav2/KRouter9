@@ -101,6 +101,7 @@ function getInputTokens(tokens) {
 
 export default function RequestDetailsTab() {
   const [details, setDetails] = useState([]);
+  const [allTime, setAllTime] = useState(null);
   const [pagination, setPagination] = useState({
     page: 1,
     pageSize: 20,
@@ -146,6 +147,7 @@ export default function RequestDetailsTab() {
       const data = await res.json();
 
       setDetails(data.details || []);
+      setAllTime(data.allTime || null);
       setPagination(prev => ({ ...prev, ...data.pagination }));
     } catch (error) {
       console.error("Failed to fetch request details:", error);
@@ -181,6 +183,31 @@ export default function RequestDetailsTab() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
+      {/* NewAPI-style all-time totals strip */}
+      {allTime && (
+        <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 sm:gap-4">
+          <Card className="flex min-w-0 flex-col gap-1 px-4 py-3">
+            <span className="text-text-muted text-sm uppercase font-semibold">Requests</span>
+            <span className="truncate text-2xl font-bold">{new Intl.NumberFormat().format(allTime.requests || 0)}</span>
+          </Card>
+          <Card className="flex min-w-0 flex-col gap-1 px-4 py-3">
+            <span className="text-text-muted text-sm uppercase font-semibold">Input Tokens</span>
+            <span className="truncate text-2xl font-bold text-primary">{new Intl.NumberFormat().format(allTime.promptTokens || 0)}</span>
+          </Card>
+          <Card className="flex min-w-0 flex-col gap-1 px-4 py-3">
+            <span className="text-text-muted text-sm uppercase font-semibold">Cached</span>
+            <span className="truncate text-2xl font-bold text-info">{new Intl.NumberFormat().format(allTime.cachedTokens || 0)}</span>
+          </Card>
+          <Card className="flex min-w-0 flex-col gap-1 px-4 py-3">
+            <span className="text-text-muted text-sm uppercase font-semibold">Output Tokens</span>
+            <span className="truncate text-2xl font-bold text-success">{new Intl.NumberFormat().format(allTime.completionTokens || 0)}</span>
+          </Card>
+          <Card className="flex min-w-0 flex-col gap-1 px-4 py-3">
+            <span className="text-text-muted text-sm uppercase font-semibold">Est. Cost</span>
+            <span className="truncate text-2xl font-bold text-warning">~${(allTime.cost || 0).toFixed(2)}</span>
+          </Card>
+        </div>
+      )}
       <Card padding="md">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="flex min-w-0 flex-col gap-2">
@@ -249,17 +276,19 @@ export default function RequestDetailsTab() {
 
       <Card padding="none">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[880px]">
+          <table className="w-full min-w-[960px]">
             <thead>
               <tr className="border-b border-black/5 dark:border-white/5">
                 <th className="text-left p-4 text-sm font-semibold text-text-main">Timestamp</th>
                 <th className="text-left p-4 text-sm font-semibold text-text-main">Model</th>
                 <th className="text-left p-4 text-sm font-semibold text-text-main">Provider</th>
                 <th className="text-left p-4 text-sm font-semibold text-text-main">IP</th>
+                <th className="text-left p-4 text-sm font-semibold text-text-main">Status</th>
                 <th className="text-right p-4 text-sm font-semibold text-text-main">Input Tokens</th>
                 <th className="text-right p-4 text-sm font-semibold text-text-main">Cached</th>
                 <th className="text-right p-4 text-sm font-semibold text-text-main">Cache Creation</th>
                 <th className="text-right p-4 text-sm font-semibold text-text-main">Output Tokens</th>
+                <th className="text-right p-4 text-sm font-semibold text-text-main">Cost</th>
                 <th className="text-left p-4 text-sm font-semibold text-text-main">Latency</th>
                 <th className="text-center p-4 text-sm font-semibold text-text-main">Action</th>
               </tr>
@@ -267,7 +296,7 @@ export default function RequestDetailsTab() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="7" className="p-8 text-center text-text-muted">
+                  <td colSpan="12" className="p-8 text-center text-text-muted">
                     <div className="flex items-center justify-center gap-2">
                       <span className="material-symbols-outlined animate-spin text-[20px]">progress_activity</span>
                       Loading...
@@ -276,7 +305,7 @@ export default function RequestDetailsTab() {
                 </tr>
               ) : details.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="p-8 text-center text-text-muted">
+                  <td colSpan="12" className="p-8 text-center text-text-muted">
                     No request details found
                   </td>
                 </tr>
@@ -300,6 +329,14 @@ export default function RequestDetailsTab() {
                     <td className="max-w-[140px] truncate p-4 font-mono text-sm text-text-muted" title={detail.clientIp || ""}>
                       {detail.clientIp || "—"}
                     </td>
+                    <td className="whitespace-nowrap p-4 text-sm">
+                      <span className={cn(
+                        "inline-block rounded px-2 py-0.5 text-xs font-semibold",
+                        detail.status === "success" ? "bg-green-500/15 text-green-600" : "bg-red-500/15 text-red-600"
+                      )}>
+                        {detail.status || "—"}
+                      </span>
+                    </td>
                     <td className="p-4 text-sm text-text-main text-right font-mono">
                       {getInputTokens(detail.tokens).toLocaleString()}
                     </td>
@@ -311,6 +348,9 @@ export default function RequestDetailsTab() {
                     </td>
                     <td className="p-4 text-sm text-text-main text-right font-mono">
                       {detail.tokens?.completion_tokens?.toLocaleString() || 0}
+                    </td>
+                    <td className="p-4 text-sm text-text-main text-right font-mono">
+                      {typeof detail.cost === "number" ? `$${detail.cost.toFixed(4)}` : "—"}
                     </td>
                     <td className="p-4 text-sm text-text-muted">
                       <div className="flex flex-col gap-0.5">
@@ -415,6 +455,20 @@ export default function RequestDetailsTab() {
                   {selectedDetail.tokens?.completion_tokens?.toLocaleString() || 0}
                 </span>
               </div>
+              {typeof selectedDetail.cost === "number" && (
+                <div>
+                  <span className="text-text-muted">Est. Cost:</span>{" "}
+                  <span className="text-text-main font-mono">
+                    ${selectedDetail.cost.toFixed(4)}
+                  </span>
+                </div>
+              )}
+              {selectedDetail.clientIp && (
+                <div>
+                  <span className="text-text-muted">Client IP:</span>{" "}
+                  <span className="text-text-main font-mono">{selectedDetail.clientIp}</span>
+                </div>
+              )}
             </div>
 
             {selectedDetail.pxpipe && (

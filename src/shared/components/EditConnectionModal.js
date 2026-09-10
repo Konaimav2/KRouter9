@@ -7,6 +7,7 @@ import Input from "@/shared/components/Input";
 import Button from "@/shared/components/Button";
 import Badge from "@/shared/components/Badge";
 import { isOpenAICompatibleProvider, isAnthropicCompatibleProvider, AI_PROVIDERS } from "@/shared/constants/providers";
+import { UA_PRESET_OPTIONS, resolveNodeUserAgent, presetForUserAgent } from "@/shared/constants/uaPresets";
 import Select from "@/shared/components/Select";
 
 export default function EditConnectionModal({ isOpen, connection, proxyPools, onSave, onClose }) {
@@ -24,7 +25,8 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
   const [cloudflareData, setCloudflareData] = useState({ accountId: "" });
   const [region, setRegion] = useState("");
   const [customHeadersText, setCustomHeadersText] = useState("");
-  const [userAgent, setUserAgent] = useState("");
+  const [uaPreset, setUaPreset] = useState("default");
+  const [uaCustom, setUaCustom] = useState("");
   const [headersError, setHeadersError] = useState(null);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
@@ -54,7 +56,9 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
       // Load custom headers / UA overrides
       const psd = connection.providerSpecificData || {};
       setCustomHeadersText(psd.customHeaders ? JSON.stringify(psd.customHeaders, null, 2) : "");
-      setUserAgent(psd.userAgent || "");
+      const ua = presetForUserAgent(psd.userAgent || "");
+      setUaPreset(ua.preset);
+      setUaCustom(ua.custom);
       setHeadersError(null);
       // Load region for providers that support it (e.g. xiaomi-tokenplan)
       const providerCfg = AI_PROVIDERS?.[connection.provider];
@@ -195,7 +199,7 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
       } else {
         updates.customHeaders = {};
       }
-      updates.userAgent = userAgent.trim();
+      updates.userAgent = resolveNodeUserAgent(uaPreset, uaCustom);
 
       await onSave(updates);
     } finally {
@@ -298,12 +302,21 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
           />
         )}
 
-        <Input
-          label="User-Agent override"
-          value={userAgent}
-          onChange={(e) => setUserAgent(e.target.value)}
-          placeholder="Optional, e.g. myapp/1.0"
+        <Select
+          label="User-Agent"
+          value={uaPreset}
+          onChange={(e) => setUaPreset(e.target.value)}
+          options={UA_PRESET_OPTIONS}
+          hint="Sent with every upstream request from this connection. Default = no override."
         />
+        {uaPreset === "custom" && (
+          <Input
+            label="Custom User-Agent"
+            value={uaCustom}
+            onChange={(e) => setUaCustom(e.target.value)}
+            placeholder="myapp/1.0"
+          />
+        )}
 
         <Input
           label="Custom request headers (JSON)"

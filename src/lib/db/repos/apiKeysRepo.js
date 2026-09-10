@@ -10,6 +10,11 @@ function rowToKey(row) {
     machineId: row.machineId,
     isActive: row.isActive === 1 || row.isActive === true,
     createdAt: row.createdAt,
+    rpmLimit: row.rpmLimit ?? 0,
+    tpmLimit: row.tpmLimit ?? 0,
+    modelPolicy: row.modelPolicy || "off",
+    allowedModels: row.allowedModels ?? null,
+    blockedModels: row.blockedModels ?? null,
   };
 }
 
@@ -22,6 +27,12 @@ export async function getApiKeys() {
 export async function getApiKeyById(id) {
   const db = await getAdapter();
   const row = db.get(`SELECT * FROM apiKeys WHERE id = ?`, [id]);
+  return rowToKey(row);
+}
+
+export async function getApiKeyByKey(key) {
+  const db = await getAdapter();
+  const row = db.get(`SELECT * FROM apiKeys WHERE key = ?`, [key]);
   return rowToKey(row);
 }
 
@@ -42,7 +53,16 @@ export async function createApiKey(name, machineId) {
     `INSERT INTO apiKeys(id, key, name, machineId, isActive, createdAt) VALUES(?, ?, ?, ?, ?, ?)`,
     [apiKey.id, apiKey.key, apiKey.name, apiKey.machineId, 1, apiKey.createdAt]
   );
-  return apiKey;
+  return { ...apiKey, rpmLimit: 0, tpmLimit: 0, modelPolicy: "off", allowedModels: null, blockedModels: null };
+}
+
+const MANAGEABLE_FIELDS = ["name", "machineId", "isActive", "rpmLimit", "tpmLimit", "modelPolicy", "allowedModels", "blockedModels"];
+
+function normalizeModelList(v) {
+  if (v === null || v === undefined) return null;
+  if (Array.isArray(v)) return JSON.stringify(v);
+  if (typeof v === "string") return v;
+  return null;
 }
 
 export async function updateApiKey(id, data) {
@@ -51,14 +71,37 @@ export async function updateApiKey(id, data) {
   db.transaction(() => {
     const row = db.get(`SELECT * FROM apiKeys WHERE id = ?`, [id]);
     if (!row) return;
-    const merged = { ...rowToKey(row), ...data };
+    const patch = {};
+    for (const f of MANAGEABLE_FIELDS) {
+      if (data[f] !== undefined) patch[f] = data[f];
+    }
+    if (patch.allowedModels !== undefined) patch.allowedModels = normalizeModelList(patch.allowedModels);
+    if (patch.blockedModels !== undefined) patch.blockedModels = normalizeModelList(patch.blockedModels);
+    if (patch.modelPolicy !== undefined && !["off", "whitelist", "blacklist"].includes(patch.modelPolicy)) {
+      patch.modelPolicy = "off";
+    }
+    if (patch.rpmLimit !== undefined) patch.rpmLimit = Math.max(0, Number(patch.rpmLimit) || 0);
+    if (patch.tpmLimit !== undefined) patch.tpmLimit = Math.max(0, Number(patch.tpmLimit) || 0);
+    const merged = { ...rowToKey(row), ...patch };
     db.run(
-      `UPDATE apiKeys SET key = ?, name = ?, machineId = ?, isActive = ? WHERE id = ?`,
-      [merged.key, merged.name, merged.machineId, merged.isActive ? 1 : 0, id]
+      `UPDATE apiKeys SET name = ?, machineId = ?, isActive = ?, rpmLimit = ?, tpmLimit = ?, modelPolicy = ?, allowedModels = ?, blockedModels = ? WHERE id = ?`,
+      [merged.name, merged.machineId, merged.isActive ? 1 : 0, merged.rpmLimit || 0, merged.tpmLimit || 0, merged.modelPolicy || "off", merged.allowedModels, merged.blockedModels, id]
     );
     result = merged;
   });
   return result;
+}
+
+// Rotate: issue a fresh key string for the same id (old string dies immediately).
+export async function rotateApiKey(id) {
+  const db = await getAdapter();
+  const row = db.get(`SELECT * FROM apiKeys WHERE id = ?`, [id]);
+  if (!row) return null;
+  const { generateApiKeyWithMachine } = await import("@/shared/utils/apiKey");
+  const machineId = row.machineId || "rotated";
+  const { key } = generateApiKeyWithMachine(machineId);
+  db.run(`UPDATE apiKeys SET key = ? WHERE id = ?`, [key, id]);
+  return rowToKey({ ...row, key });
 }
 
 export async function deleteApiKey(id) {

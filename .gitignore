@@ -99,3 +99,4 @@ graphify-out/*
 PORT_*.md
 
 _backup_files/
+cli/krouter9-*.tgz

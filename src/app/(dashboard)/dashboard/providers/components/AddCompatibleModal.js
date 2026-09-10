@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import PropTypes from "prop-types";
 import { Badge, Button, Input, Modal, Select } from "@/shared/components";
+import { UA_PRESET_OPTIONS, resolveNodeUserAgent } from "@/shared/constants/uaPresets";
 
 const VARIANT_CONFIG = {
   openai: {
@@ -47,6 +48,8 @@ function AddCompatibleModal({ variant, isOpen, onClose, onCreated }) {
   const [submitting, setSubmitting] = useState(false);
   const [checkKey, setCheckKey] = useState("");
   const [checkModelId, setCheckModelId] = useState("");
+  const [uaPreset, setUaPreset] = useState("default");
+  const [uaCustom, setUaCustom] = useState("");
   const [validating, setValidating] = useState(false);
   const [validationResult, setValidationResult] = useState(null);
 
@@ -65,6 +68,7 @@ function AddCompatibleModal({ variant, isOpen, onClose, onCreated }) {
     if (!formData.name.trim() || !formData.prefix.trim() || !formData.baseUrl.trim()) return;
     setSubmitting(true);
     try {
+      const userAgent = resolveNodeUserAgent(uaPreset, uaCustom);
       const res = await fetch("/api/provider-nodes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -74,6 +78,7 @@ function AddCompatibleModal({ variant, isOpen, onClose, onCreated }) {
           ...(config.hasApiType ? { apiType: formData.apiType } : {}),
           baseUrl: formData.baseUrl,
           type: config.type,
+          ...(userAgent ? { userAgent } : {}),
         }),
       });
       const data = await res.json();
@@ -81,6 +86,8 @@ function AddCompatibleModal({ variant, isOpen, onClose, onCreated }) {
         onCreated(data.node);
         setFormData(initialFormData());
         setCheckKey("");
+        setUaPreset("default");
+        setUaCustom("");
         setValidationResult(null);
       }
     } catch (error) {
@@ -165,6 +172,21 @@ function AddCompatibleModal({ variant, isOpen, onClose, onCreated }) {
           placeholder={config.defaultBaseUrl}
           hint={config.baseUrlHint}
         />
+        <Select
+          label="User-Agent"
+          options={UA_PRESET_OPTIONS}
+          value={uaPreset}
+          onChange={(e) => setUaPreset(e.target.value)}
+          hint="Sent with every upstream request from this node. Default = no override."
+        />
+        {uaPreset === "custom" && (
+          <Input
+            label="Custom User-Agent"
+            value={uaCustom}
+            onChange={(e) => setUaCustom(e.target.value)}
+            placeholder="myapp/1.0"
+          />
+        )}
         <Input
           label="API Key (for Check)"
           type="password"

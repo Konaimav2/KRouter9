@@ -4,6 +4,7 @@ import { useState } from "react";
 import PropTypes from "prop-types";
 import { Button, Badge, Input, Modal, Select } from "@/shared/components";
 import { AI_PROVIDERS } from "@/shared/constants/providers";
+import { UA_PRESET_OPTIONS, resolveNodeUserAgent } from "@/shared/constants/uaPresets";
 import { planBulkAdd } from "@/shared/utils/bulkAdd";
 
 const BULK_PLACEHOLDER = `name1|sk-key1\nname2|sk-key2\nsk-key-only-auto-named`;
@@ -32,7 +33,8 @@ export default function AddApiKeyModal({ isOpen, provider, providerName, isCompa
     ollamaHostUrl: "",
   });
   const [customHeadersText, setCustomHeadersText] = useState("");
-  const [userAgent, setUserAgent] = useState("");
+  const [uaPreset, setUaPreset] = useState("default");
+  const [uaCustom, setUaCustom] = useState("");
   const [headersError, setHeadersError] = useState(null);
   const [azureData, setAzureData] = useState({
     azureEndpoint: "",
@@ -146,7 +148,7 @@ export default function AddApiKeyModal({ isOpen, provider, providerName, isCompa
         testStatus: isValid ? "active" : "unknown",
         providerSpecificData: buildProviderSpecificData(),
         customHeaders: parsedCustomHeaders,
-        userAgent: userAgent.trim() || undefined
+        userAgent: resolveNodeUserAgent(uaPreset, uaCustom) || undefined
       });
     } finally {
       setSaving(false);
@@ -408,12 +410,21 @@ export default function AddApiKeyModal({ isOpen, provider, providerName, isCompa
           </p>
         )}
 
-        <Input
-          label="User-Agent override"
-          value={userAgent}
-          onChange={(e) => setUserAgent(e.target.value)}
-          placeholder="Optional, e.g. myapp/1.0"
+        <Select
+          label="User-Agent"
+          value={uaPreset}
+          onChange={(e) => setUaPreset(e.target.value)}
+          options={UA_PRESET_OPTIONS}
+          hint="Sent with every upstream request from this connection. Default = no override."
         />
+        {uaPreset === "custom" && (
+          <Input
+            label="Custom User-Agent"
+            value={uaCustom}
+            onChange={(e) => setUaCustom(e.target.value)}
+            placeholder="myapp/1.0"
+          />
+        )}
 
         <Input
           label="Custom request headers (JSON)"
