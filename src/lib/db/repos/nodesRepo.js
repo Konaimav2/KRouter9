@@ -62,6 +62,7 @@ export async function createProviderNode(data) {
     prefix: data.prefix,
     apiType: data.apiType,
     baseUrl: data.baseUrl,
+    ...(typeof data.userAgent === "string" && data.userAgent.trim() ? { userAgent: data.userAgent.trim() } : {}),
     createdAt: now,
     updatedAt: now,
   };

@@ -6,7 +6,7 @@ export async function PUT(request, { params }) {
   try {
     const { id } = await params;
     const body = await request.json();
-    const { name, prefix, apiType, baseUrl } = body;
+    const { name, prefix, apiType, baseUrl, userAgent } = body;
     const node = await getProviderNodeById(id);
 
     if (!node) {
@@ -58,6 +58,13 @@ export async function PUT(request, { params }) {
       updates.apiType = apiType;
     }
 
+    // Node-level UA override ("": clear). Propagated to connections below.
+    // undefined value = clear (JSON drops undefined on persist).
+    if (userAgent !== undefined) {
+      updates.userAgent = typeof userAgent === "string" ? userAgent.trim() : "";
+      if (!updates.userAgent) updates.userAgent = undefined;
+    }
+
     const updated = await updateProviderNode(id, updates);
 
     const connections = await getProviderConnections({ provider: id });
@@ -69,6 +76,11 @@ export async function PUT(request, { params }) {
           apiType: node.type === "openai-compatible" ? apiType : undefined,
           baseUrl: sanitizedBaseUrl,
           nodeName: updated.name,
+          ...(userAgent !== undefined
+            ? (typeof userAgent === "string" && userAgent.trim()
+              ? { userAgent: userAgent.trim() }
+              : { userAgent: undefined })
+            : {}),
         }
       })
     )));

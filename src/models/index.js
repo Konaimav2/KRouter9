@@ -31,8 +31,12 @@ export {
   getMitmAlias,
   setMitmAliasAll,
   getApiKeys,
+  getApiKeyById,
   createApiKey,
+  updateApiKey,
   deleteApiKey,
   validateApiKey,
+  rotateApiKey,
+  getApiKeyByKey,
   isCloudEnabled,
 } from "@/lib/localDb";

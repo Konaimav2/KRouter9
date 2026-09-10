@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import PropTypes from "prop-types";
 import { Button, Badge, Input, Modal, Select } from "@/shared/components";
+import { UA_PRESET_OPTIONS, resolveNodeUserAgent, presetForUserAgent } from "@/shared/constants/uaPresets";
 
 export default function EditCompatibleNodeModal({ isOpen, node, onSave, onClose, isAnthropic }) {
   const [formData, setFormData] = useState({
@@ -11,6 +12,8 @@ export default function EditCompatibleNodeModal({ isOpen, node, onSave, onClose,
     apiType: "chat",
     baseUrl: "https://api.openai.com/v1",
   });
+  const [uaPreset, setUaPreset] = useState("default");
+  const [uaCustom, setUaCustom] = useState("");
   const [saving, setSaving] = useState(false);
   const [checkKey, setCheckKey] = useState("");
   const [checkModelId, setCheckModelId] = useState("");
@@ -25,6 +28,9 @@ export default function EditCompatibleNodeModal({ isOpen, node, onSave, onClose,
         apiType: node.apiType || "chat",
         baseUrl: node.baseUrl || (isAnthropic ? "https://api.anthropic.com/v1" : "https://api.openai.com/v1"),
       });
+      const ua = presetForUserAgent(node.userAgent || "");
+      setUaPreset(ua.preset);
+      setUaCustom(ua.custom);
     }
   }, [node, isAnthropic]);
 
@@ -41,6 +47,7 @@ export default function EditCompatibleNodeModal({ isOpen, node, onSave, onClose,
         name: formData.name,
         prefix: formData.prefix,
         baseUrl: formData.baseUrl,
+        userAgent: resolveNodeUserAgent(uaPreset, uaCustom),
       };
       if (!isAnthropic) {
         payload.apiType = formData.apiType;
@@ -107,6 +114,21 @@ export default function EditCompatibleNodeModal({ isOpen, node, onSave, onClose,
           placeholder={isAnthropic ? "https://api.anthropic.com/v1" : "https://api.openai.com/v1"}
           hint={`Use the base URL (ending in /v1) for your ${isAnthropic ? "Anthropic" : "OpenAI"}-compatible API.`}
         />
+        <Select
+          label="User-Agent"
+          options={UA_PRESET_OPTIONS}
+          value={uaPreset}
+          onChange={(e) => setUaPreset(e.target.value)}
+          hint="Sent with every upstream request from this node. Default = no override."
+        />
+        {uaPreset === "custom" && (
+          <Input
+            label="Custom User-Agent"
+            value={uaCustom}
+            onChange={(e) => setUaCustom(e.target.value)}
+            placeholder="myapp/1.0"
+          />
+        )}
         <div className="flex gap-2">
           <Input
             label="API Key (for Check)"
@@ -154,6 +176,7 @@ EditCompatibleNodeModal.propTypes = {
     prefix: PropTypes.string,
     apiType: PropTypes.string,
     baseUrl: PropTypes.string,
+    userAgent: PropTypes.string,
   }),
   onSave: PropTypes.func.isRequired,
   onClose: PropTypes.func.isRequired,

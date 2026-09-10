@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import PropTypes from "prop-types";
-import { Card, Button, Input, Modal, CardSkeleton, Toggle, ConfirmModal } from "@/shared/components";
+import { Card, Button, Input, Modal, CardSkeleton, Toggle, ConfirmModal, Select } from "@/shared/components";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import {
   TUNNEL_BENEFITS,
@@ -14,6 +14,7 @@ import {
 } from "./endpointConstants";
 import { clientPingUrl, clientPingAny } from "./endpointPing";
 import EndpointRow from "./components/EndpointRow";
+import ManageKeyModal from "./components/ManageKeyModal";
 import StatusAlert from "./components/StatusAlert";
 import Tooltip from "./components/Tooltip";
 import SecurityWarning from "./components/SecurityWarning";
@@ -24,6 +25,8 @@ export default function APIPageClient({ machineId }) {
   const [newKeyName, setNewKeyName] = useState("");
   const [createdKey, setCreatedKey] = useState(null);
   const [confirmState, setConfirmState] = useState(null);
+  const [manageKey, setManageKey] = useState(null);
+  const [rotatedKey, setRotatedKey] = useState(null);
 
   const [requireApiKey, setRequireApiKey] = useState(false);
   const [requireLogin, setRequireLogin] = useState(true);
@@ -1038,12 +1041,25 @@ export default function APIPageClient({ machineId }) {
                   </div>
                   <p className="text-xs text-text-muted mt-1">
                     Created {new Date(key.createdAt).toLocaleDateString()}
+                    {(key.rpmLimit > 0 || key.tpmLimit > 0) && (
+                      <span> · {(key.rpmLimit > 0) ? `${key.rpmLimit} rpm` : ""}{(key.rpmLimit > 0 && key.tpmLimit > 0) ? " · " : ""}{(key.tpmLimit > 0) ? `${key.tpmLimit} tpm` : ""}</span>
+                    )}
+                    {(key.modelPolicy && key.modelPolicy !== "off") && (
+                      <span> · {key.modelPolicy}</span>
+                    )}
                   </p>
                   {key.isActive === false && (
                     <p className="text-xs text-orange-500 mt-1">Paused</p>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setManageKey(key)}
+                    className="p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded text-text-muted hover:text-primary transition-all"
+                    title="Manage key"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">settings</span>
+                  </button>
                   <Toggle
                     size="sm"
                     checked={key.isActive ?? true}
@@ -1140,6 +1156,57 @@ export default function APIPageClient({ machineId }) {
             </Button>
           </div>
           <Button onClick={() => setCreatedKey(null)} fullWidth>
+            Done
+          </Button>
+        </div>
+      </Modal>
+
+      {/* Manage Key Modal (remount per key so form state resets) */}
+      <ManageKeyModal
+        key={manageKey?.id || "none"}
+        apiKey={manageKey}
+        onClose={() => setManageKey(null)}
+        onSaved={(updated) => {
+          setKeys((prev) => prev.map((k) => (k.id === updated.id ? { ...k, ...updated } : k)));
+          setManageKey(null);
+        }}
+        onRotated={(rotated) => {
+          setKeys((prev) => prev.map((k) => (k.id === rotated.id ? { ...k, ...rotated } : k)));
+          setManageKey(null);
+          setRotatedKey(rotated.key);
+        }}
+      />
+
+      {/* Rotated Key Modal */}
+      <Modal
+        isOpen={!!rotatedKey}
+        title="API Key Rotated"
+        onClose={() => setRotatedKey(null)}
+      >
+        <div className="flex flex-col gap-4">
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+            <p className="text-sm text-yellow-800 dark:text-yellow-200 mb-2 font-medium">
+              Save this key now!
+            </p>
+            <p className="text-sm text-yellow-700 dark:text-yellow-300">
+              The old key string stopped working. This is the only time you will see the new one.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Input
+              value={rotatedKey || ""}
+              readOnly
+              className="flex-1 font-mono text-sm"
+            />
+            <Button
+              variant="secondary"
+              icon={copied === "rotated_key" ? "check" : "content_copy"}
+              onClick={() => copy(rotatedKey, "rotated_key")}
+            >
+              {copied === "rotated_key" ? "Copied!" : "Copy"}
+            </Button>
+          </div>
+          <Button onClick={() => setRotatedKey(null)} fullWidth>
             Done
           </Button>
         </div>

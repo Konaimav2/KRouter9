@@ -73,6 +73,10 @@ function mapApiKey(r) {
     rateLimit: r.rateLimit ?? r.rate_limit ?? 0,
     quotaLimit: r.quotaLimit ?? r.quota_limit ?? 0,
     allowedModels: r.allowedModels ? (typeof r.allowedModels === "string" ? r.allowedModels : JSON.stringify(r.allowedModels)) : null,
+    rpmLimit: r.rpmLimit ?? r.rpm_limit ?? 0,
+    tpmLimit: r.tpmLimit ?? r.tpm_limit ?? 0,
+    modelPolicy: r.modelPolicy ?? r.model_policy ?? "off",
+    blockedModels: r.blockedModels ? (typeof r.blockedModels === "string" ? r.blockedModels : JSON.stringify(r.blockedModels)) : null,
   };
 }
 
@@ -114,8 +118,8 @@ async function importAll(data) {
     const k = mapApiKey(r);
     const exists = db.get("SELECT id FROM apiKeys WHERE key = ?", [k.key]);
     if (exists) { summary.apiKeys.skipped++; continue; }
-    if (!dryRun) db.run("INSERT INTO apiKeys (id, key, name, machineId, isActive, createdAt, creditLimit, usageCost, usageTokens, rateLimit, quotaLimit, allowedModels) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      [k.id, k.key, k.name, k.machineId, k.isActive, k.createdAt, k.creditLimit, k.usageCost, k.usageTokens, k.rateLimit, k.quotaLimit, k.allowedModels]);
+    if (!dryRun) db.run("INSERT INTO apiKeys (id, key, name, machineId, isActive, createdAt, creditLimit, usageCost, usageTokens, rateLimit, quotaLimit, allowedModels, rpmLimit, tpmLimit, modelPolicy, blockedModels) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [k.id, k.key, k.name, k.machineId, k.isActive, k.createdAt, k.creditLimit, k.usageCost, k.usageTokens, k.rateLimit, k.quotaLimit, k.allowedModels, k.rpmLimit, k.tpmLimit, k.modelPolicy, k.blockedModels]);
     summary.apiKeys.inserted++;
   }
 
@@ -223,6 +227,45 @@ async function importAll(data) {
        typeof p.data === "string" ? p.data : JSON.stringify(p.data || {}),
        p.createdAt || new Date().toISOString(), p.updatedAt || new Date().toISOString()]);
     summary.proxyPools.inserted++;
+  }
+
+  // usageHistory / usageDaily / requestDetails — history wholesale (bounded).
+  // These tables carry papi's 40k-row traffic history; migrate copies them in
+  // arrival order so both the Logs tab and Request Details tab survive the move.
+  // Cap requestDetails (largest blobs) to keep the export/import bounded.
+  summary.usageHistory = { inserted: 0, skipped: 0 };
+  summary.usageDaily = { inserted: 0, skipped: 0 };
+  summary.requestDetails = { inserted: 0, skipped: 0 };
+  for (const e of data.usageHistory || []) {
+    const dup = db.get(
+      `SELECT id FROM usageHistory WHERE timestamp = ? AND COALESCE(provider,'') = COALESCE(?, '') AND COALESCE(model,'') = COALESCE(?, '') AND COALESCE(connectionId,'') = COALESCE(?, '') AND COALESCE(apiKey,'') = COALESCE(?, '') AND promptTokens = ? AND completionTokens = ? LIMIT 1`,
+      [e.timestamp || null, e.provider || null, e.model || null, e.connectionId || null, e.apiKey || null, e.promptTokens || 0, e.completionTokens || 0]);
+    if (dup) { summary.usageHistory.skipped++; continue; }
+    if (!dryRun) db.run(
+      `INSERT INTO usageHistory(timestamp, provider, model, connectionId, apiKey, endpoint, promptTokens, completionTokens, cost, status, tokens, meta) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [e.timestamp || new Date().toISOString(), e.provider || null, e.model || null, e.connectionId || null, e.apiKey || null, e.endpoint || null,
+       e.promptTokens || 0, e.completionTokens || 0, e.cost || 0, e.status || "ok",
+       typeof e.tokens === "string" ? e.tokens : JSON.stringify(e.tokens || {}),
+       typeof e.meta === "string" ? e.meta : JSON.stringify(e.meta || {})]);
+    summary.usageHistory.inserted++;
+  }
+  for (const d of data.usageDaily || []) {
+    if (!d.dateKey) { summary.usageDaily.skipped++; continue; }
+    const exists = db.get("SELECT dateKey FROM usageDaily WHERE dateKey = ?", [d.dateKey]);
+    if (exists) { summary.usageDaily.skipped++; continue; }
+    if (!dryRun) db.run("INSERT INTO usageDaily(dateKey, data) VALUES(?, ?)",
+      [d.dateKey, typeof d.data === "string" ? d.data : JSON.stringify(d.data || {})]);
+    summary.usageDaily.inserted++;
+  }
+  const details = (data.requestDetails || []).slice(-2000);
+  for (const r of details) {
+    if (!r.id) { summary.requestDetails.skipped++; continue; }
+    const exists = db.get("SELECT id FROM requestDetails WHERE id = ?", [r.id]);
+    if (exists) { summary.requestDetails.skipped++; continue; }
+    const rowData = r.data !== undefined ? (typeof r.data === "string" ? r.data : JSON.stringify(r.data)) : JSON.stringify(r);
+    if (!dryRun) db.run("INSERT INTO requestDetails(id, timestamp, provider, model, connectionId, status, data) VALUES(?, ?, ?, ?, ?, ?, ?)",
+      [r.id, r.timestamp || new Date().toISOString(), r.provider || null, r.model || null, r.connectionId || null, r.status || null, rowData]);
+    summary.requestDetails.inserted++;
   }
 
   return summary;

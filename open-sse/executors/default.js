@@ -203,6 +203,20 @@ export class DefaultExecutor extends BaseExecutor {
     }
 
     if (stream) headers["Accept"] = "text/event-stream";
+
+    // Custom per-connection headers and User-Agent (providerSpecificData).
+    // Applied last so a connection can deliberately override auth/UA defaults.
+    // (Mirrors BaseExecutor.buildHeaders — DefaultExecutor overrides it.)
+    const psd = credentials?.providerSpecificData;
+    if (psd?.customHeaders && typeof psd.customHeaders === "object") {
+      for (const [k, v] of Object.entries(psd.customHeaders)) {
+        if (typeof k === "string" && k.trim() && v != null) headers[k.trim()] = String(v);
+      }
+    }
+    if (typeof psd?.userAgent === "string" && psd.userAgent.trim()) {
+      headers["User-Agent"] = psd.userAgent.trim();
+    }
+
     return headers;
   }
 

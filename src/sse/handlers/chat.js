@@ -85,6 +85,36 @@ export async function handleChat(request, clientRawRequest = null) {
     }
   }
 
+  // KRouter9 per-key manage enforcement (fail-open; defaults OFF: limits 0 = unlimited, policy off = allow all).
+  // Applies whenever a known key is presented, independent of requireApiKey.
+  if (apiKey) {
+    try {
+      const { getApiKeyByKey } = await import("@/lib/localDb");
+      const { checkRateLimit, checkTpmLimit } = await import("@/lib/rateLimit.js");
+      const { isModelAllowedForKey } = await import("@/lib/apiKeyPolicy.js");
+      const keyRow = await getApiKeyByKey(apiKey);
+      if (keyRow) {
+        if (!isModelAllowedForKey(keyRow, modelStr)) {
+          log.warn("AUTH", `API key model denied: ${modelStr}`);
+          return errorResponse(HTTP_STATUS.FORBIDDEN, `Model not allowed for this API key: ${modelStr}`);
+        }
+        const rpm = checkRateLimit(keyRow.id, clientIp, keyRow.rpmLimit || 0);
+        if (!rpm.ok) {
+          log.warn("AUTH", `API key RPM exceeded (limit ${rpm.limit})`);
+          const retryIso = new Date(Date.now() + (rpm.retryAfterSec || 60) * 1000).toISOString();
+          return unavailableResponse(HTTP_STATUS.RATE_LIMITED, `API key rate limit exceeded (${rpm.limit}/min)`, retryIso, `retry after ${rpm.retryAfterSec}s`);
+        }
+        const estTokens = Math.max(1, Math.ceil(JSON.stringify(body?.messages || body || "").length / 4));
+        const tpm = checkTpmLimit(keyRow.id, estTokens, keyRow.tpmLimit || 0);
+        if (!tpm.ok) {
+          log.warn("AUTH", `API key TPM exceeded (limit ${tpm.limit})`);
+          const retryIso = new Date(Date.now() + (tpm.retryAfterSec || 60) * 1000).toISOString();
+          return unavailableResponse(HTTP_STATUS.RATE_LIMITED, `API key token limit exceeded (${tpm.limit}/min)`, retryIso, `retry after ${tpm.retryAfterSec}s`);
+        }
+      }
+    } catch (_keyPolicyErr) { /* fail-open: policy checks never break inference */ }
+  }
+
   if (!modelStr) {
     log.warn("CHAT", "Missing model");
     return errorResponse(HTTP_STATUS.BAD_REQUEST, "Missing model");
