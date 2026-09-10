@@ -233,9 +233,13 @@ async function importAll(data) {
   // These tables carry papi's 40k-row traffic history; migrate copies them in
   // arrival order so both the Logs tab and Request Details tab survive the move.
   // Cap requestDetails (largest blobs) to keep the export/import bounded.
+  // NOTE: bulk inserts run inside explicit transactions — without one, each
+  // auto-commit INSERT fsyncs and 40k rows take ~10min (papi real case).
   summary.usageHistory = { inserted: 0, skipped: 0 };
   summary.usageDaily = { inserted: 0, skipped: 0 };
   summary.requestDetails = { inserted: 0, skipped: 0 };
+  if (!dryRun) db.exec("BEGIN");
+  try {
   for (const e of data.usageHistory || []) {
     const dup = db.get(
       `SELECT id FROM usageHistory WHERE timestamp = ? AND COALESCE(provider,'') = COALESCE(?, '') AND COALESCE(model,'') = COALESCE(?, '') AND COALESCE(connectionId,'') = COALESCE(?, '') AND COALESCE(apiKey,'') = COALESCE(?, '') AND promptTokens = ? AND completionTokens = ? LIMIT 1`,
@@ -266,6 +270,11 @@ async function importAll(data) {
     if (!dryRun) db.run("INSERT INTO requestDetails(id, timestamp, provider, model, connectionId, status, data) VALUES(?, ?, ?, ?, ?, ?, ?)",
       [r.id, r.timestamp || new Date().toISOString(), r.provider || null, r.model || null, r.connectionId || null, r.status || null, rowData]);
     summary.requestDetails.inserted++;
+  }
+  if (!dryRun) db.exec("COMMIT");
+  } catch (err) {
+    if (!dryRun) { try { db.exec("ROLLBACK"); } catch {} }
+    throw err;
   }
 
   return summary;
