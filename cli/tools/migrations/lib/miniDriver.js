@@ -7,7 +7,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { TABLES, buildCreateTableSql } from "./schema.js";
+import { TABLES, buildCreateTableSql, SCHEMA_VERSION } from "./schema.js";
 
 function dataFile() {
   const dir = process.env.KROUTER9_DATA_DIR || path.join(os.homedir(), ".krouter9");
@@ -78,7 +78,16 @@ export async function getAdapter() {
   }
   const adapter = (await openNodeSqlite(file)) || (await openSqlJs(file));
   if (!adapter) throw new Error("[migrate] No SQLite driver available (need Node >= 22.5 or the sql.js package)");
-  if (!existed) createSchema(adapter);
+  if (!existed) {
+    createSchema(adapter);
+    // Stamp schema version + app version so the server's migrate.js sees a
+    // current DB on first boot instead of re-running schema sync from zero.
+    try {
+      adapter.run("INSERT INTO _meta(key, value) VALUES('schemaVersion', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [String(SCHEMA_VERSION)]);
+      adapter.run("INSERT INTO _meta(key, value) VALUES('backupSchemaVersion', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [String(SCHEMA_VERSION)]);
+      adapter.run("INSERT INTO _meta(key, value) VALUES('migratedAt', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [new Date().toISOString()]);
+    } catch {}
+  }
   console.log(`[migrate] Driver: ${adapter.driver} | file: ${file}`);
   return adapter;
 }
