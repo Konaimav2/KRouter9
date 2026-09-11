@@ -322,18 +322,22 @@ export async function saveRequestUsage(entry) {
       const next = (cur ? parseInt(cur.value, 10) : 0) + 1;
       db.run(`INSERT INTO _meta(key, value) VALUES('totalRequestsLifetime', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`, [String(next)]);
 
-      // KRouter9 credit accounting (V3): converge on the prepaid model. If this
-      // request prepaid an estimate, refund it and charge the real usage; if not,
-      // charge real usage directly. Done in the SAME transaction as the history
-      // insert so accounting cannot drift from the recorded request.
+      // KRouter9 credit accounting (V3 prepaid): converge on the prepaid model.
+      // Charge real usage FIRST, then consume the refund, so a failing
+      // transaction cannot lose a reservation (fail-closed overcharge, never
+      // free usage). Done in the SAME transaction as the history insert.
       try {
         if (entry.apiKey) {
-          const { refundCost, refundTokens } = consumePendingReservation(entry.apiKey);
           const chargeCost = Number(entry.cost) || 0;
           const chargeTokens = (promptTokens || 0) + (completionTokens || 0);
-          if (refundCost > 0 || refundTokens > 0 || chargeCost > 0 || chargeTokens > 0) {
-            db.run(`UPDATE apiKeys SET usageCost = MAX(0, COALESCE(usageCost,0) - ? + ?), usageTokens = MAX(0, COALESCE(usageTokens,0) - ? + ?) WHERE key = ?`,
-              [refundCost, chargeCost, refundTokens, chargeTokens, entry.apiKey]);
+          if (chargeCost > 0 || chargeTokens > 0) {
+            db.run(`UPDATE apiKeys SET usageCost = MAX(0, COALESCE(usageCost,0) + ?), usageTokens = MAX(0, COALESCE(usageTokens,0) + ?) WHERE key = ?`,
+              [chargeCost, chargeTokens, entry.apiKey]);
+            const { refundCost, refundTokens } = consumePendingReservation(entry.apiKey);
+            if (refundCost > 0 || refundTokens > 0) {
+              db.run(`UPDATE apiKeys SET usageCost = MAX(0, COALESCE(usageCost,0) - ?), usageTokens = MAX(0, COALESCE(usageTokens,0) - ?) WHERE key = ?`,
+                [refundCost, refundTokens, entry.apiKey]);
+            }
           }
         }
       } catch (_creditErr) { /* fail-open: credit accounting never breaks usage logging */ }

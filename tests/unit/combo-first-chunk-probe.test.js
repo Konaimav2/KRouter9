@@ -51,4 +51,3 @@ describe("combo first-chunk probe", () => {
     expect(streaming).toMatch(/if\s*\(comboName\)/);
   });
 });
-

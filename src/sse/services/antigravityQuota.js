@@ -22,11 +22,11 @@ const MIN_REFRESH_INTERVAL_MS = 30_000; // 30s between refreshes per connection
 // process with many connections. Read dynamically so a Settings change (env
 // mirror) applies without a restart.
 function cacheTtlMs() {
-  const n = Number(process.env.ANTIGRAVITY_cacheTtlMs());
+  const n = Number(process.env.ANTIGRAVITY_CACHE_TTL_MS);
   return Number.isFinite(n) && n > 0 ? n : 10 * 60 * 1000;
 }
 function cacheMaxEntries() {
-  const n = Number(process.env.ANTIGRAVITY_cacheMaxEntries());
+  const n = Number(process.env.ANTIGRAVITY_CACHE_MAX_ENTRIES);
   return Number.isFinite(n) && n > 0 ? n : 5000;
 }
 
