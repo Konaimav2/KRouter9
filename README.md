@@ -8,7 +8,7 @@
   One local endpoint for Claude Code, Codex, Cursor, Antigravity, Copilot, Cline, OpenCode and 40+ providers — with per-key credit accounting, a circuit breaker, guardrails, semantic caching, and account automation built in. 30 features merged from SRouter, OmniRoute, 9router-v3, and ZenRouter.
 
   [![GitHub](https://img.shields.io/badge/GitHub-Konaimav2%2FKRouter9-181717?logo=github)](https://github.com/Konaimav2/KRouter9)
-  [![npm](https://img.shields.io/badge/npm-krouter9%200.5.69-cb3837?logo=npm)](https://www.npmjs.com/package/krouter9)
+  [![npm](https://img.shields.io/badge/npm-krouter9%200.5.78-cb3837?logo=npm)](https://www.npmjs.com/package/krouter9)
   [![License](https://img.shields.io/badge/license-MIT-22c55e?style=flat-square)](./LICENSE)
   [![Base](https://img.shields.io/badge/built%20on-9router%20v0.5.69-6366f1?style=flat-square)](https://github.com/decolua/9router)
   [![Node](https://img.shields.io/badge/node-%3E%3D22-339933?style=flat-square&logo=node.js)](https://nodejs.org/)
