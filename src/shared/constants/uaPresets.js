@@ -1,6 +1,8 @@
 // KRouter9 custom-provider User-Agent presets — CLIENT-SAFE (no node imports).
 // Values mirror open-sse/config/clientVersions.js. A unit test
 // (tests/unit/node-ua-presets.test.js) fails if they drift.
+import { APP_CONFIG } from "./config.js";
+
 export const UA_PRESET_OPTIONS = [
   { value: "default", label: "Default (no override)" },
   { value: "claude_code", label: "Claude Code", ua: "claude-cli/2.1.258 (external, sdk-cli)" },
@@ -25,6 +27,11 @@ const UA_BY_VALUE = Object.fromEntries(UA_PRESET_OPTIONS.filter((o) => o.ua).map
 export function resolveNodeUserAgent(preset, customText) {
   if (!preset || preset === "default") return "";
   if (preset === "custom") return String(customText || "").trim();
+  if (preset === "krouter9") return `krouter9/${APP_CONFIG.version || ""}`.replace(/\/$/, "");
+  if (preset === "opencode") return "opencode/1.18.30";
+  if (preset === "browser") {
+    return "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36";
+  }
   return UA_BY_VALUE[preset] || "";
 }
 
@@ -34,5 +41,32 @@ export function presetForUserAgent(ua) {
   if (!t) return { preset: "default", custom: "" };
   const hit = UA_PRESET_OPTIONS.find((o) => o.ua === t);
   if (hit) return { preset: hit.value, custom: "" };
+  return { preset: "custom", custom: t };
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Node-level UA selector: the curated 5-choice list for Add/Edit Compatible
+// Provider modals. "9router" is the default and sends the krouter9/<version>
+// gateway string. Connection-level modals keep the full list above.
+// ─────────────────────────────────────────────────────────────────────────
+export const NODE_UA_PRESET_OPTIONS = [
+  { value: "krouter9", label: "9Router (default)" },
+  { value: "opencode", label: "OpenCode" },
+  { value: "claude_code", label: "Claude Code", ua: UA_BY_VALUE.claude_code },
+  { value: "browser", label: "Browser" },
+  { value: "custom", label: "Custom..." },
+];
+
+export function resolveNodeUserAgentPreset(preset, customText) {
+  return resolveNodeUserAgent(preset, customText);
+}
+
+export function presetForNodeUserAgent(ua) {
+  const t = String(ua || "").trim();
+  if (!t) return { preset: "krouter9", custom: "" };
+  if (t.startsWith("krouter9/") || t === "krouter9") return { preset: "krouter9", custom: "" };
+  if (t.startsWith("opencode/")) return { preset: "opencode", custom: "" };
+  if (t === UA_BY_VALUE.claude_code) return { preset: "claude_code", custom: "" };
+  if (t.startsWith("Mozilla/")) return { preset: "browser", custom: "" };
   return { preset: "custom", custom: t };
 }

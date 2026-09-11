@@ -1,7 +1,7 @@
 // Custom provider UA presets — preset list + resolve helper + drift guard
 // against open-sse/config/clientVersions.js (single source of truth).
 import { describe, it, expect } from "vitest";
-import { UA_PRESET_OPTIONS, resolveNodeUserAgent, presetForUserAgent } from "../../src/lib/nodeUserAgent.js";
+import { UA_PRESET_OPTIONS, resolveNodeUserAgent, presetForUserAgent, NODE_UA_PRESET_OPTIONS, resolveNodeUserAgentPreset, presetForNodeUserAgent } from "../../src/lib/nodeUserAgent.js";
 import {
   CLAUDE_CLI_USER_AGENT,
   CODEX_USER_AGENT,
@@ -16,6 +16,8 @@ import {
   KIMCHI_USER_AGENT,
   ZED_USER_AGENT,
   IFLOW_USER_AGENT,
+  OPENCODE_USER_AGENT,
+  BROWSER_USER_AGENT,
 } from "../../open-sse/config/clientVersions.js";
 
 describe("node UA presets", () => {
@@ -57,5 +59,37 @@ describe("node UA presets", () => {
     expect(byValue.kimchi).toBe(KIMCHI_USER_AGENT);
     expect(byValue.zed).toBe(ZED_USER_AGENT);
     expect(byValue.iflow).toBe(IFLOW_USER_AGENT);
+  });
+});
+
+describe("node UA selector (curated 5)", () => {
+  it("exposes exactly the 5 node choices", () => {
+    expect(NODE_UA_PRESET_OPTIONS.map((o) => o.value)).toEqual([
+      "krouter9", "opencode", "claude_code", "browser", "custom",
+    ]);
+  });
+  it("9router default resolves to krouter9/<version>", () => {
+    expect(resolveNodeUserAgentPreset("krouter9", "")).toMatch(/^krouter9\/\d/);
+  });
+  it("opencode resolves to the opencode UA", () => {
+    expect(resolveNodeUserAgentPreset("opencode", "")).toBe(OPENCODE_USER_AGENT);
+  });
+  it("browser resolves to a Mozilla UA", () => {
+    expect(resolveNodeUserAgentPreset("browser", "")).toBe(BROWSER_USER_AGENT);
+  });
+  it("claude_code matches the shared constant", () => {
+    expect(resolveNodeUserAgentPreset("claude_code", "")).toBe(CLAUDE_CLI_USER_AGENT);
+  });
+  it("round-trips stored UA back to a node preset", () => {
+    expect(presetForNodeUserAgent("").preset).toBe("krouter9");
+    expect(presetForNodeUserAgent("krouter9/0.5.78").preset).toBe("krouter9");
+    expect(presetForNodeUserAgent(OPENCODE_USER_AGENT).preset).toBe("opencode");
+    expect(presetForNodeUserAgent(BROWSER_USER_AGENT).preset).toBe("browser");
+    expect(presetForNodeUserAgent(CLAUDE_CLI_USER_AGENT).preset).toBe("claude_code");
+    expect(presetForNodeUserAgent("myapp/1.0")).toEqual({ preset: "custom", custom: "myapp/1.0" });
+  });
+  it("stays in sync with clientVersions for opencode/browser", () => {
+    expect(resolveNodeUserAgentPreset("opencode", "")).toBe(OPENCODE_USER_AGENT);
+    expect(resolveNodeUserAgentPreset("browser", "")).toBe(BROWSER_USER_AGENT);
   });
 });

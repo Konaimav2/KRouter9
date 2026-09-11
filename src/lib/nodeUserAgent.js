@@ -4,4 +4,7 @@ export {
   UA_PRESET_OPTIONS,
   resolveNodeUserAgent,
   presetForUserAgent,
+  NODE_UA_PRESET_OPTIONS,
+  resolveNodeUserAgentPreset,
+  presetForNodeUserAgent,
 } from "@/shared/constants/uaPresets.js";
