@@ -23,7 +23,7 @@ export default function MitmPageClient() {
 
   const fetchConnections = async () => {
     try {
-      const res = await fetch("/api/providers");
+      const res = await fetch("/api/providers?mode=full");
       if (res.ok) {
         const data = await res.json();
         setConnections(data.connections || []);

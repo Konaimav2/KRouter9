@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import {
   getProviderConnections,
+  getProviderConnectionCount,
+  getProviderConnectionStats,
   createProviderConnection,
   getProviderNodeById,
   getProviderNodes,
@@ -47,10 +49,24 @@ async function normalizeProxyPoolId(proxyPoolId) {
   return { proxyPoolId: normalizedId };
 }
 
-// GET /api/providers - List all connections
-export async function GET() {
+// GET /api/providers - List connections.
+//
+// P2 scaling: default returns a paginated, list-shaped payload that strips the
+// large `providerSpecificData`/`modelLock_*` fields. `?mode=full` preserves the
+// legacy unpaginated shape for internal callers (playground, CLI, migrate).
+// Query: ?page=1&pageSize=50&provider=...&isActive=1&mode=full&stats=1
+export async function GET(request) {
   try {
-    const connections = await getProviderConnections();
+    const { searchParams } = new URL(request.url || "http://localhost/api/providers");
+    const mode = searchParams.get("mode");
+    const wantStats = searchParams.get("stats") === "1";
+    const provider = searchParams.get("provider") || undefined;
+    const isActiveParam = searchParams.get("isActive");
+
+    const baseFilter = {};
+    if (provider) baseFilter.provider = provider;
+    if (isActiveParam === "1" || isActiveParam === "true") baseFilter.isActive = true;
+    else if (isActiveParam === "0" || isActiveParam === "false") baseFilter.isActive = false;
 
     // Build nodeNameMap for compatible providers (id → name)
     let nodeNameMap = {};
@@ -61,23 +77,78 @@ export async function GET() {
       }
     } catch { }
 
-    // Hide sensitive fields, enrich name for compatible providers
-    const safeConnections = connections.map(c => {
+    const enrich = (c) => {
       const isCompatible = isOpenAICompatibleProvider(c.provider) || isAnthropicCompatibleProvider(c.provider);
       const name = isCompatible
         ? (c.name || nodeNameMap[c.provider] || c.providerSpecificData?.nodeName || c.provider)
         : c.name;
-      return {
-        ...c,
-        name,
+      return { ...c, name };
+    };
+
+    // Stats are a cheap SQL GROUP BY; safe to include on any mode.
+    const stats = wantStats ? await getProviderConnectionStats() : undefined;
+
+    if (mode === "full") {
+      const connections = await getProviderConnections(baseFilter);
+      const safeConnections = connections.map((c) => ({
+        ...enrich(c),
+        apiKey: undefined,
+        accessToken: undefined,
+        refreshToken: undefined,
+        idToken: undefined,
+      }));
+      return NextResponse.json({ connections: safeConnections, ...(stats ? { stats } : {}) });
+    }
+
+    // Paginated list mode (default). Strip heavy + sensitive fields.
+    const page = Math.max(1, Number(searchParams.get("page")) || 1);
+    const rawPageSize = Number(searchParams.get("pageSize"));
+    const pageSize = Number.isFinite(rawPageSize) && rawPageSize > 0
+      ? Math.min(Math.floor(rawPageSize), 500)
+      : 50;
+
+    const totalItems = await getProviderConnectionCount(baseFilter);
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+    const connections = await getProviderConnections({
+      ...baseFilter,
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+    });
+
+    const safeConnections = connections.map((c) => {
+      const { providerSpecificData, ...rest } = c;
+      // Keep only small, non-secret display fields from providerSpecificData.
+      const psd = providerSpecificData || {};
+      const display = {};
+      for (const k of ["nodeName", "prefix", "apiType"]) {
+        if (psd[k] !== undefined) display[k] = psd[k];
+      }
+      const clean = {
+        ...rest,
+        ...(Object.keys(display).length ? { providerSpecificData: display } : {}),
         apiKey: undefined,
         accessToken: undefined,
         refreshToken: undefined,
         idToken: undefined,
       };
+      for (const k of Object.keys(clean)) {
+        if (k.startsWith("modelLock_")) delete clean[k];
+      }
+      return enrich(clean);
     });
 
-    return NextResponse.json({ connections: safeConnections });
+    return NextResponse.json({
+      connections: safeConnections,
+      ...(stats ? { stats } : {}),
+      pagination: {
+        page,
+        pageSize,
+        totalItems,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
+      },
+    });
   } catch (error) {
     console.log("Error fetching providers:", error);
     return NextResponse.json({ error: "Failed to fetch providers" }, { status: 500 });

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { getStatusVariant as getConnectionStatusVariant } from "@/shared/utils/connectionStatus";
 import PropTypes from "prop-types";
 import { Badge, Toggle, Tooltip } from "@/shared/components";
+import { useCooldownNow } from "@/shared/hooks/useCooldownNow";
 import CooldownTimer from "./CooldownTimer";
 
 export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst, isLast, onMoveUp, onMoveDown, onToggleActive, onUpdateProxy, onEdit, onDelete, oneByOneStatus = null, autoPing = null }) {
@@ -85,7 +86,6 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
       : null;
 
   // Use useState + useEffect for impure Date.now() to avoid calling during render
-  const [isCooldown, setIsCooldown] = useState(false);
 
   // Get earliest model lock timestamp (useEffect handles the Date.now() comparison)
   const modelLockUntil = Object.entries(connection)
@@ -94,23 +94,10 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
     .filter(v => !!v)
     .sort()[0] || null;
 
-  useEffect(() => {
-    const checkCooldown = () => {
-      const until = Object.entries(connection)
-        .filter(([k]) => k.startsWith("modelLock_"))
-        .map(([, v]) => v)
-        .filter(v => v && new Date(v).getTime() > Date.now())
-        .sort()[0] || null;
-      setIsCooldown(!!until);
-    };
-
-    checkCooldown();
-    const interval = modelLockUntil ? setInterval(checkCooldown, 1000) : null;
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [modelLockUntil]);
-
+  // Shared 1s clock (one interval for the whole list, not one per row). The
+  // snapshot is a timestamp, so comparing is pure.
+  const cooldownNow = useCooldownNow();
+  const isCooldown = !!modelLockUntil && new Date(modelLockUntil).getTime() > cooldownNow;
   // Determine effective status (override unavailable if cooldown expired)
   const effectiveStatus = (connection.testStatus === "unavailable" && !isCooldown)
     ? "active"  // Cooldown expired u2192 treat as active

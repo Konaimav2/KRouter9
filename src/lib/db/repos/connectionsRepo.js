@@ -73,11 +73,60 @@ export async function getProviderConnections(filter = {}) {
   const params = [];
   if (filter.provider) { where.push("provider = ?"); params.push(filter.provider); }
   if (filter.isActive !== undefined) { where.push("isActive = ?"); params.push(filter.isActive ? 1 : 0); }
-  const sql = `SELECT * FROM providerConnections${where.length ? ` WHERE ${where.join(" AND ")}` : ""}`;
+  // Order in SQL so large tables don't require a full in-memory sort.
+  // COALESCE keeps rows without a priority last (matches prior `priority||999`).
+  let sql = `SELECT * FROM providerConnections${where.length ? ` WHERE ${where.join(" AND ")}` : ""} ORDER BY COALESCE(priority, 999) ASC, createdAt ASC`;
+  // Optional pagination. `limit`/`offset` are numbers; 0/undefined limit = all.
+  const limit = Number(filter.limit);
+  if (Number.isFinite(limit) && limit > 0) {
+    sql += ` LIMIT ?`;
+    params.push(Math.floor(limit));
+    const offset = Number(filter.offset);
+    if (Number.isFinite(offset) && offset > 0) {
+      sql += ` OFFSET ?`;
+      params.push(Math.floor(offset));
+    }
+  }
   const rows = db.all(sql, params);
-  const list = rows.map(rowToConn);
-  list.sort((a, b) => (a.priority || 999) - (b.priority || 999));
-  return list;
+  return rows.map(rowToConn);
+}
+
+/** Total rows matching a filter (for pagination metadata). */
+export async function getProviderConnectionCount(filter = {}) {
+  const db = await getAdapter();
+  const where = [];
+  const params = [];
+  if (filter.provider) { where.push("provider = ?"); params.push(filter.provider); }
+  if (filter.isActive !== undefined) { where.push("isActive = ?"); params.push(filter.isActive ? 1 : 0); }
+  const sql = `SELECT COUNT(*) AS n FROM providerConnections${where.length ? ` WHERE ${where.join(" AND ")}` : ""}`;
+  const row = db.get(sql, params);
+  return Number(row?.n) || 0;
+}
+
+/**
+ * Server-side per-provider aggregation for the providers list. Replaces the
+ * client-side O(providers x connections) filter loop. Returns one row per
+ * provider with connection counts — no `data` blob is read.
+ */
+export async function getProviderConnectionStats() {
+  const db = await getAdapter();
+  const rows = db.all(
+    `SELECT provider,
+            COUNT(*) AS total,
+            SUM(CASE WHEN isActive = 1 THEN 1 ELSE 0 END) AS active,
+            MAX(updatedAt) AS lastUpdated
+       FROM providerConnections
+      GROUP BY provider`
+  );
+  const out = {};
+  for (const r of rows) {
+    out[r.provider] = {
+      total: Number(r.total) || 0,
+      active: Number(r.active) || 0,
+      lastUpdated: r.lastUpdated || null,
+    };
+  }
+  return out;
 }
 
 export async function getProviderConnectionById(id) {
