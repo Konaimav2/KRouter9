@@ -7,6 +7,7 @@ import { buildClineHeaders } from "../shared/clineAuth.js";
 import { proxyAwareFetch } from "../utils/proxyFetch.js";
 import { injectReasoningContent } from "../utils/reasoningContentInjector.js";
 import { stripUnsupportedParams } from "../translator/concerns/paramSupport.js";
+import { applyCustomHeaders } from "../utils/customHeaders.js";
 
 // Auth header descriptors — derived from registry transport.auth, fallback to hardcoded defaults.
 const BEARER = { combined: true, header: "Authorization", scheme: "bearer" };
@@ -205,14 +206,10 @@ export class DefaultExecutor extends BaseExecutor {
     if (stream) headers["Accept"] = "text/event-stream";
 
     // Custom per-connection headers and User-Agent (providerSpecificData).
-    // Applied last so a connection can deliberately override auth/UA defaults.
-    // (Mirrors BaseExecutor.buildHeaders — DefaultExecutor overrides it.)
+    // Applied last so a connection can override non-reserved defaults; reserved
+    // auth/host headers are refused at this boundary (mirrors BaseExecutor).
     const psd = credentials?.providerSpecificData;
-    if (psd?.customHeaders && typeof psd.customHeaders === "object") {
-      for (const [k, v] of Object.entries(psd.customHeaders)) {
-        if (typeof k === "string" && k.trim() && v != null) headers[k.trim()] = String(v);
-      }
-    }
+    applyCustomHeaders(headers, psd?.customHeaders);
     if (typeof psd?.userAgent === "string" && psd.userAgent.trim()) {
       headers["User-Agent"] = psd.userAgent.trim();
     }

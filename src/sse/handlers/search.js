@@ -29,6 +29,15 @@ export async function handleSearch(request) {
     return errorResponse(HTTP_STATUS.BAD_REQUEST, "Invalid JSON body");
   }
 
+  // V3: enforce per-key credit/quota (search is billable).
+  const { withKeyBudget } = await import("@/lib/budget.js");
+  return withKeyBudget(request, extractApiKey(request), () => handleSearchInner(request, body), {
+    estCost: 0.005,
+    estTokens: 500,
+  });
+}
+
+async function handleSearchInner(request, body) {
   const url = new URL(request.url);
   // Accept either `provider` or `model` (UI sends `model` since provider IS the model for webSearch)
   const providerInput = body.provider || body.model;

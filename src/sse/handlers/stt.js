@@ -18,6 +18,16 @@ const CREDENTIALED_PROVIDERS = new Set(
 );
 
 export async function handleStt(request) {
+  // V3: enforce per-key credit/quota (STT is billable). apiKey read from headers
+  // only; formData is consumed inside the inner handler (single-read body).
+  const { withKeyBudget } = await import("@/lib/budget.js");
+  return withKeyBudget(request, extractApiKey(request), () => handleSttInner(request), {
+    estCost: 0.006,
+    estTokens: 300,
+  });
+}
+
+async function handleSttInner(request) {
   let formData;
   try {
     formData = await request.formData();

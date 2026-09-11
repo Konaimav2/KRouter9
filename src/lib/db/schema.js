@@ -3,7 +3,7 @@
 // pre-change safety backup in migrate.js: when the stored version is lower,
 // one lightweight DB backup is taken before applying schema changes. Forgetting
 // to bump only skips that backup — it does NOT break the additive auto-sync.
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export const PRAGMA_SQL = `
 PRAGMA journal_mode = WAL;
@@ -89,6 +89,10 @@ export const TABLES = {
       usageTokens: "INTEGER DEFAULT 0",
       creditLimit: "REAL DEFAULT 0",
       usageCost: "REAL DEFAULT 0",
+      // In-flight reservation for atomic credit/quota enforcement (V3).
+      // Reserved amount is held between pre-dispatch check and usage reconcile.
+      reservedCost: "REAL DEFAULT 0",
+      reservedTokens: "INTEGER DEFAULT 0",
       allowedModels: "TEXT",
       // KRouter9 API key manage (0.5.77): per-key RPM/TPM + model allow/deny
       rpmLimit: "INTEGER DEFAULT 0",

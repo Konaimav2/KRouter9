@@ -58,6 +58,11 @@ export const STREAM_FIRST_CHUNK_TIMEOUT_MS = envMs("STREAM_FIRST_CHUNK_TIMEOUT_M
 // Fetch connect timeout: abort if upstream doesn't return response headers within this duration
 export const FETCH_CONNECT_TIMEOUT_MS = envMs("FETCH_CONNECT_TIMEOUT_MS", 60 * 1000);
 
+// Per-provider-node timeout override bounds (node config `timeoutMs`). Prevents
+// an unbounded value (e.g. 2^31 ≈ 25 days) from pinning sockets/requests.
+export const NODE_TIMEOUT_MIN_MS = 1000;
+export const NODE_TIMEOUT_MAX_MS = 300 * 1000;
+
 // Gemini native TTS fetch timeout: abort if Google does not return response headers in time.
 export const GEMINI_NATIVE_TTS_FETCH_TIMEOUT_MS = envMs("GEMINI_NATIVE_TTS_FETCH_TIMEOUT_MS", 45 * 1000);
 

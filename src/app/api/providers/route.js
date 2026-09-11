@@ -9,6 +9,7 @@ import {
 import { APIKEY_PROVIDERS } from "@/shared/constants/config";
 import { AI_PROVIDERS, FREE_TIER_PROVIDERS, WEB_COOKIE_PROVIDERS, isOpenAICompatibleProvider, isAnthropicCompatibleProvider, isCustomEmbeddingProvider } from "@/shared/constants/providers";
 import { normalizeProviderId, normalizeProviderSpecificData } from "@/lib/providerNormalization";
+import { applyCustomHeaders } from "open-sse/utils/customHeaders.js";
 
 export const dynamic = "force-dynamic";
 
@@ -139,6 +140,8 @@ export async function POST(request) {
         baseUrl: node.baseUrl,
         nodeName: node.name,
         ...(typeof node.userAgent === "string" && node.userAgent.trim() ? { userAgent: node.userAgent.trim() } : {}),
+        ...(Number(node.timeoutMs) > 0 ? { timeoutMs: Math.floor(Number(node.timeoutMs)) } : {}),
+        ...(node.customHeaders && typeof node.customHeaders === "object" ? { customHeaders: { ...node.customHeaders } } : {}),
       };
     } else if (isAnthropicCompatibleProvider(provider)) {
       const node = await getProviderNodeById(provider);
@@ -150,6 +153,8 @@ export async function POST(request) {
         baseUrl: node.baseUrl,
         nodeName: node.name,
         ...(typeof node.userAgent === "string" && node.userAgent.trim() ? { userAgent: node.userAgent.trim() } : {}),
+        ...(Number(node.timeoutMs) > 0 ? { timeoutMs: Math.floor(Number(node.timeoutMs)) } : {}),
+        ...(node.customHeaders && typeof node.customHeaders === "object" ? { customHeaders: { ...node.customHeaders } } : {}),
       };
     } else if (isCustomEmbeddingProvider(provider)) {
       const node = await getProviderNodeById(provider);
@@ -171,11 +176,9 @@ export async function POST(request) {
     };
 
     // Custom per-connection request headers and User-Agent (any provider type).
+    // Sanitized via the shared runtime helper (reserved auth/host headers refused).
     if (body.customHeaders && typeof body.customHeaders === "object" && !Array.isArray(body.customHeaders)) {
-      const clean = {};
-      for (const [k, v] of Object.entries(body.customHeaders)) {
-        if (typeof k === "string" && k.trim() && v != null) clean[k.trim()] = String(v);
-      }
+      const clean = applyCustomHeaders({}, body.customHeaders);
       if (Object.keys(clean).length > 0) mergedProviderSpecificData.customHeaders = clean;
     }
     if (typeof body.userAgent === "string" && body.userAgent.trim()) {

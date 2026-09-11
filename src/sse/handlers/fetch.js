@@ -30,6 +30,15 @@ export async function handleFetch(request) {
     return errorResponse(HTTP_STATUS.BAD_REQUEST, "Invalid JSON body");
   }
 
+  // V3: enforce per-key credit/quota (web fetch is billable).
+  const { withKeyBudget } = await import("@/lib/budget.js");
+  return withKeyBudget(request, extractApiKey(request), () => handleFetchInner(request, body), {
+    estCost: 0.003,
+    estTokens: 500,
+  });
+}
+
+async function handleFetchInner(request, body) {
   const reqUrl = new URL(request.url);
   // Accept either `provider` or `model` (UI sends `model` since provider IS the model for webFetch)
   const providerInput = body.provider || body.model;

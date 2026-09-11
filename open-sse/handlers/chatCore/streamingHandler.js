@@ -43,11 +43,16 @@ function buildTransformStream({ provider, sourceFormat, targetFormat, userAgent,
 /**
  * Handle streaming response — pipe provider SSE through transform stream to client.
  */
-function reenqueueFirstChunk(bodyStream, firstChunkValue) {
-  const reader = bodyStream.getReader();
+// Re-wrap a body stream whose FIRST chunk was already consumed by the combo
+// probe. The probe's existing `reader` is passed in — calling getReader()
+// again on the same stream throws TypeError("ReadableStream is locked"). The
+// reader is released once the remainder is drained so downstream cleanup can
+// cancel the source.
+export function reenqueueFirstChunk(reader, firstChunkValue) {
   return new ReadableStream({
     async start(controller) {
       controller.enqueue(firstChunkValue);
+      let errored = false;
       try {
         while (true) {
           const { done, value } = await reader.read();
@@ -55,12 +60,18 @@ function reenqueueFirstChunk(bodyStream, firstChunkValue) {
           controller.enqueue(value);
         }
       } catch (e) {
+        errored = true;
         controller.error(e);
       } finally {
-        controller.close();
+        try { reader.releaseLock(); } catch { /* already released/cancelled */ }
+        // close() after error() throws; only close on the clean path.
+        if (!errored) { try { controller.close(); } catch { /* already closed */ } }
       }
     },
-    cancel() { reader.cancel().catch(() => {}); },
+    cancel() {
+      reader.cancel().catch(() => {});
+      try { reader.releaseLock(); } catch { /* noop */ }
+    },
   });
 }
 
@@ -115,14 +126,28 @@ export async function handleStreamingResponse({ providerResponse, provider, mode
   let bodyStream = providerResponse.body;
   if (comboName) {
     const reader = providerResponse.body.getReader();
+    // On any early return the source must be cancelled and the reader released.
+    // A pending reader.read() that loses the race would reject on releaseLock()
+    // with no handler attached -> process-level unhandled rejection, so we
+    // cancel() first and swallow the resulting rejection.
+    const abandon = () => {
+      try { reader.cancel().catch(() => {}); } catch { /* noop */ }
+      try { reader.releaseLock(); } catch { /* noop */ }
+      try { providerResponse.body.cancel?.().catch(() => {}); } catch { /* noop */ }
+    };
     let firstChunk = null;
+    let timeoutTimer;
     try {
       const timeoutMs = 15000;
+      // Keep a handle on the read promise so a losing race can be swallowed.
+      const readPromise = reader.read();
+      readPromise.catch(() => { /* consumed by race or abandon */ });
       firstChunk = await Promise.race([
-        reader.read(),
-        new Promise((_, rej) => setTimeout(() => rej(new Error("first chunk timeout")), timeoutMs)),
+        readPromise,
+        new Promise((_, rej) => { timeoutTimer = setTimeout(() => rej(new Error("first chunk timeout")), timeoutMs); }),
       ]);
     } catch (err) {
+      abandon();
       streamController?.handleError?.(err);
       return {
         success: false,
@@ -131,8 +156,11 @@ export async function handleStreamingResponse({ providerResponse, provider, mode
           headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
         }),
       };
+    } finally {
+      clearTimeout(timeoutTimer);
     }
     if (firstChunk?.done) {
+      abandon();
       streamController?.handleError?.(new Error("upstream stream ended before first chunk"));
       return {
         success: false,
@@ -144,6 +172,7 @@ export async function handleStreamingResponse({ providerResponse, provider, mode
     }
     const chunkText = new TextDecoder().decode(firstChunk.value);
     if (/^data:\s*\{"error"/m.test(chunkText) || /^data:\s*\[DONE\]/m.test(chunkText) && !/("delta"|"content_block_start"|"candidates"|"message_start"|"response\.output")/.test(chunkText)) {
+      abandon();
       streamController?.handleError?.(new Error("upstream first chunk is an error/empty event"));
       // extract error message if present
       let errMsg = "upstream returned an error event";
@@ -157,8 +186,9 @@ export async function handleStreamingResponse({ providerResponse, provider, mode
         }),
       };
     }
-    // good first chunk — re-wrap so the rest of the pipeline keeps streaming
-    bodyStream = reenqueueFirstChunk(providerResponse.body, firstChunk.value);
+    // good first chunk — re-wrap so the rest of the pipeline keeps streaming.
+    // Reuse the SAME reader (the stream is locked); a second getReader() throws.
+    bodyStream = reenqueueFirstChunk(reader, firstChunk.value);
   }
 
   const transformedBody = pipeWithDisconnect(bodyStream, transformStream, streamController, onAbortTerminal, stallTimeoutMs);

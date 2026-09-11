@@ -32,7 +32,7 @@ export async function GET() {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { name, prefix, apiType, baseUrl, type, userAgent } = body;
+    const { name, prefix, apiType, baseUrl, type, userAgent, timeoutMs, customHeaders } = body;
 
     if (!name?.trim()) {
       return NextResponse.json({ error: "Name is required" }, { status: 400 });
@@ -58,6 +58,8 @@ export async function POST(request) {
         baseUrl: (baseUrl || OPENAI_COMPATIBLE_DEFAULTS.baseUrl).trim(),
         name: name.trim(),
         ...(typeof userAgent === "string" && userAgent.trim() ? { userAgent: userAgent.trim() } : {}),
+        ...(Number(timeoutMs) > 0 ? { timeoutMs: Math.floor(Number(timeoutMs)) } : {}),
+        ...(customHeaders && typeof customHeaders === "object" ? { customHeaders } : {}),
       });
       return NextResponse.json({ node }, { status: 201 });
     }
@@ -94,6 +96,8 @@ export async function POST(request) {
         baseUrl: sanitizedBaseUrl,
         name: name.trim(),
         ...(typeof userAgent === "string" && userAgent.trim() ? { userAgent: userAgent.trim() } : {}),
+        ...(Number(timeoutMs) > 0 ? { timeoutMs: Math.floor(Number(timeoutMs)) } : {}),
+        ...(customHeaders && typeof customHeaders === "object" ? { customHeaders } : {}),
       });
       return NextResponse.json({ node }, { status: 201 });
     }

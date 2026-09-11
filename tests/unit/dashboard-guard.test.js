@@ -287,6 +287,44 @@ describe("dashboard guard local-only access", () => {
   });
 });
 
+describe("dashboard playground is always authenticated (V2)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.NINEROUTER_PEER_TOKEN = PEER_TOKEN;
+    mocks.validateApiKey.mockResolvedValue(false);
+    mocks.getConsistentMachineId.mockResolvedValue("cli-token");
+    mocks.verifyDashboardAuthToken.mockResolvedValue(false);
+  });
+
+  it("rejects remote playground request even when requireLogin is disabled", async () => {
+    // The dangerous config: login disabled. The playground route must still
+    // demand a real session/CLI token, or the instance is free inference.
+    mocks.getSettings.mockResolvedValue({ requireLogin: false });
+    const response = await proxy(request("/api/dashboard/chat/completions", {
+      host: "router.example.com",
+    }));
+    expect(response.status).toBe(401);
+  });
+
+  it("allows playground request with a valid dashboard token", async () => {
+    mocks.getSettings.mockResolvedValue({ requireLogin: false });
+    mocks.verifyDashboardAuthToken.mockResolvedValue(true);
+    const req = request("/api/dashboard/chat/completions", { host: "router.example.com" });
+    req.cookies.get = vi.fn(() => ({ value: "session-jwt" }));
+    const response = await proxy(req);
+    expect(response).toBe(mocks.nextResponse);
+  });
+
+  it("allows playground request with a valid CLI token", async () => {
+    mocks.getSettings.mockResolvedValue({ requireLogin: false });
+    const response = await proxy(request("/api/dashboard/chat/completions", {
+      host: "router.example.com",
+      "x-9r-cli-token": "cli-token",
+    }));
+    expect(response).toBe(mocks.nextResponse);
+  });
+});
+
 describe("dashboard guard helpers", () => {
   it("extracts bearer API keys before x-api-key", () => {
     const apiRequest = request("/v1/chat/completions", {
