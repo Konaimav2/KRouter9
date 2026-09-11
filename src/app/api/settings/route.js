@@ -78,6 +78,33 @@ export async function PATCH(request) {
 
     const settings = await updateSettings(body);
 
+    // P3: mirror memory-cap settings to env so runtime modules (which read env
+    // at use time) pick them up without a restart.
+    const CAP_ENV_MAP = {
+      observabilityBodyCapBytes: "OBSERVABILITY_BODY_CAP_BYTES",
+      observabilityBufferBytes: "OBSERVABILITY_BUFFER_BYTES",
+      streamAccumulateCapBytes: "STREAM_ACCUMULATE_CAP_BYTES",
+      circuitBreakerTtlMs: "CIRCUIT_BREAKER_TTL_MS",
+      circuitBreakerMaxEntries: "CIRCUIT_BREAKER_MAX_ENTRIES",
+      antigravityCacheTtlMs: "ANTIGRAVITY_CACHE_TTL_MS",
+      antigravityCacheMaxEntries: "ANTIGRAVITY_CACHE_MAX_ENTRIES",
+      rateLimitMapCap: "RATE_LIMIT_MAP_CAP",
+    };
+    let memoryCapChanged = false;
+    for (const [key, envName] of Object.entries(CAP_ENV_MAP)) {
+      if (Object.prototype.hasOwnProperty.call(body, key)) {
+        const n = Math.floor(Number(settings[key]));
+        if (Number.isFinite(n) && n > 0) process.env[envName] = String(n);
+        memoryCapChanged = true;
+      }
+    }
+    if (memoryCapChanged) {
+      try {
+        const { resetObservabilityConfig } = await import("@/lib/db/repos/requestDetailsRepo.js");
+        resetObservabilityConfig?.();
+      } catch { /* noop */ }
+    }
+
     // Apply outbound proxy settings immediately (no restart required)
     if (
       Object.prototype.hasOwnProperty.call(body, "outboundProxyEnabled") ||

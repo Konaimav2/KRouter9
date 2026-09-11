@@ -4,6 +4,11 @@ import { parseJson, stringifyJson } from "../helpers/jsonCol.js";
 const DEFAULT_MITM_ROUTER_BASE = "http://localhost:20128";
 const DEFAULT_HEADROOM_URL = process.env.HEADROOM_URL || "http://localhost:8787";
 
+function envInt(name, fallback) {
+  const n = Number(process.env?.[name]);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+}
+
 const DEFAULT_SETTINGS = {
   cloudEnabled: false,
   tunnelEnabled: false,
@@ -47,6 +52,13 @@ const DEFAULT_SETTINGS = {
   observabilityBatchSize: 20,
   observabilityFlushIntervalMs: 5000,
   observabilityMaxJsonSize: 5,
+  // P3 memory caps (configurable; env override wins).
+  observabilityBodyCapBytes: envInt("OBSERVABILITY_BODY_CAP_BYTES", 262144),
+  observabilityBufferBytes: envInt("OBSERVABILITY_BUFFER_BYTES", 8 * 1024 * 1024),
+  streamAccumulateCapBytes: envInt("STREAM_ACCUMULATE_CAP_BYTES", 65536),
+  circuitBreakerTtlMs: envInt("CIRCUIT_BREAKER_TTL_MS", 30 * 60 * 1000),
+  antigravityCacheTtlMs: envInt("ANTIGRAVITY_CACHE_TTL_MS", 10 * 60 * 1000),
+  rateLimitMapCap: envInt("RATE_LIMIT_MAP_CAP", 10000),
   outboundProxyEnabled: false,
   outboundProxyUrl: "",
   outboundNoProxy: "",
