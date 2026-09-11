@@ -242,7 +242,16 @@ export function pipeWithDisconnect(providerResponse, transformStream, streamCont
     flush() { dbg(tag, `upstream EOF | chunks=${chunkCount} | bytes=${totalBytes} | dur=${Date.now() - t0}ms`); clearStall(); }
   });
 
-  const transformedBody = providerResponse.body
+  // Accept either a full Response or a bare ReadableStream. The streaming
+  // handler passes a re-wrapped stream (post first-chunk probe) sometimes, and
+  // `providerResponse.body` is undefined on a plain stream — that was the
+  // "Cannot read properties of undefined (reading 'pipeThrough')" crash.
+  const source = providerResponse?.body ?? providerResponse;
+  if (!source || typeof source.pipeThrough !== "function") {
+    throw new TypeError(`pipeWithDisconnect: expected a Response or ReadableStream, got ${typeof providerResponse}`);
+  }
+
+  const transformedBody = source
     .pipeThrough(upstreamTap)
     .pipeThrough(transformStream);
 
