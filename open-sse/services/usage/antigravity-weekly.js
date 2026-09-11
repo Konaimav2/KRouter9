@@ -15,6 +15,26 @@ const WEEKLY_CONFIG = {
 // — Cache: TTL + in-flight dedup per project ———————————————
 const WEEKLY_CACHE_TTL_MS = 180_000; // 3 minutes
 const weeklyCache = new Map(); // cacheKey -> { result, expiresAt } | { promise }
+// P3: hard cap so long-running processes with many accounts/tokens cannot grow
+// the cache (which retains raw access tokens) without bound.
+const WEEKLY_CACHE_MAX_ENTRIES = Number(process.env.ANTIGRAVITY_CACHE_MAX_ENTRIES) > 0
+  ? Number(process.env.ANTIGRAVITY_CACHE_MAX_ENTRIES)
+  : 1000;
+
+function sweepWeeklyCache(now = Date.now()) {
+  if (weeklyCache.size <= WEEKLY_CACHE_MAX_ENTRIES) return;
+  for (const [k, v] of weeklyCache) {
+    if (v?.expiresAt && v.expiresAt <= now) weeklyCache.delete(k);
+  }
+  if (weeklyCache.size > WEEKLY_CACHE_MAX_ENTRIES) {
+    const over = weeklyCache.size - WEEKLY_CACHE_MAX_ENTRIES;
+    let removed = 0;
+    for (const k of weeklyCache.keys()) {
+      weeklyCache.delete(k);
+      if (++removed >= over) break;
+    }
+  }
+}
 
 function cacheKey(accessToken, projectId) {
   return `${accessToken}::${projectId || ""}`;
@@ -139,6 +159,7 @@ export async function fetchAntigravityWeeklyQuota(accessToken, projectId, proxyO
     const result = await promise;
     if (result && Object.keys(result).length > 0) {
       weeklyCache.set(key, { result, expiresAt: Date.now() + WEEKLY_CACHE_TTL_MS });
+      sweepWeeklyCache();
     } else {
       weeklyCache.delete(key);
     }

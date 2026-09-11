@@ -70,6 +70,22 @@ describe("budget reservation (V3 prepaid)", () => {
     expect(ok).toBeGreaterThanOrEqual(1);
   });
 
+  it("concurrent requests on the SAME key each refund their own reservation", async () => {
+    const k = await db.createApiKey("b8", "m");
+    await db.updateApiKey(k.id, { creditLimit: 10 });
+    // Two reserves with the SAME apiKey string (the original bug: the second
+    // reserve overwrote the first pending entry, so the first completion
+    // refunded nothing and one estimate stayed charged forever).
+    await budget.reserveBudget(k, { estCost: 1, estTokens: 0, apiKey: k.key });
+    await budget.reserveBudget(k, { estCost: 1, estTokens: 0, apiKey: k.key });
+
+    await budget.settleUsageForKey(k.key, { actualCost: 0.05, actualTokens: 0 });
+    await budget.settleUsageForKey(k.key, { actualCost: 0.05, actualTokens: 0 });
+    const back = await db.getApiKeyById(k.id);
+    // 2 estimates (2.0) charged, then 2 refunds (−2.0) + real (0.10) => 0.10.
+    expect(back.usageCost).toBeCloseTo(0.1, 6);
+  });
+
   it("quota prepay blocks on token limit", async () => {
     const k = await db.createApiKey("b4", "m");
     await db.updateApiKey(k.id, { quotaLimit: 1000 });

@@ -18,7 +18,10 @@ import { getAdapter } from "./db/driver.js";
 const DEFAULT_EST_COST = 0.01;
 const DEFAULT_EST_TOKENS = 4096;
 
-// apiKey string -> { keyId, chargedCost, chargedTokens }
+// apiKey string -> ARRAY of { keyId, chargedCost, chargedTokens }. Concurrent
+// requests on the same key each push their own reservation; each completion
+// pops exactly one. A single Map entry was wrong — the second reserve
+// overwrote the first, so the first completion refunded nothing.
 const pending = new Map();
 
 function posNum(v) {
@@ -67,11 +70,14 @@ export async function reserveBudget(keyRow, { estCost = DEFAULT_EST_COST, estTok
   });
 
   if (out.ok && apiKey && (out.reservation.reserveCost > 0 || out.reservation.reserveTokens > 0)) {
-    pending.set(String(apiKey), {
+    const key = String(apiKey);
+    const list = pending.get(key) || [];
+    list.push({
       keyId: keyRow.id,
       chargedCost: out.reservation.reserveCost,
       chargedTokens: out.reservation.reserveTokens,
     });
+    pending.set(key, list);
   }
   return out;
 }
@@ -86,8 +92,9 @@ export async function reserveBudget(keyRow, { estCost = DEFAULT_EST_COST, estTok
 export async function settleUsageForKey(apiKey, { actualCost = 0, actualTokens = 0 } = {}) {
   if (!apiKey) return;
   const key = String(apiKey);
-  const held = pending.get(key);
-  pending.delete(key);
+  const list = pending.get(key);
+  const held = list && list.length ? list.pop() : null;
+  if (list && list.length === 0) pending.delete(key);
   const db = await getAdapter();
   db.transaction(() => {
     const row = db.get(`SELECT id, usageCost, usageTokens FROM apiKeys WHERE key = ?`, [key]);
@@ -101,16 +108,19 @@ export async function settleUsageForKey(apiKey, { actualCost = 0, actualTokens =
 }
 
 /**
- * Sync variant for in-transaction callers (usageRepo). Returns the refund that
- * was held for this key (0 if none) so the caller can compute the final charge
- * inside its own transaction. Also clears the pending entry.
+ * Sync variant for in-transaction callers (usageRepo). Pops ONE reservation
+ * (LIFO) for this key and returns its refund so the caller can compute the
+ * final charge inside its own transaction. Caller MUST only call after its DB
+ * update has been prepared; if the caller's transaction throws before
+ * consuming, the reservation stays held (fail-closed overcharge, never free).
  */
 export function consumePendingReservation(apiKey) {
   const key = apiKey != null ? String(apiKey) : null;
   if (!key) return { refundCost: 0, refundTokens: 0 };
-  const held = pending.get(key);
-  if (!held) return { refundCost: 0, refundTokens: 0 };
-  pending.delete(key);
+  const list = pending.get(key);
+  if (!list || list.length === 0) return { refundCost: 0, refundTokens: 0 };
+  const held = list.pop();
+  if (list.length === 0) pending.delete(key);
   return { refundCost: held.chargedCost, refundTokens: held.chargedTokens };
 }
 
