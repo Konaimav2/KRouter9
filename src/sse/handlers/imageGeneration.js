@@ -29,6 +29,15 @@ export async function handleImageGeneration(request) {
     return errorResponse(HTTP_STATUS.BAD_REQUEST, "Invalid JSON body");
   }
 
+  // V3: enforce per-key credit/quota (image gen is billable).
+  const { withKeyBudget } = await import("@/lib/budget.js");
+  return withKeyBudget(request, extractApiKey(request), () => handleImageGenerationInner(request, body), {
+    estCost: 0.04,
+    estTokens: 1000,
+  });
+}
+
+async function handleImageGenerationInner(request, body) {
   const url = new URL(request.url);
   const preferredConnectionId = request.headers.get("x-connection-id") || null;
   const wantsStream = (request.headers.get("accept") || "").includes("text/event-stream");

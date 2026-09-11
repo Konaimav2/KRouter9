@@ -12,6 +12,53 @@ export function getQuotaCooldown(backoffLevel = 0) {
   return Math.min(cooldown, BACKOFF_CONFIG.max);
 }
 
+// Statuses that indicate the REQUEST is bad, not the account/provider. Retrying
+// another account cannot fix these, so they must not lock or cooldown a healthy
+// account.
+const CLIENT_FAULT_STATUSES = new Set([400, 406, 422]);
+// Explicit bad-request signals in the message.
+const CLIENT_FAULT_HINTS = [
+  "invalid request",
+  "improperly formed",
+  "invalid_parameter",
+  "invalid parameter",
+  "unsupported parameter",
+  "context length",
+  "maximum context",
+  "too long",
+  "validation error",
+];
+
+/**
+ * Provider/account fault signals. These MUST win over a client-fault status:
+ * a 400 whose body says "quota exceeded" or "rate limit" is an account fault
+ * and must still rotate. Mirrors the text rules in errorConfig.js.
+ */
+const PROVIDER_FAULT_HINTS = [
+  "rate limit",
+  "too many requests",
+  "quota",
+  "capacity",
+  "overloaded",
+  "no credentials",
+  "request not allowed",
+];
+
+/**
+ * Whether an error is the caller's fault (bad request) rather than the
+ * account's/provider's. Such errors should NOT lock the current account.
+ * Provider-fault text wins, so an account-specific 400 (quota/config) still
+ * rotates instead of pinning routing to a broken account.
+ */
+export function isClientFault(status, errorText) {
+  const lower = errorText
+    ? (typeof errorText === "string" ? errorText : JSON.stringify(errorText)).toLowerCase()
+    : "";
+  if (PROVIDER_FAULT_HINTS.some((h) => lower.includes(h))) return false;
+  if (CLIENT_FAULT_HINTS.some((h) => lower.includes(h))) return true;
+  return CLIENT_FAULT_STATUSES.has(status) && !PROVIDER_FAULT_HINTS.some((h) => lower.includes(h));
+}
+
 /**
  * Check if error should trigger account fallback (switch to next account)
  * Config-driven: matches ERROR_RULES top-to-bottom (text rules first, then status)

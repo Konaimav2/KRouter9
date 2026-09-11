@@ -31,7 +31,7 @@ import { stripModelContextMarker } from "open-sse/utils/modelMarkers.js";
  * Supports: OpenAI, Claude, Gemini, OpenAI Responses API formats
  * Format detection and translation handled by translator
  */
-export async function handleChat(request, clientRawRequest = null) {
+export async function handleChat(request, clientRawRequest = null, options = {}) {
   let body;
   try {
     body = await request.json();
@@ -71,9 +71,11 @@ export async function handleChat(request, clientRawRequest = null) {
     log.debug("AUTH", "No API key provided (local mode)");
   }
 
-  // Enforce API key if enabled in settings
+  // Enforce API key if enabled in settings.
+  // `options.internal` (dashboard playground) is same-origin + auth-gated by the
+  // dashboard guard, so it skips the end-user API key requirement.
   const settings = await getSettings();
-  if (settings.requireApiKey) {
+  if (settings.requireApiKey && !options.internal) {
     if (!apiKey) {
       log.warn("AUTH", "Missing API key (requireApiKey=true)");
       return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Missing API key");
@@ -85,14 +87,19 @@ export async function handleChat(request, clientRawRequest = null) {
     }
   }
 
-  // KRouter9 per-key manage enforcement (fail-open; defaults OFF: limits 0 = unlimited, policy off = allow all).
-  // Applies whenever a known key is presented, independent of requireApiKey.
+  // KRouter9 per-key manage enforcement (V3). Defaults OFF (limits 0 = unlimited,
+  // policy off = allow all). Applies whenever a known key is presented, independent
+  // of requireApiKey. Budget/credit checks FAIL CLOSED; policy checks fail open.
+  // The budget reservation is prepaid AFTER the cheap validation checks below so
+  // an invalid/bypass request never charges the key.
+  let enforcementKeyRow = null;
   if (apiKey) {
+    let keyRow = null;
     try {
       const { getApiKeyByKey } = await import("@/lib/localDb");
       const { checkRateLimit, checkTpmLimit } = await import("@/lib/rateLimit.js");
       const { isModelAllowedForKey } = await import("@/lib/apiKeyPolicy.js");
-      const keyRow = await getApiKeyByKey(apiKey);
+      keyRow = await getApiKeyByKey(apiKey);
       if (keyRow) {
         if (!isModelAllowedForKey(keyRow, modelStr)) {
           log.warn("AUTH", `API key model denied: ${modelStr}`);
@@ -112,7 +119,11 @@ export async function handleChat(request, clientRawRequest = null) {
           return unavailableResponse(HTTP_STATUS.RATE_LIMITED, `API key token limit exceeded (${tpm.limit}/min)`, retryIso, `retry after ${tpm.retryAfterSec}s`);
         }
       }
-    } catch (_keyPolicyErr) { /* fail-open: policy checks never break inference */ }
+    } catch (_keyPolicyErr) {
+      // RPM/TPM/policy are fail-open for inference; budget is handled below.
+      keyRow = null;
+    }
+    enforcementKeyRow = keyRow;
   }
 
   if (!modelStr) {
@@ -123,7 +134,27 @@ export async function handleChat(request, clientRawRequest = null) {
   // Bypass naming/warmup requests before combo rotation to avoid wasting rotation slots
   const userAgent = request?.headers?.get("user-agent") || "";
   const bypassResponse = handleBypassRequest(body, modelStr, userAgent, !!settings.ccFilterNaming);
-  if (bypassResponse) return bypassResponse.response || bypassResponse;
+  if (bypassResponse) {
+    return bypassResponse.response || bypassResponse;
+  }
+
+  // Atomic credit/quota gate (prepaid). Runs after validation so invalid/bypass
+  // requests never charge the key. Fail CLOSED if a positive limit is configured
+  // but the reserve step throws. Reconciled to real usage by usageRepo.
+  if (enforcementKeyRow && ((Number(enforcementKeyRow.creditLimit) || 0) > 0 || (Number(enforcementKeyRow.quotaLimit) || 0) > 0)) {
+    try {
+      const { reserveBudget } = await import("@/lib/budget.js");
+      const estTokens = Math.max(1, Math.ceil(JSON.stringify(body?.messages || body || "").length / 4)) + 1024;
+      const res = await reserveBudget(enforcementKeyRow, { apiKey, estTokens });
+      if (!res.ok) {
+        log.warn("AUTH", res.message);
+        return errorResponse(res.status, res.message);
+      }
+    } catch (err) {
+      log.warn("AUTH", `Budget check failed, failing closed: ${err?.message || err}`);
+      return errorResponse(HTTP_STATUS.PAYMENT_REQUIRED, "API key budget check unavailable");
+    }
+  }
 
   const requiredCapabilities = detectRequiredCapabilities(body);
 

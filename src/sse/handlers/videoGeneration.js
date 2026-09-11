@@ -92,6 +92,15 @@ function withConnectionHeader(response, connectionId) {
  * POST /v1/videos/{generations|edits|extensions} — async job creation proxy.
  */
 export async function handleVideoCreate(request, action) {
+  // V3: enforce per-key credit/quota (video jobs are the most expensive).
+  const { withKeyBudget } = await import("@/lib/budget.js");
+  return withKeyBudget(request, extractApiKey(request), () => handleVideoCreateInner(request, action), {
+    estCost: 0.25,
+    estTokens: 1000,
+  });
+}
+
+async function handleVideoCreateInner(request, action) {
   const authError = await requireValidApiKey(request);
   if (authError) return authError;
 

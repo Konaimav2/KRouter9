@@ -69,25 +69,43 @@ function writeJsonFile(sessionPath, filename, data) {
   }
 }
 
-// Mask sensitive data in headers (DISABLED - keep full token for testing)
-function maskSensitiveHeaders(headers) {
+// Mask sensitive header values before writing them to disk. Request-log files
+// are plaintext under DATA_DIR; with ENABLE_REQUEST_LOGS they would otherwise
+// carry reusable dashboard JWTs, bearer API keys and provider credentials.
+// Header NAMES are preserved (useful for debugging); values are redacted.
+const SENSITIVE_HEADER_HINTS = [
+  "authorization",
+  "x-api-key",
+  "api-key",
+  "apikey",
+  "cookie",
+  "set-cookie",
+  "token",
+  "secret",
+  "password",
+  "credential",
+  "session",
+];
+
+function maskValue(value) {
+  const s = String(value ?? "");
+  if (s.length === 0) return "";
+  if (s.length <= 12) return "***";
+  return `${s.slice(0, 6)}...${s.slice(-4)}`;
+}
+
+export function maskSensitiveHeaders(headers) {
   if (!headers) return {};
-  return { ...headers };
-  
-  // Old masking code (disabled):
-  // const masked = { ...headers };
-  // const sensitiveKeys = ["authorization", "x-api-key", "cookie", "token"];
-  // 
-  // for (const key of Object.keys(masked)) {
-  //   const lowerKey = key.toLowerCase();
-  //   if (sensitiveKeys.some(sk => lowerKey.includes(sk))) {
-  //     const value = masked[key];
-  //     if (value && value.length > 20) {
-  //       masked[key] = value.slice(0, 10) + "..." + value.slice(-5);
-  //     }
-  //   }
-  // }
-  // return masked;
+  const out = {};
+  for (const [key, value] of Object.entries(headers)) {
+    const lower = String(key).toLowerCase();
+    if (SENSITIVE_HEADER_HINTS.some((h) => lower.includes(h))) {
+      out[key] = maskValue(value);
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
 }
 
 // No-op logger when logging is disabled
@@ -170,7 +188,7 @@ export async function createRequestLogger(sourceFormat, targetFormat, model) {
         timestamp: new Date().toISOString(),
         status,
         statusText,
-        headers: headers ? (typeof headers.entries === "function" ? Object.fromEntries(headers.entries()) : headers) : {},
+        headers: maskSensitiveHeaders(headers ? (typeof headers.entries === "function" ? Object.fromEntries(headers.entries()) : headers) : {}),
         body
       });
     },

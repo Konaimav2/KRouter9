@@ -67,4 +67,20 @@ describe("apikey manage", () => {
     expect(checkTpmLimit("k1", 500, 1000).ok).toBe(true);
     expect(checkTpmLimit("k1", 600, 1000).ok).toBe(false);
   });
+
+  it("persists credit/quota budgets and exposes usage counters", async () => {
+    const k = await db.createApiKey("credit-1", "machine-abc");
+    const upd = await db.updateApiKey(k.id, { creditLimit: 5.5, quotaLimit: 1000 });
+    expect(upd.creditLimit).toBe(5.5);
+    expect(upd.quotaLimit).toBe(1000);
+    const back = await db.getApiKeyById(k.id);
+    expect(back.creditLimit).toBe(5.5);
+    expect(back.quotaLimit).toBe(1000);
+    expect(back.usageCost).toBe(0);
+    expect(back.usageTokens).toBe(0);
+    // Clearing back to unlimited.
+    const cleared = await db.updateApiKey(k.id, { creditLimit: 0, quotaLimit: 0 });
+    expect(cleared.creditLimit).toBe(0);
+    expect(cleared.quotaLimit).toBe(0);
+  });
 });

@@ -26,6 +26,15 @@ export async function handleTts(request) {
     return errorResponse(HTTP_STATUS.BAD_REQUEST, "Invalid JSON body");
   }
 
+  // V3: enforce per-key credit/quota (TTS is billable).
+  const { withKeyBudget } = await import("@/lib/budget.js");
+  return withKeyBudget(request, extractApiKey(request), () => handleTtsInner(request, body), {
+    estCost: 0.015,
+    estTokens: 500,
+  });
+}
+
+async function handleTtsInner(request, body) {
   const url = new URL(request.url);
   const modelStr = body.model;
   const responseFormat = url.searchParams.get("response_format") || "mp3"; // mp3 (default) | json

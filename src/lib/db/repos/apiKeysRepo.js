@@ -15,6 +15,12 @@ function rowToKey(row) {
     modelPolicy: row.modelPolicy || "off",
     allowedModels: row.allowedModels ?? null,
     blockedModels: row.blockedModels ?? null,
+    // Credit/quota accounting (ported from srouter). 0 = unlimited.
+    creditLimit: row.creditLimit ?? 0,
+    usageCost: row.usageCost ?? 0,
+    usageTokens: row.usageTokens ?? 0,
+    quotaLimit: row.quotaLimit ?? 0,
+    rateLimit: row.rateLimit ?? 0,
   };
 }
 
@@ -53,10 +59,10 @@ export async function createApiKey(name, machineId) {
     `INSERT INTO apiKeys(id, key, name, machineId, isActive, createdAt) VALUES(?, ?, ?, ?, ?, ?)`,
     [apiKey.id, apiKey.key, apiKey.name, apiKey.machineId, 1, apiKey.createdAt]
   );
-  return { ...apiKey, rpmLimit: 0, tpmLimit: 0, modelPolicy: "off", allowedModels: null, blockedModels: null };
+  return { ...apiKey, rpmLimit: 0, tpmLimit: 0, modelPolicy: "off", allowedModels: null, blockedModels: null, creditLimit: 0, usageCost: 0, usageTokens: 0, quotaLimit: 0, rateLimit: 0 };
 }
 
-const MANAGEABLE_FIELDS = ["name", "machineId", "isActive", "rpmLimit", "tpmLimit", "modelPolicy", "allowedModels", "blockedModels"];
+const MANAGEABLE_FIELDS = ["name", "machineId", "isActive", "rpmLimit", "tpmLimit", "modelPolicy", "allowedModels", "blockedModels", "creditLimit", "quotaLimit"];
 
 function normalizeModelList(v) {
   if (v === null || v === undefined) return null;
@@ -82,10 +88,12 @@ export async function updateApiKey(id, data) {
     }
     if (patch.rpmLimit !== undefined) patch.rpmLimit = Math.max(0, Number(patch.rpmLimit) || 0);
     if (patch.tpmLimit !== undefined) patch.tpmLimit = Math.max(0, Number(patch.tpmLimit) || 0);
+    if (patch.creditLimit !== undefined) patch.creditLimit = Math.max(0, Number(patch.creditLimit) || 0);
+    if (patch.quotaLimit !== undefined) patch.quotaLimit = Math.max(0, Math.floor(Number(patch.quotaLimit) || 0));
     const merged = { ...rowToKey(row), ...patch };
     db.run(
-      `UPDATE apiKeys SET name = ?, machineId = ?, isActive = ?, rpmLimit = ?, tpmLimit = ?, modelPolicy = ?, allowedModels = ?, blockedModels = ? WHERE id = ?`,
-      [merged.name, merged.machineId, merged.isActive ? 1 : 0, merged.rpmLimit || 0, merged.tpmLimit || 0, merged.modelPolicy || "off", merged.allowedModels, merged.blockedModels, id]
+      `UPDATE apiKeys SET name = ?, machineId = ?, isActive = ?, rpmLimit = ?, tpmLimit = ?, modelPolicy = ?, allowedModels = ?, blockedModels = ?, creditLimit = ?, quotaLimit = ? WHERE id = ?`,
+      [merged.name, merged.machineId, merged.isActive ? 1 : 0, merged.rpmLimit || 0, merged.tpmLimit || 0, merged.modelPolicy || "off", merged.allowedModels, merged.blockedModels, merged.creditLimit || 0, merged.quotaLimit || 0, id]
     );
     result = merged;
   });

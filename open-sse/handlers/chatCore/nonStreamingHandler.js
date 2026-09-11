@@ -21,6 +21,42 @@ function parseToolArguments(value) {
   }
 }
 
+// Upstream can answer HTTP 200 while the BODY is an error (capacity/overload
+// served as a JSON error, or an empty Chat-Completions body). Without this,
+// handleComboChat/account-fallback sees success:true and never advances
+// (boss-report "still says 200"). Returns an error message string, else null.
+//
+// V7: require an EXPLICIT failure envelope. A top-level `error` field is not
+// enough on its own — some vendors attach warning/history metadata under
+// `error` on otherwise-successful bodies, and rejecting those would synthesise
+// a 502 and multiply fallback work.
+export function detectSoftError(responseBody, upstreamFormat) {
+  if (!responseBody || typeof responseBody !== "object") return null;
+
+  const hasChoices = Array.isArray(responseBody.choices) && responseBody.choices.length > 0;
+
+  // Anthropic-style error envelope: { type: "error", error: {...} }
+  if (responseBody.type === "error") {
+    return responseBody.error?.message || JSON.stringify(responseBody.error || responseBody);
+  }
+  // Responses API: explicit failed status carries the failure.
+  if (responseBody.object === "response" && responseBody.status === "failed") {
+    return responseBody.error?.message || responseBody.error || "upstream response failed";
+  }
+  // OpenAI error envelope: `error` must be an object carrying a message, and the
+  // body must NOT also carry valid choices.
+  if (!hasChoices && responseBody.error && typeof responseBody.error === "object" && responseBody.error.message) {
+    return responseBody.error.message;
+  }
+  // Chat-Completions must carry choices. Missing/empty = malformed upstream
+  // body served as 200. ONLY OpenAI shape uses `choices`; Claude (`type:
+  // "message"`) and Responses are handled above and must not be flagged here.
+  if (upstreamFormat === FORMATS.OPENAI && !hasChoices) {
+    return "upstream returned no choices";
+  }
+  return null;
+}
+
 function openAICompletionToClaudeMessage(responseBody) {
   if (!responseBody?.choices?.[0]) return responseBody;
   const choice = responseBody.choices[0];
@@ -371,6 +407,18 @@ export async function handleNonStreamingResponse({ providerResponse, provider, m
     }
   }
 
+  // Decloak tool_use names once on raw Claude body, before any translation (INPUT side)
+  const decloakedBody = decloakToolNames(responseBody, toolNameMap);
+
+  // HTTP 200 with an error/empty body is the "200 trap": surface it as a
+  // fallback-eligible failure instead of a bogus success.
+  const softErr = detectSoftError(decloakedBody, targetFormat);
+  if (softErr) {
+    appendLog({ status: `FAILED ${HTTP_STATUS.BAD_GATEWAY}`, error: softErr });
+    console.error(`[ChatCore] ${provider} returned 200 with error body: ${softErr}`);
+    return createErrorResult(HTTP_STATUS.BAD_GATEWAY, `[${provider}/${model}] ${softErr}`);
+  }
+
   reqLogger.logProviderResponse(providerResponse.status, providerResponse.statusText, providerResponse.headers, responseBody);
   if (onRequestSuccess) {
     Promise.resolve()
@@ -380,8 +428,7 @@ export async function handleNonStreamingResponse({ providerResponse, provider, m
       });
   }
 
-  // Decloak tool_use names once on raw Claude body, before any translation (INPUT side)
-  responseBody = decloakToolNames(responseBody, toolNameMap);
+  responseBody = decloakedBody;
 
   const usage = extractUsageFromResponse(responseBody);
   appendLog({ tokens: usage, status: "200 OK" });

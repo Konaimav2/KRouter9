@@ -6,7 +6,7 @@ export async function PUT(request, { params }) {
   try {
     const { id } = await params;
     const body = await request.json();
-    const { name, prefix, apiType, baseUrl, userAgent } = body;
+    const { name, prefix, apiType, baseUrl, userAgent, timeoutMs, customHeaders } = body;
     const node = await getProviderNodeById(id);
 
     if (!node) {
@@ -65,6 +65,18 @@ export async function PUT(request, { params }) {
       if (!updates.userAgent) updates.userAgent = undefined;
     }
 
+    // Node-level request timeout (ms) and custom headers ("curl-like").
+    // undefined = leave untouched; empty/null = clear.
+    if (timeoutMs !== undefined) {
+      const n = Number(timeoutMs);
+      updates.timeoutMs = Number.isFinite(n) && n > 0 ? Math.floor(n) : undefined;
+    }
+    if (customHeaders !== undefined) {
+      updates.customHeaders = (customHeaders && typeof customHeaders === "object" && !Array.isArray(customHeaders))
+        ? customHeaders
+        : undefined;
+    }
+
     const updated = await updateProviderNode(id, updates);
 
     const connections = await getProviderConnections({ provider: id });
@@ -80,6 +92,12 @@ export async function PUT(request, { params }) {
             ? (typeof userAgent === "string" && userAgent.trim()
               ? { userAgent: userAgent.trim() }
               : { userAgent: undefined })
+            : {}),
+          ...(timeoutMs !== undefined
+            ? (updated.timeoutMs ? { timeoutMs: updated.timeoutMs } : { timeoutMs: undefined })
+            : {}),
+          ...(customHeaders !== undefined
+            ? (updated.customHeaders ? { customHeaders: updated.customHeaders } : { customHeaders: undefined })
             : {}),
         }
       })

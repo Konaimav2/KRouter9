@@ -1,9 +1,10 @@
-import { HTTP_STATUS, RETRY_CONFIG, DEFAULT_RETRY_CONFIG, resolveRetryEntry, FETCH_CONNECT_TIMEOUT_MS } from "../config/runtimeConfig.js";
+import { HTTP_STATUS, RETRY_CONFIG, DEFAULT_RETRY_CONFIG, resolveRetryEntry, FETCH_CONNECT_TIMEOUT_MS, NODE_TIMEOUT_MIN_MS, NODE_TIMEOUT_MAX_MS } from "../config/runtimeConfig.js";
 import { shouldRefreshCredentials } from "../services/oauthCredentialManager.js";
 import { proxyAwareFetch } from "../utils/proxyFetch.js";
 import { dbg } from "../utils/debugLog.js";
 import { ANTHROPIC_API_VERSION, OPENAI_COMPAT_BASE, ANTHROPIC_COMPAT_BASE } from "../providers/shared.js";
 import { resolveOpenAICompatibleApiType } from "../services/provider.js";
+import { applyCustomHeaders } from "../utils/customHeaders.js";
 
 /**
  * BaseExecutor - Base class for provider executors
@@ -73,13 +74,10 @@ export class BaseExecutor {
     }
 
     // Custom per-connection headers and User-Agent (providerSpecificData).
-    // Applied last so a connection can deliberately override auth/UA defaults.
+    // Applied last so a connection can deliberately override non-reserved
+    // defaults. Reserved auth/host headers are refused at this boundary.
     const psd = credentials?.providerSpecificData;
-    if (psd?.customHeaders && typeof psd.customHeaders === "object") {
-      for (const [k, v] of Object.entries(psd.customHeaders)) {
-        if (typeof k === "string" && k.trim() && v != null) headers[k.trim()] = String(v);
-      }
-    }
+    applyCustomHeaders(headers, psd?.customHeaders);
     if (typeof psd?.userAgent === "string" && psd.userAgent.trim()) {
       headers["User-Agent"] = psd.userAgent.trim();
     }
@@ -143,9 +141,19 @@ export class BaseExecutor {
 
       if (!retryAttemptsByUrl[urlIndex]) retryAttemptsByUrl[urlIndex] = 0;
 
-      // Abort if upstream doesn't return response headers within connection timeout
+      // Abort if upstream doesn't return response headers within connection timeout.
+      // Precedence: per-connection/node override > provider registry config > global default.
+      // The override is clamped so a bad config cannot pin a request for days.
       const connectCtrl = new AbortController();
-      const timeoutMs = this.config?.timeoutMs || FETCH_CONNECT_TIMEOUT_MS;
+      const rawConnTimeoutMs = Number(credentials?.providerSpecificData?.timeoutMs);
+      const connTimeoutMs = Number.isFinite(rawConnTimeoutMs) && rawConnTimeoutMs > 0
+        ? Math.min(Math.max(Math.floor(rawConnTimeoutMs), NODE_TIMEOUT_MIN_MS), NODE_TIMEOUT_MAX_MS)
+        : null;
+      const rawConfigTimeoutMs = Number(this.config?.timeoutMs);
+      const configTimeoutMs = Number.isFinite(rawConfigTimeoutMs) && rawConfigTimeoutMs > 0
+        ? Math.min(Math.max(Math.floor(rawConfigTimeoutMs), NODE_TIMEOUT_MIN_MS), NODE_TIMEOUT_MAX_MS)
+        : null;
+      const timeoutMs = connTimeoutMs || configTimeoutMs || FETCH_CONNECT_TIMEOUT_MS;
       const connectTimer = setTimeout(() => connectCtrl.abort(new Error("fetch connect timeout")), timeoutMs);
       const mergedSignal = signal ? AbortSignal.any([signal, connectCtrl.signal]) : connectCtrl.signal;
 

@@ -45,6 +45,11 @@ const ALWAYS_PROTECTED = [
   "/api/version/update",
   "/api/oauth/cursor/auto-import",
   "/api/oauth/kiro/auto-import",
+  // Dashboard playground runs inference with the server's own provider
+  // credentials and skips the end-user API-key requirement. It MUST require a
+  // real dashboard session/CLI token even when requireLogin is disabled,
+  // otherwise an internet-exposed instance becomes free inference.
+  "/api/dashboard/chat/completions",
 ];
 
 // Require auth, but allow through if requireLogin is disabled

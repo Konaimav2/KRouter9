@@ -38,6 +38,15 @@ export async function handleEmbeddings(request) {
     return errorResponse(HTTP_STATUS.BAD_REQUEST, "Invalid JSON body");
   }
 
+  // V3: enforce per-key credit/quota for this billable endpoint.
+  const { withKeyBudget } = await import("@/lib/budget.js");
+  return withKeyBudget(request, extractApiKey(request), () => handleEmbeddingsInner(request, body), {
+    estCost: 0.001,
+    estTokens: Math.max(1, Math.ceil(JSON.stringify(body?.input || "").length / 4)),
+  });
+}
+
+async function handleEmbeddingsInner(request, body) {
   const url = new URL(request.url);
   const modelStr = body.model;
 

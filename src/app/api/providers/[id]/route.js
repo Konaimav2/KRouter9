@@ -5,6 +5,7 @@ import {
   updateProviderConnection,
   deleteProviderConnection,
 } from "@/models";
+import { applyCustomHeaders } from "open-sse/utils/customHeaders.js";
 
 function normalizeProxyConfig(body = {}) {
   const hasAnyProxyField =
@@ -117,14 +118,13 @@ export async function PUT(request, { params }) {
     }
 
     // Custom per-connection request headers and User-Agent (any provider type).
+    // Sanitized via the shared runtime helper (reserved auth/host headers refused).
     const customHeadersUpdate = {};
     let hasCustomHeadersUpdate = false;
     if (body.customHeaders !== undefined) {
       hasCustomHeadersUpdate = true;
       if (body.customHeaders && typeof body.customHeaders === "object" && !Array.isArray(body.customHeaders)) {
-        for (const [k, v] of Object.entries(body.customHeaders)) {
-          if (typeof k === "string" && k.trim() && v != null) customHeadersUpdate[k.trim()] = String(v);
-        }
+        Object.assign(customHeadersUpdate, applyCustomHeaders({}, body.customHeaders));
       }
     }
     const userAgentUpdate = typeof body.userAgent === "string" ? body.userAgent.trim() : undefined;
