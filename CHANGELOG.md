@@ -1,3 +1,54 @@
+# v0.5.78 (2026-09-12)
+
+## Features
+- **Custom providers**: per-node request timeout + custom headers ("curl-like"),
+  and a curated 5-choice User-Agent selector (9Router default `krouter9/<ver>`,
+  OpenCode, Claude Code, Browser, Custom) on Add/Edit Compatible modals.
+- **Playground**: dashboard chat playground (`POST /api/dashboard/chat/completions`)
+  with TTFT/total/token metrics, exposed as the first sidebar item; saved
+  sessions in localStorage.
+- **API keys**: credit/token-quota budgets with usage display and enforcement
+  (402 credit exhausted, 429 token quota exhausted) on every billable endpoint.
+- **API docs**: browsable `/docs` reference page plus an OpenAPI 3 spec at
+  `GET /api/docs/openapi.yaml`; footer links fixed.
+- **Upstream v0.5.75 backports**: codex Version header + image models,
+  deepseek Anthropic tool types, cline/clinepass/airforce envelope + catalog
+  fixes, antigravity weekly quota + free-tier tracking, stale-lock clearing,
+  Claude Fable weekly limit parsing.
+
+## Fixes
+- **Streaming**: every streaming chat request returned 500
+  ("reading 'pipeThrough'") since the combo probe landed — `pipeWithDisconnect`
+  now accepts a bare ReadableStream. Found by live test.
+- **Combo mid-stream 200 trap**: `comboName` was never threaded into
+  `handleChatCore`, so the first-chunk probe never ran. Combos now advance on
+  upstream 200-then-error/death.
+- **Non-stream 200 trap**: upstream 200 with an error/empty body is rejected
+  (502) so fallback advances.
+- **Smarter rotation**: client-fault errors (400/406/422, validation) no longer
+  lock a healthy account; provider-fault text still wins.
+- **Auth**: dashboard playground always requires a session/CLI token (the
+  `requireLogin=false` bypass can no longer expose free inference).
+- **Secrets**: request-log masking restored (authorization/cookie/api-key);
+  custom header values never logged.
+- **Provider section at ~3000 connections**: paginated `/api/providers`
+  (`?mode=full` for legacy callers), server-side stats, bulk toggle endpoint,
+  incremental detail render, single shared cooldown clock. CLI uses
+  `?mode=full` so its connection list is not truncated.
+- **Header hardening**: custom headers lowercased/validated at parse, persist,
+  read and use; reserved auth/cookie/host headers refused.
+
+## Performance
+- Observability bodies truncated at push + byte-capped buffer; `allTime`
+  aggregated in SQL; stream accumulation bounded (UTF-8 aware); circuit
+  breaker / antigravity / rate-limit maps bounded; request-log writes queued.
+  Caps configurable in Settings → Observability.
+
+## Notes
+- DB schema v3 → v4 (additive `reservedCost`/`reservedTokens` on `apiKeys`).
+- Deferred: kiro wire-format rewrite, Claude cache-budget cap, video
+  (OpenRouter/Vertex) providers — need dedicated ports.
+
 # v0.5.69 (2026-09-05)
 
 > Ported into KRouter9 from decolua/9router v0.5.69 (19 commits) with Zen-superset
