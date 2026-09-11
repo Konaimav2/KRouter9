@@ -34,6 +34,8 @@ export default function ManageKeyModal({ apiKey, onClose, onSaved, onRotated }) 
   const [modelPolicy, setModelPolicy] = useState(apiKey?.modelPolicy || "off");
   const [allowedModels, setAllowedModels] = useState(asText(apiKey?.allowedModels));
   const [blockedModels, setBlockedModels] = useState(asText(apiKey?.blockedModels));
+  const [creditLimit, setCreditLimit] = useState(apiKey?.creditLimit ? String(apiKey.creditLimit) : "");
+  const [quotaLimit, setQuotaLimit] = useState(apiKey?.quotaLimit ? String(apiKey.quotaLimit) : "");
   const [saving, setSaving] = useState(false);
   const [rotating, setRotating] = useState(false);
   const [error, setError] = useState(null);
@@ -54,6 +56,8 @@ export default function ManageKeyModal({ apiKey, onClose, onSaved, onRotated }) 
           modelPolicy,
           allowedModels: modelPolicy === "whitelist" ? parseList(allowedModels) : null,
           blockedModels: modelPolicy === "blacklist" ? parseList(blockedModels) : null,
+          creditLimit: creditLimit === "" ? 0 : Number(creditLimit),
+          quotaLimit: quotaLimit === "" ? 0 : Number(quotaLimit),
         }),
       });
       const data = await res.json();
@@ -124,6 +128,35 @@ export default function ManageKeyModal({ apiKey, onClose, onSaved, onRotated }) 
             hint="Tokens per minute (est.)."
           />
         </div>
+        <div className="rounded-md border border-border bg-surface-2 p-3 text-sm">
+          <p className="mb-1 font-medium text-text-primary">Usage</p>
+          <p className="text-text-muted">
+            Cost spent: <span className="text-text-primary">${(Number(apiKey?.usageCost) || 0).toFixed(6)}</span>
+            {" · "}
+            Tokens used: <span className="text-text-primary">{(Number(apiKey?.usageTokens) || 0).toLocaleString()}</span>
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Input
+            label="Credit limit"
+            type="number"
+            min="0"
+            step="0.000001"
+            value={creditLimit}
+            onChange={(e) => setCreditLimit(e.target.value)}
+            placeholder="0 = unlimited"
+            hint="Max cost (USD). Requests rejected once spent."
+          />
+          <Input
+            label="Token quota"
+            type="number"
+            min="0"
+            value={quotaLimit}
+            onChange={(e) => setQuotaLimit(e.target.value)}
+            placeholder="0 = unlimited"
+            hint="Max lifetime tokens. Requests rejected once used."
+          />
+        </div>
         <Select
           label="Model policy"
           options={POLICY_OPTIONS}
@@ -180,6 +213,10 @@ ManageKeyModal.propTypes = {
     modelPolicy: PropTypes.string,
     allowedModels: PropTypes.oneOfType([PropTypes.string, PropTypes.array]),
     blockedModels: PropTypes.oneOfType([PropTypes.string, PropTypes.array]),
+    creditLimit: PropTypes.number,
+    usageCost: PropTypes.number,
+    usageTokens: PropTypes.number,
+    quotaLimit: PropTypes.number,
   }),
   onClose: PropTypes.func.isRequired,
   onSaved: PropTypes.func.isRequired,

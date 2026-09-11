@@ -23,7 +23,7 @@ export async function PUT(request, { params }) {
   try {
     const { id } = await params;
     const body = await request.json();
-    const { name, isActive, rpmLimit, tpmLimit, modelPolicy, allowedModels, blockedModels, rotate } = body;
+    const { name, isActive, rpmLimit, tpmLimit, modelPolicy, allowedModels, blockedModels, creditLimit, quotaLimit, rotate } = body;
 
     const existing = await getApiKeyById(id);
     if (!existing) {
@@ -54,6 +54,8 @@ export async function PUT(request, { params }) {
     }
     if (allowedModels !== undefined) updateData.allowedModels = allowedModels;
     if (blockedModels !== undefined) updateData.blockedModels = blockedModels;
+    if (creditLimit !== undefined) updateData.creditLimit = creditLimit;
+    if (quotaLimit !== undefined) updateData.quotaLimit = quotaLimit;
 
     const updated = await updateApiKey(id, updateData);
 

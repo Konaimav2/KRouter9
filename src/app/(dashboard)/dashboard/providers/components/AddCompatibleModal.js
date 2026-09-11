@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import PropTypes from "prop-types";
 import { Badge, Button, Input, Modal, Select } from "@/shared/components";
+import AdvancedNodeFields from "@/shared/components/AdvancedNodeFields";
+import { textToHeaders } from "@/shared/utils/nodeHeaders";
 import { UA_PRESET_OPTIONS, resolveNodeUserAgent } from "@/shared/constants/uaPresets";
 
 const VARIANT_CONFIG = {
@@ -50,6 +52,8 @@ function AddCompatibleModal({ variant, isOpen, onClose, onCreated }) {
   const [checkModelId, setCheckModelId] = useState("");
   const [uaPreset, setUaPreset] = useState("default");
   const [uaCustom, setUaCustom] = useState("");
+  const [uaTimeout, setUaTimeout] = useState("");
+  const [uaHeadersText, setUaHeadersText] = useState("");
   const [validating, setValidating] = useState(false);
   const [validationResult, setValidationResult] = useState(null);
 
@@ -69,6 +73,7 @@ function AddCompatibleModal({ variant, isOpen, onClose, onCreated }) {
     setSubmitting(true);
     try {
       const userAgent = resolveNodeUserAgent(uaPreset, uaCustom);
+      const customHeaders = textToHeaders(uaHeadersText);
       const res = await fetch("/api/provider-nodes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -79,6 +84,8 @@ function AddCompatibleModal({ variant, isOpen, onClose, onCreated }) {
           baseUrl: formData.baseUrl,
           type: config.type,
           ...(userAgent ? { userAgent } : {}),
+          ...(Number(uaTimeout) > 0 ? { timeoutMs: Number(uaTimeout) } : {}),
+          ...(Object.keys(customHeaders).length ? { customHeaders } : {}),
         }),
       });
       const data = await res.json();
@@ -88,6 +95,8 @@ function AddCompatibleModal({ variant, isOpen, onClose, onCreated }) {
         setCheckKey("");
         setUaPreset("default");
         setUaCustom("");
+        setUaTimeout("");
+        setUaHeadersText("");
         setValidationResult(null);
       }
     } catch (error) {
@@ -187,6 +196,12 @@ function AddCompatibleModal({ variant, isOpen, onClose, onCreated }) {
             placeholder="myapp/1.0"
           />
         )}
+        <AdvancedNodeFields
+          timeoutMs={uaTimeout}
+          onTimeoutMs={setUaTimeout}
+          headersText={uaHeadersText}
+          onHeadersText={setUaHeadersText}
+        />
         <Input
           label="API Key (for Check)"
           type="password"
