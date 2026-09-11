@@ -2,6 +2,8 @@
 export {
   getProviderConnections,
   getProviderConnectionById,
+  getProviderConnectionCount,
+  getProviderConnectionStats,
   createProviderConnection,
   updateProviderConnection,
   deleteProviderConnection,

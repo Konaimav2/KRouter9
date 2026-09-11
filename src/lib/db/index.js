@@ -10,6 +10,7 @@ export {
 // Provider connections
 export {
   getProviderConnections, getProviderConnectionById,
+  getProviderConnectionCount, getProviderConnectionStats,
   createProviderConnection, updateProviderConnection,
   deleteProviderConnection, deleteProviderConnectionsByProvider,
   reorderProviderConnections, cleanupProviderConnections,

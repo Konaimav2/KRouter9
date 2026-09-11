@@ -174,7 +174,9 @@ function makeRequest(method, path, body = null) {
  * @returns {Promise<Object>} { success, data: { connections } }
  */
 async function getProviders() {
-  return makeRequest("GET", "/api/providers");
+  // mode=full: the dashboard endpoint defaults to a paginated list (50 rows);
+  // the CLI needs every connection for its provider menus and counts.
+  return makeRequest("GET", "/api/providers?mode=full");
 }
 
 /**

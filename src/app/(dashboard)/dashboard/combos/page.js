@@ -64,7 +64,7 @@ export default function CombosPage() {
     try {
       const [combosRes, providersRes, settingsRes] = await Promise.all([
         fetch("/api/combos"),
-        fetch("/api/providers"),
+        fetch("/api/providers?mode=full"),
         fetch("/api/settings"),
       ]);
       const combosData = await combosRes.json();

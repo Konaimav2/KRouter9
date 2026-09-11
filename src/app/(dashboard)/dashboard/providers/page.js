@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import PropTypes from "prop-types";
 import {
   Card,
@@ -153,7 +153,7 @@ export default function ProvidersPage() {
     const fetchData = async () => {
       try {
         const [connectionsRes, nodesRes] = await Promise.all([
-          fetch("/api/providers"),
+          fetch("/api/providers?mode=full"),
           fetch("/api/provider-nodes"),
         ]);
         const connectionsData = await connectionsRes.json();
@@ -170,10 +170,23 @@ export default function ProvidersPage() {
     fetchData();
   }, []);
 
+  // P2 scaling: group connections by provider ONCE per connections change so
+  // getProviderStats is O(group) instead of O(all connections) on every call.
+  // The list page calls it in many filter/sort comparators per keystroke.
+  const connectionsByProvider = useMemo(() => {
+    const map = new Map();
+    for (const c of connections) {
+      let arr = map.get(c.provider);
+      if (!arr) { arr = []; map.set(c.provider, arr); }
+      arr.push(c);
+    }
+    return map;
+  }, [connections]);
+
   const getProviderStats = (providerId, authType) => {
     const authTypes = Array.isArray(authType) ? authType : [authType];
-    const providerConnections = connections.filter(
-      (c) => c.provider === providerId && authTypes.includes(c.authType),
+    const providerConnections = (connectionsByProvider.get(providerId) || []).filter(
+      (c) => authTypes.includes(c.authType),
     );
 
     const getEffectiveStatus = (conn) => {
@@ -223,19 +236,19 @@ export default function ProvidersPage() {
     const authTypes = Array.isArray(authType) ? authType : [authType];
     const matches = (c) =>
       c.provider === providerId && authTypes.includes(c.authType);
-    const providerConns = connections.filter(matches);
     setConnections((prev) =>
       prev.map((c) => (matches(c) ? { ...c, isActive: newActive } : c)),
     );
-    await Promise.allSettled(
-      providerConns.map((c) =>
-        fetch(`/api/providers/${c.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ isActive: newActive }),
-        }),
-      ),
-    );
+    // Single bulk call instead of N parallel PUTs (3000 conns would storm).
+    try {
+      await fetch("/api/providers/toggle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: providerId, authType: authTypes, isActive: newActive }),
+      });
+    } catch (error) {
+      console.log("Error toggling provider connections:", error);
+    }
   };
 
   const handleBatchTest = async (mode, providerId = null) => {

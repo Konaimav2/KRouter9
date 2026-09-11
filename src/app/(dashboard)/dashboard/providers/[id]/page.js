@@ -25,6 +25,7 @@ import BulkImportCodexModal from "./BulkImportCodexModal";
 import BulkImportGrokCliModal from "./BulkImportGrokCliModal";
 
 const ONE_BY_ONE_DELAY_MS = 1000;
+const PAGE_SIZE = 50;
 
 const AUTO_PING_SETTINGS_KEYS = {
   claude: "claudeAutoPing",
@@ -42,6 +43,8 @@ export default function ProviderDetailPage() {
   const { getCaps } = useModelCaps();
   const [connections, setConnections] = useState([]);
   const [loading, setLoading] = useState(true);
+  // P2: incremental render for provider pages with thousands of connections.
+  const [visibleCount, setVisibleCount] = useState(50);
   const [providerNode, setProviderNode] = useState(null);
   const [proxyPools, setProxyPools] = useState([]);
   const [showOAuthModal, setShowOAuthModal] = useState(false);
@@ -295,7 +298,7 @@ export default function ProviderDetailPage() {
   const fetchConnections = useCallback(async () => {
     try {
       const [connectionsRes, nodesRes, proxyPoolsRes, settingsRes] = await Promise.all([
-        fetch("/api/providers", { cache: "no-store" }),
+        fetch("/api/providers?mode=full", { cache: "no-store" }),
         fetch("/api/provider-nodes", { cache: "no-store" }),
         fetch("/api/proxy-pools?isActive=true", { cache: "no-store" }),
         fetch("/api/settings", { cache: "no-store" }),
@@ -307,6 +310,7 @@ export default function ProviderDetailPage() {
       if (connectionsRes.ok) {
         const filtered = (connectionsData.connections || []).filter(c => c.provider === providerId);
         setConnections(filtered);
+        setVisibleCount(PAGE_SIZE);
       }
       if (proxyPoolsRes.ok) {
         setProxyPools(proxyPoolsData.proxyPools || []);
@@ -945,6 +949,7 @@ export default function ProviderDetailPage() {
   const connectionsList = (
     <div className="flex min-w-0 flex-col divide-y divide-black/[0.03] dark:divide-white/[0.03] max-h-[500px] overflow-y-auto pr-1">
       {connections
+        .slice(0, visibleCount)
         .map((conn, index) => (
           <div key={conn.id} className="flex min-w-0 items-stretch">
             <div className="flex shrink-0 items-center pl-1 sm:pl-2">
@@ -998,6 +1003,18 @@ export default function ProviderDetailPage() {
             </div>
           </div>
         ))}
+      {connections.length > visibleCount && (
+        <div className="flex justify-center py-3">
+          <button
+            type="button"
+            onClick={() => setVisibleCount((n) => n + PAGE_SIZE)}
+            className="rounded-lg border border-border px-4 py-2 text-sm text-text-muted hover:bg-black/[0.04] dark:hover:bg-white/[0.04]"
+          >
+            Show {Math.min(PAGE_SIZE, connections.length - visibleCount)} more
+            ({connections.length - visibleCount} remaining)
+          </button>
+        </div>
+      )}
     </div>
   );
 

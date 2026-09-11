@@ -162,7 +162,7 @@ export default function MediaProviderKindPage() {
 
   useEffect(() => {
     if (!kindConfig) return;
-    fetch("/api/providers", { cache: "no-store" })
+    fetch("/api/providers?mode=full", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => setConnections(d.connections || []))
       .catch(() => {});
