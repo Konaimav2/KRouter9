@@ -8,6 +8,32 @@ let fs = null;
 let path = null;
 let LOGS_DIR = null;
 
+// P3: queue append writes so streaming chunks don't block the event loop with
+// synchronous fs calls mid-stream. Order per file is preserved by chaining.
+// Backpressure: cap pending bytes/entries per file so a slow disk cannot grow
+// the queue without bound; excess chunks are dropped (debug logs only).
+const MAX_QUEUE_ENTRIES = Number(process.env.REQUEST_LOG_QUEUE_MAX) > 0
+  ? Number(process.env.REQUEST_LOG_QUEUE_MAX)
+  : 2000;
+const appendQueues = new Map();
+const appendQueueDepth = new Map();
+function queueAppend(filePath, chunk) {
+  if (!fs || !filePath) return;
+  const depth = appendQueueDepth.get(filePath) || 0;
+  if (depth >= MAX_QUEUE_ENTRIES) return; // drop under backpressure
+  appendQueueDepth.set(filePath, depth + 1);
+  const prev = appendQueues.get(filePath) || Promise.resolve();
+  const next = prev
+    .then(() => fs.promises.appendFile(filePath, chunk))
+    .catch(() => {})
+    .finally(() => {
+      const d = (appendQueueDepth.get(filePath) || 1) - 1;
+      if (d <= 0) appendQueueDepth.delete(filePath); else appendQueueDepth.set(filePath, d);
+      if (appendQueues.get(filePath) === next) appendQueues.delete(filePath);
+    });
+  appendQueues.set(filePath, next);
+}
+
 // Lazy load Node.js modules (avoid top-level await)
 async function ensureNodeModules() {
   if (!isNode || !LOGGING_ENABLED || fs) return;
@@ -196,23 +222,13 @@ export async function createRequestLogger(sourceFormat, targetFormat, model) {
     // 5. Append streaming chunk to provider response
     appendProviderChunk(chunk) {
       if (!fs || !sessionPath) return;
-      try {
-        const filePath = path.join(sessionPath, "5_res_provider.txt");
-        fs.appendFileSync(filePath, chunk);
-      } catch (err) {
-        // Ignore append errors
-      }
+      queueAppend(path.join(sessionPath, "5_res_provider.txt"), chunk);
     },
     
     // 6. Append OpenAI intermediate chunks (target → openai)
     appendOpenAIChunk(chunk) {
       if (!fs || !sessionPath) return;
-      try {
-        const filePath = path.join(sessionPath, "6_res_openai.txt");
-        fs.appendFileSync(filePath, chunk);
-      } catch (err) {
-        // Ignore append errors
-      }
+      queueAppend(path.join(sessionPath, "6_res_openai.txt"), chunk);
     },
     
     // 7. Log converted response to client (for non-streaming)
@@ -226,12 +242,7 @@ export async function createRequestLogger(sourceFormat, targetFormat, model) {
     // 7. Append streaming chunk to converted response
     appendConvertedChunk(chunk) {
       if (!fs || !sessionPath) return;
-      try {
-        const filePath = path.join(sessionPath, "7_res_client.txt");
-        fs.appendFileSync(filePath, chunk);
-      } catch (err) {
-        // Ignore append errors
-      }
+      queueAppend(path.join(sessionPath, "7_res_client.txt"), chunk);
     },
     
     // 6. Log error
@@ -271,7 +282,7 @@ export function logError(provider, { error, url, model, requestBody }) {
       requestBody
     };
     
-    fs.appendFileSync(logPath, JSON.stringify(logEntry) + "\n");
+    queueAppend(logPath, JSON.stringify(logEntry) + "\n");
   } catch (err) {
     console.log("[LOG] Failed to write error log:", err.message);
   }

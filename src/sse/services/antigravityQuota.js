@@ -17,6 +17,73 @@ const inflightRefresh = new Map();
 
 const MIN_REFRESH_INTERVAL_MS = 30_000; // 30s between refreshes per connection
 
+// P3: bound the caches. quotaCache/lastRefreshAt/inflightRefresh are keyed by
+// connectionId and previously never evicted, leaking across a long-lived
+// process with many connections. Read dynamically so a Settings change (env
+// mirror) applies without a restart.
+function cacheTtlMs() {
+  const n = Number(process.env.ANTIGRAVITY_cacheTtlMs());
+  return Number.isFinite(n) && n > 0 ? n : 10 * 60 * 1000;
+}
+function cacheMaxEntries() {
+  const n = Number(process.env.ANTIGRAVITY_cacheMaxEntries());
+  return Number.isFinite(n) && n > 0 ? n : 5000;
+}
+
+function sweepCache(map, now) {
+  if (map.size <= cacheMaxEntries()) return;
+  for (const [k, ts] of map) {
+    const t = typeof ts === "number" ? ts : 0;
+    if (t > 0 && now - t > cacheTtlMs()) map.delete(k);
+  }
+  if (map.size > cacheMaxEntries()) {
+    const over = map.size - cacheMaxEntries();
+    let removed = 0;
+    for (const k of map.keys()) {
+      map.delete(k);
+      if (++removed >= over) break;
+    }
+  }
+}
+
+// quotaCache values are quota objects (no timestamp), so age is derived from
+// lastRefreshAt. Drop quota entries with no recent refresh, then hard-cap.
+function sweepQuotaCache(now) {
+  if (quotaCache.size <= cacheMaxEntries()) return;
+  for (const connId of [...quotaCache.keys()]) {
+    const ts = lastRefreshAt.get(connId) || 0;
+    if (!ts || now - ts > cacheTtlMs()) quotaCache.delete(connId);
+  }
+  if (quotaCache.size > cacheMaxEntries()) {
+    const over = quotaCache.size - cacheMaxEntries();
+    let removed = 0;
+    for (const k of quotaCache.keys()) {
+      quotaCache.delete(k);
+      if (++removed >= over) break;
+    }
+  }
+}
+
+// Bound the strike maps (keyed "conn|model"). Drop entries whose strike window
+// or block has expired, then hard-cap oldest-first.
+function sweepStrikeMaps(now) {
+  for (const [key, s] of strikeCounts) {
+    if (!s || now - (s.windowStart || 0) > STRIKE_WINDOW_MS) strikeCounts.delete(key);
+  }
+  for (const [key, until] of strikeBlocks) {
+    if (!until || until <= now) strikeBlocks.delete(key);
+  }
+  for (const map of [strikeCounts, strikeBlocks]) {
+    if (map.size <= cacheMaxEntries()) continue;
+    const over = map.size - cacheMaxEntries();
+    let removed = 0;
+    for (const k of map.keys()) {
+      map.delete(k);
+      if (++removed >= over) break;
+    }
+  }
+}
+
 // Strike-based circuit breaker (#3681): Google's quota API can report remaining
 // quota while generation endpoints keep returning 429 (sprint/weekly dual-pool
 // mismatch). After STRIKE_THRESHOLD 429s within the window for the same
@@ -93,7 +160,13 @@ export async function refreshAntigravityQuota(connectionId, accessToken, provide
 
   // Record every attempt so failed quota calls cannot amplify an upstream 429 burst.
   lastRefreshAt.set(connectionId, now);
+  sweepCache(lastRefreshAt, now);
   const promise = _doRefresh(connectionId, accessToken, providerSpecificData, now);
+  // Bound inflight map: if it is at the cap (many distinct connections with
+  // hanging upstream calls), skip dedup storage rather than growing unbounded.
+  if (inflightRefresh.size >= cacheMaxEntries()) {
+    return promise;
+  }
   inflightRefresh.set(connectionId, promise);
   try {
     return await promise;
@@ -122,6 +195,7 @@ async function _doRefresh(connectionId, accessToken, providerSpecificData, now) 
     // Strike blocks are re-asserted after every refresh so an optimistic
     // upstream reading cannot resurrect a pair we just circuit-broke.
     quotaCache.set(connectionId, applyActiveStrikeBlocks(connectionId, usage.quotas));
+    sweepQuotaCache(now);
 
     return usage.quotas;
   } catch (e) {
@@ -158,6 +232,7 @@ export async function handleAntigravityQuotaError(connectionId, status, model, a
     const windowStart = strike && now - strike.windowStart <= STRIKE_WINDOW_MS ? strike.windowStart : now;
     const count = strike && windowStart === strike.windowStart ? strike.count + 1 : 1;
     strikeCounts.set(key, { count, windowStart });
+    sweepStrikeMaps(now);
     if (count >= STRIKE_THRESHOLD) {
       strikeCounts.delete(key);
       const blockedUntil = now + STRIKE_BLOCK_MS;
@@ -169,7 +244,9 @@ export async function handleAntigravityQuotaError(connectionId, status, model, a
       const cached = quotaCache.get(connectionId) || {};
       cached[model] = { remainingPercentage: 0, resetAt: new Date(blockedUntil).toISOString() };
       quotaCache.set(connectionId, cached);
+      sweepQuotaCache(now);
       strikeBlocks.set(key, blockedUntil);
+      sweepStrikeMaps(now);
       return blockedUntil;
     }
     return null;

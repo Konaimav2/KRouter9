@@ -2,20 +2,40 @@
 // Fixed-window per API-key + client address. rate_limit = req/min, 0 = unlimited.
 const WINDOW_MS = 60_000;
 const TPM_WINDOW_MS = 60_000;
-const MAX_TRACKED_KEYS = 10_000;
 const windows = new Map();
 const tpmWindows = new Map();
+
+// Read the cap dynamically so a Settings change (mirrored to env) applies
+// without a restart.
+function maxTrackedKeys() {
+  const n = Number(process.env.RATE_LIMIT_MAP_CAP);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 10_000;
+}
+
+// P3: evict expired entries, and if still over cap, evict oldest (insertion
+// order) so an attacker rotating live keys cannot grow the map unbounded.
+function enforceCap(map, now) {
+  const cap = maxTrackedKeys();
+  if (map.size <= cap) return;
+  for (const [k, e] of map) if (e.resetAt <= now) map.delete(k);
+  if (map.size > cap) {
+    const over = map.size - cap;
+    let removed = 0;
+    for (const k of map.keys()) {
+      map.delete(k);
+      if (++removed >= over) break;
+    }
+  }
+}
 
 export function checkRateLimit(keyId, clientAddr, limit) {
   if (!keyId || !limit || limit <= 0) return { ok: true };
   const now = Date.now();
-  if (windows.size > MAX_TRACKED_KEYS) {
-    for (const [k, e] of windows) if (e.resetAt <= now) windows.delete(k);
-  }
   const wk = `${keyId}:${clientAddr || "unknown"}`;
   const entry = windows.get(wk);
   if (!entry || entry.resetAt <= now) {
     windows.set(wk, { count: 1, resetAt: now + WINDOW_MS });
+    enforceCap(windows, now);
     return { ok: true };
   }
   entry.count += 1;
@@ -36,13 +56,11 @@ export function resetRateLimits(keyId) {
 export function checkTpmLimit(keyId, tokens, limit) {
   if (!keyId || !limit || limit <= 0) return { ok: true };
   const now = Date.now();
-  if (tpmWindows.size > MAX_TRACKED_KEYS) {
-    for (const [k, e] of tpmWindows) if (e.resetAt <= now) tpmWindows.delete(k);
-  }
   const n = Number(tokens) || 0;
   const entry = tpmWindows.get(keyId);
   if (!entry || entry.resetAt <= now) {
     tpmWindows.set(keyId, { used: n, resetAt: now + TPM_WINDOW_MS });
+    enforceCap(tpmWindows, now);
     return n > limit
       ? { ok: false, retryAfterSec: Math.ceil(TPM_WINDOW_MS / 1000), limit }
       : { ok: true };

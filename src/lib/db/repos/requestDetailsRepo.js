@@ -1,5 +1,6 @@
 import { getAdapter } from "../driver.js";
 import { parseJson, stringifyJson } from "../helpers/jsonCol.js";
+import { memoryCap, memoryCapFrom } from "@/lib/memoryCaps.js";
 
 const DEFAULT_MAX_RECORDS = 200;
 const DEFAULT_BATCH_SIZE = 20;
@@ -9,6 +10,12 @@ const CONFIG_CACHE_TTL_MS = 5000;
 
 let cachedConfig = null;
 let cachedConfigTs = 0;
+
+/** Force the next getObservabilityConfig() to re-read settings/env. */
+export function resetObservabilityConfig() {
+  cachedConfig = null;
+  cachedConfigTs = 0;
+}
 
 async function getObservabilityConfig() {
   if (cachedConfig && (Date.now() - cachedConfigTs) < CONFIG_CACHE_TTL_MS) return cachedConfig;
@@ -24,6 +31,8 @@ async function getObservabilityConfig() {
         batchSize: settings.observabilityBatchSize || parseInt(process.env.OBSERVABILITY_BATCH_SIZE || String(DEFAULT_BATCH_SIZE), 10),
         flushIntervalMs: settings.observabilityFlushIntervalMs || parseInt(process.env.OBSERVABILITY_FLUSH_INTERVAL_MS || String(DEFAULT_FLUSH_INTERVAL_MS), 10),
         maxJsonSize: (settings.observabilityMaxJsonSize || parseInt(process.env.OBSERVABILITY_MAX_JSON_SIZE || "5", 10)) * 1024,
+        bodyCapBytes: memoryCapFrom(settings, "observabilityBodyCapBytes"),
+        bufferBytes: memoryCapFrom(settings, "observabilityBufferBytes"),
       };
       cachedConfigTs = Date.now();
       return cachedConfig;
@@ -41,6 +50,8 @@ async function getObservabilityConfig() {
       batchSize: settings.observabilityBatchSize || parseInt(process.env.OBSERVABILITY_BATCH_SIZE || String(DEFAULT_BATCH_SIZE), 10),
       flushIntervalMs: settings.observabilityFlushIntervalMs || parseInt(process.env.OBSERVABILITY_FLUSH_INTERVAL_MS || String(DEFAULT_FLUSH_INTERVAL_MS), 10),
       maxJsonSize: (settings.observabilityMaxJsonSize || parseInt(process.env.OBSERVABILITY_MAX_JSON_SIZE || "5", 10)) * 1024,
+      bodyCapBytes: memoryCapFrom(settings, "observabilityBodyCapBytes"),
+      bufferBytes: memoryCapFrom(settings, "observabilityBufferBytes"),
     };
   } catch {
     cachedConfig = {
@@ -49,6 +60,8 @@ async function getObservabilityConfig() {
       batchSize: DEFAULT_BATCH_SIZE,
       flushIntervalMs: DEFAULT_FLUSH_INTERVAL_MS,
       maxJsonSize: DEFAULT_MAX_JSON_SIZE,
+      bodyCapBytes: memoryCap("observabilityBodyCapBytes"),
+      bufferBytes: memoryCap("observabilityBufferBytes"),
     };
   }
   cachedConfigTs = Date.now();
@@ -56,6 +69,7 @@ async function getObservabilityConfig() {
 }
 
 let writeBuffer = [];
+let writeBufferBytes = 0;
 let flushTimer = null;
 let isFlushing = false;
 
@@ -79,6 +93,9 @@ function generateDetailId(model) {
 }
 
 function truncateField(obj, maxSize) {
+  if (!obj || typeof obj !== "object") return obj || {};
+  // Already-truncated marker: never re-truncate (would lose _originalSize).
+  if (obj._truncated === true) return obj;
   const str = JSON.stringify(obj || {});
   if (str.length > maxSize) {
     return { _truncated: true, _originalSize: str.length, _preview: str.substring(0, 200) };
@@ -94,6 +111,7 @@ async function flushToDatabase() {
     // Drain entire buffer (loop in case more pushed during await)
     while (writeBuffer.length > 0) {
       const items = writeBuffer.splice(0, writeBuffer.length);
+      writeBufferBytes = 0;
       const db = await getAdapter();
       const config = await getObservabilityConfig();
 
@@ -147,11 +165,28 @@ export async function saveRequestDetail(detail) {
   const config = await getObservabilityConfig();
   if (!config.enabled) {return;}
 
-  writeBuffer.push(detail);
+  // P3: truncate heavy body fields AT PUSH so the buffer never holds full
+  // request/response bodies (previously only truncated at flush, so memory
+  // peaked at batchSize x body size under load). flush then re-truncates to the
+  // configured maxJsonSize, which is a no-op on already-truncated values.
+  const capped = {
+    ...detail,
+    request: truncateField(detail.request, config.bodyCapBytes),
+    providerRequest: truncateField(detail.providerRequest, config.bodyCapBytes),
+    providerResponse: truncateField(detail.providerResponse, config.bodyCapBytes),
+    response: truncateField(detail.response, config.bodyCapBytes),
+  };
 
-  // Trigger immediate flush if batch threshold reached.
-  // flushToDatabase() drains entire buffer in a loop, so all pushes during await are persisted.
-  if (writeBuffer.length >= config.batchSize) {
+  const approxBytes = JSON.stringify(capped).length;
+  writeBuffer.push(capped);
+  writeBufferBytes += approxBytes;
+
+  // Hard byte ceiling: flush immediately if the buffer grows too large, even
+  // before batchSize, so a burst of big bodies cannot balloon memory.
+  const overBytes = writeBufferBytes >= config.bufferBytes;
+
+  // Trigger immediate flush if batch threshold or byte cap reached.
+  if (writeBuffer.length >= config.batchSize || overBytes) {
     if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
     flushToDatabase().catch((e) => console.error("[requestDetailsRepo] flush err:", e));
   } else if (!flushTimer) {
@@ -189,21 +224,40 @@ export async function getRequestDetails(filter = {}) {
   );
   const details = rows.map((r) => parseJson(r.data, {}));
 
-  // All-time totals over the filtered dataset (SRouter-parity: cumulative
-  // requests/tokens/cost summary above the logs table). Token data lives in
-  // the JSON blob, so aggregate in JS over the full filtered set.
-  let allTime = { requests: totalItems, promptTokens: 0, completionTokens: 0, cachedTokens: 0, cost: 0 };
+  // All-time totals over the filtered dataset. P3: aggregate in SQL via
+  // json_extract instead of loading every row's JSON blob into memory.
+  const allTime = { requests: totalItems, promptTokens: 0, completionTokens: 0, cachedTokens: 0, cost: 0 };
   try {
-    const allRows = db.all(`SELECT data FROM requestDetails ${where}`, params);
-    for (const r of allRows) {
-      const d = parseJson(r.data, {});
-      const tk = d.tokens || {};
-      allTime.promptTokens += tk.prompt_tokens || tk.input_tokens || 0;
-      allTime.completionTokens += tk.completion_tokens || tk.output_tokens || 0;
-      allTime.cachedTokens += tk.cached_tokens || tk.cache_read_input_tokens || 0;
-      if (typeof d.cost === "number") allTime.cost += d.cost;
+    const agg = db.get(
+      `SELECT
+         COALESCE(SUM(CAST(COALESCE(json_extract(data,'$.tokens.prompt_tokens'), json_extract(data,'$.tokens.input_tokens'), 0) AS INTEGER)),0) AS promptTokens,
+         COALESCE(SUM(CAST(COALESCE(json_extract(data,'$.tokens.completion_tokens'), json_extract(data,'$.tokens.output_tokens'), 0) AS INTEGER)),0) AS completionTokens,
+         COALESCE(SUM(CAST(COALESCE(json_extract(data,'$.tokens.cached_tokens'), json_extract(data,'$.tokens.cache_read_input_tokens'), 0) AS INTEGER)),0) AS cachedTokens,
+         COALESCE(SUM(CAST(COALESCE(json_extract(data,'$.cost'), 0) AS REAL)),0) AS cost
+       FROM requestDetails ${where}`,
+      params
+    );
+    if (agg) {
+      allTime.promptTokens = Number(agg.promptTokens) || 0;
+      allTime.completionTokens = Number(agg.completionTokens) || 0;
+      allTime.cachedTokens = Number(agg.cachedTokens) || 0;
+      allTime.cost = Number(agg.cost) || 0;
     }
-  } catch {}
+  } catch {
+    // Fallback (json_extract unavailable): scan with a hard cap to bound memory.
+    try {
+      const CAP = 10000;
+      const allRows = db.all(`SELECT data FROM requestDetails ${where} LIMIT ?`, [...params, CAP]);
+      for (const r of allRows) {
+        const d = parseJson(r.data, {});
+        const tk = d.tokens || {};
+        allTime.promptTokens += tk.prompt_tokens || tk.input_tokens || 0;
+        allTime.completionTokens += tk.completion_tokens || tk.output_tokens || 0;
+        allTime.cachedTokens += tk.cached_tokens || tk.cache_read_input_tokens || 0;
+        if (typeof d.cost === "number") allTime.cost += d.cost;
+      }
+    } catch { /* ignore */ }
+  }
 
   return {
     details,

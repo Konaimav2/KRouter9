@@ -64,6 +64,36 @@ export function createSSEStream(options = {}) {
     : null;
 
   let totalContentLength = 0;
+  // P3: bound in-memory accumulation of the full completion. Long/streaming
+  // responses no longer hold the entire output; past the cap we stop appending.
+  // One shared budget covers content+thinking so the aggregate is bounded.
+  const accumulateCap = Number(process.env.STREAM_ACCUMULATE_CAP_BYTES) > 0
+    ? Number(process.env.STREAM_ACCUMULATE_CAP_BYTES)
+    : 65536;
+  let accumulatedBytes = 0;
+  let contentTruncated = false;
+  const utf8Len = typeof Buffer !== "undefined"
+    ? (s) => Buffer.byteLength(s, "utf8")
+    : (s) => new TextEncoder().encode(s).length;
+  // Returns the (possibly truncated) accumulated string. Mutates the shared
+  // byte budget + truncation flag so content and thinking share one limit.
+  const capAppend = (current, addition) => {
+    if (accumulatedBytes >= accumulateCap) { contentTruncated = true; return current; }
+    const room = accumulateCap - accumulatedBytes;
+    let take = addition;
+    if (utf8Len(addition) > room) {
+      // Slice conservatively by code units until it fits the byte budget.
+      let lo = 0, hi = addition.length;
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1;
+        if (utf8Len(addition.slice(0, mid)) <= room) lo = mid; else hi = mid - 1;
+      }
+      take = addition.slice(0, lo);
+      contentTruncated = true;
+    }
+    accumulatedBytes += utf8Len(take);
+    return current + take;
+  };
   let accumulatedContent = "";
   let accumulatedThinking = "";
   let ttftAt = null;
@@ -101,7 +131,9 @@ export function createSSEStream(options = {}) {
     if (onStreamComplete) {
       onStreamComplete({
         content: accumulatedContent,
-        thinking: accumulatedThinking
+        thinking: accumulatedThinking,
+        truncated: contentTruncated,
+        contentBytes: totalContentLength
       }, finalUsage, ttftAt);
     }
   };
@@ -187,11 +219,11 @@ export function createSSEStream(options = {}) {
               const reasoning = delta?.reasoning_content;
               if (content && typeof content === "string") {
                 totalContentLength += content.length;
-                accumulatedContent += content;
+                accumulatedContent = capAppend(accumulatedContent, content);
               }
               if (reasoning && typeof reasoning === "string") {
                 totalContentLength += reasoning.length;
-                accumulatedThinking += reasoning;
+                accumulatedThinking = capAppend(accumulatedThinking, reasoning);
               }
 
               const extracted = extractUsage(parsed);
@@ -282,23 +314,23 @@ export function createSSEStream(options = {}) {
         // Claude format - content
         if (parsed.delta?.text) {
           totalContentLength += parsed.delta.text.length;
-          accumulatedContent += parsed.delta.text;
+          accumulatedContent = capAppend(accumulatedContent, parsed.delta.text);
         }
         // Claude format - thinking
         if (parsed.delta?.thinking) {
           totalContentLength += parsed.delta.thinking.length;
-          accumulatedThinking += parsed.delta.thinking;
+          accumulatedThinking = capAppend(accumulatedThinking, parsed.delta.thinking);
         }
         
         // OpenAI format - content
         if (parsed.choices?.[0]?.delta?.content) {
           totalContentLength += parsed.choices[0].delta.content.length;
-          accumulatedContent += parsed.choices[0].delta.content;
+          accumulatedContent = capAppend(accumulatedContent, parsed.choices[0].delta.content);
         }
         // OpenAI format - reasoning
         if (parsed.choices?.[0]?.delta?.reasoning_content) {
           totalContentLength += parsed.choices[0].delta.reasoning_content.length;
-          accumulatedThinking += parsed.choices[0].delta.reasoning_content;
+          accumulatedThinking = capAppend(accumulatedThinking, parsed.choices[0].delta.reasoning_content);
         }
         
         // Gemini format
@@ -308,9 +340,9 @@ export function createSSEStream(options = {}) {
               totalContentLength += part.text.length;
               // Check if this is thinking content
               if (part.thought === true) {
-                accumulatedThinking += part.text;
+                accumulatedThinking = capAppend(accumulatedThinking, part.text);
               } else {
-                accumulatedContent += part.text;
+                accumulatedContent = capAppend(accumulatedContent, part.text);
               }
             }
           }

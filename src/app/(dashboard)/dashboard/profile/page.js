@@ -649,6 +649,21 @@ export default function ProfilePage() {
     }
   };
 
+  // P3: generic numeric setting updater (memory caps). Clamps to >= 0.
+  const updateNumberSetting = async (key, rawValue) => {
+    const n = Math.max(0, Math.floor(Number(rawValue) || 0));
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [key]: n }),
+      });
+      if (res.ok) setSettings(prev => ({ ...prev, [key]: n }));
+    } catch (err) {
+      console.error(`Failed to update ${key}:`, err);
+    }
+  };
+
   const reloadSettings = async () => {
     try {
       const res = await fetch("/api/settings");
@@ -1617,6 +1632,40 @@ export default function ProfilePage() {
               checked={observabilityEnabled}
               onChange={updateObservabilityEnabled}
               disabled={loading}
+            />
+          </div>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <Input
+              label="Body cap (bytes)"
+              type="number"
+              min="0"
+              value={settings.observabilityBodyCapBytes ?? 262144}
+              onChange={(e) => updateNumberSetting("observabilityBodyCapBytes", e.target.value)}
+              hint="Truncate recorded request/response bodies above this size."
+            />
+            <Input
+              label="Stream accumulate cap (bytes)"
+              type="number"
+              min="0"
+              value={settings.streamAccumulateCapBytes ?? 65536}
+              onChange={(e) => updateNumberSetting("streamAccumulateCapBytes", e.target.value)}
+              hint="Max in-memory bytes kept per streamed completion."
+            />
+            <Input
+              label="Rate-limit map cap"
+              type="number"
+              min="0"
+              value={settings.rateLimitMapCap ?? 10000}
+              onChange={(e) => updateNumberSetting("rateLimitMapCap", e.target.value)}
+              hint="Max tracked rate-limit keys before oldest are evicted."
+            />
+            <Input
+              label="Circuit-breaker max entries"
+              type="number"
+              min="0"
+              value={settings.circuitBreakerMaxEntries ?? 5000}
+              onChange={(e) => updateNumberSetting("circuitBreakerMaxEntries", e.target.value)}
+              hint="Max provider/model health entries kept."
             />
           </div>
         </Card>
