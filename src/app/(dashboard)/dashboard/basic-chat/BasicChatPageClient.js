@@ -627,6 +627,7 @@ export default function BasicChatPageClient() {
     setStreamingText("");
     abortRef.current?.abort();
     abortRef.current = new AbortController();
+    const startedAt = performance.now();
 
     const requestMessages = nextMessages
       .filter((message) => !(message.role === "assistant" && message.id === assistantMessageId))
@@ -670,6 +671,8 @@ export default function BasicChatPageClient() {
       const decoder = new TextDecoder();
       let buffer = "";
       let assistantText = "";
+      let usage = null;
+      let firstTokenAt = null;
 
       while (true) {
         const { value, done } = await reader.read();
@@ -688,8 +691,10 @@ export default function BasicChatPageClient() {
 
           try {
             const chunk = JSON.parse(payload);
+            if (chunk?.usage) usage = chunk.usage;
             const text = readAssistantText(chunk);
             if (!text) continue;
+            if (firstTokenAt == null) firstTokenAt = performance.now();
 
             assistantText += text;
             setStreamingText(assistantText);
@@ -704,9 +709,16 @@ export default function BasicChatPageClient() {
         }
       }
 
+      const totalMs = Math.round(performance.now() - startedAt);
+      const ttftMs = firstTokenAt != null ? Math.round(firstTokenAt - startedAt) : null;
       updateSession(sessionId, (currentSession) => ({
         ...currentSession,
-        messages: currentSession.messages.map((message) => (message.id === assistantMessageId ? { ...message, content: assistantText || message.content, status: "done" } : message)),
+        messages: currentSession.messages.map((message) => (message.id === assistantMessageId ? {
+          ...message,
+          content: assistantText || message.content,
+          status: "done",
+          metrics: { ttftMs, totalMs, usage },
+        } : message)),
         updatedAt: new Date().toISOString(),
       }));
       finalizeSessionTitle(sessionId, userText);
@@ -901,6 +913,19 @@ export default function BasicChatPageClient() {
                         {content}
                         {isAssistant && isStreaming && !streamingText ? <span className="inline-block animate-pulse">▋</span> : null}
                       </div>
+                      {isAssistant && message.status === "done" && message.metrics ? (
+                        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-white/40">
+                          {message.metrics.ttftMs != null ? <span>TTFT {message.metrics.ttftMs}ms</span> : null}
+                          <span>Total {message.metrics.totalMs}ms</span>
+                          {message.metrics.usage ? (
+                            <span>
+                              in {message.metrics.usage.prompt_tokens ?? message.metrics.usage.input_tokens ?? 0}
+                              {" · "}
+                              out {message.metrics.usage.completion_tokens ?? message.metrics.usage.output_tokens ?? 0}
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 );

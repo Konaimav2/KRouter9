@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import PropTypes from "prop-types";
 import { Button, Badge, Input, Modal, Select } from "@/shared/components";
+import AdvancedNodeFields from "@/shared/components/AdvancedNodeFields";
+import { textToHeaders, headersToText } from "@/shared/utils/nodeHeaders";
 import { UA_PRESET_OPTIONS, resolveNodeUserAgent, presetForUserAgent } from "@/shared/constants/uaPresets";
 
 export default function EditCompatibleNodeModal({ isOpen, node, onSave, onClose, isAnthropic }) {
@@ -14,6 +16,8 @@ export default function EditCompatibleNodeModal({ isOpen, node, onSave, onClose,
   });
   const [uaPreset, setUaPreset] = useState("default");
   const [uaCustom, setUaCustom] = useState("");
+  const [nodeTimeout, setNodeTimeout] = useState("");
+  const [nodeHeadersText, setNodeHeadersText] = useState("");
   const [saving, setSaving] = useState(false);
   const [checkKey, setCheckKey] = useState("");
   const [checkModelId, setCheckModelId] = useState("");
@@ -31,6 +35,8 @@ export default function EditCompatibleNodeModal({ isOpen, node, onSave, onClose,
       const ua = presetForUserAgent(node.userAgent || "");
       setUaPreset(ua.preset);
       setUaCustom(ua.custom);
+      setNodeTimeout(node.timeoutMs ? String(node.timeoutMs) : "");
+      setNodeHeadersText(headersToText(node.customHeaders));
     }
   }, [node, isAnthropic]);
 
@@ -48,6 +54,8 @@ export default function EditCompatibleNodeModal({ isOpen, node, onSave, onClose,
         prefix: formData.prefix,
         baseUrl: formData.baseUrl,
         userAgent: resolveNodeUserAgent(uaPreset, uaCustom),
+        timeoutMs: Number(nodeTimeout) > 0 ? Number(nodeTimeout) : undefined,
+        customHeaders: textToHeaders(nodeHeadersText),
       };
       if (!isAnthropic) {
         payload.apiType = formData.apiType;
@@ -129,6 +137,12 @@ export default function EditCompatibleNodeModal({ isOpen, node, onSave, onClose,
             placeholder="myapp/1.0"
           />
         )}
+        <AdvancedNodeFields
+          timeoutMs={nodeTimeout}
+          onTimeoutMs={setNodeTimeout}
+          headersText={nodeHeadersText}
+          onHeadersText={setNodeHeadersText}
+        />
         <div className="flex gap-2">
           <Input
             label="API Key (for Check)"
