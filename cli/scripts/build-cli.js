@@ -284,7 +284,8 @@ function buildCliPackage() {
   const openapiSrc = path.join(appDir, "docs", "openapi.yaml");
   const openapiDest = path.join(cliAppDir, "docs", "openapi.yaml");
   if (fs.existsSync(openapiSrc)) {
-    copyRecursive(openapiSrc, openapiDest);
+    fs.mkdirSync(path.dirname(openapiDest), { recursive: true });
+    fs.copyFileSync(openapiSrc, openapiDest);
     console.log("✅ Copied docs/openapi.yaml\n");
   } else {
     console.log("⏭️  No docs/openapi.yaml found\n");
