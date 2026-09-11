@@ -5,7 +5,7 @@ import PropTypes from "prop-types";
 import { Button, Badge, Input, Modal, Select } from "@/shared/components";
 import AdvancedNodeFields from "@/shared/components/AdvancedNodeFields";
 import { textToHeaders, headersToText } from "@/shared/utils/nodeHeaders";
-import { UA_PRESET_OPTIONS, resolveNodeUserAgent, presetForUserAgent } from "@/shared/constants/uaPresets";
+import { NODE_UA_PRESET_OPTIONS, resolveNodeUserAgentPreset, presetForNodeUserAgent } from "@/shared/constants/uaPresets";
 
 export default function EditCompatibleNodeModal({ isOpen, node, onSave, onClose, isAnthropic }) {
   const [formData, setFormData] = useState({
@@ -14,7 +14,7 @@ export default function EditCompatibleNodeModal({ isOpen, node, onSave, onClose,
     apiType: "chat",
     baseUrl: "https://api.openai.com/v1",
   });
-  const [uaPreset, setUaPreset] = useState("default");
+  const [uaPreset, setUaPreset] = useState("krouter9");
   const [uaCustom, setUaCustom] = useState("");
   const [nodeTimeout, setNodeTimeout] = useState("");
   const [nodeHeadersText, setNodeHeadersText] = useState("");
@@ -32,7 +32,7 @@ export default function EditCompatibleNodeModal({ isOpen, node, onSave, onClose,
         apiType: node.apiType || "chat",
         baseUrl: node.baseUrl || (isAnthropic ? "https://api.anthropic.com/v1" : "https://api.openai.com/v1"),
       });
-      const ua = presetForUserAgent(node.userAgent || "");
+      const ua = presetForNodeUserAgent(node.userAgent || "");
       setUaPreset(ua.preset);
       setUaCustom(ua.custom);
       setNodeTimeout(node.timeoutMs ? String(node.timeoutMs) : "");
@@ -53,7 +53,7 @@ export default function EditCompatibleNodeModal({ isOpen, node, onSave, onClose,
         name: formData.name,
         prefix: formData.prefix,
         baseUrl: formData.baseUrl,
-        userAgent: resolveNodeUserAgent(uaPreset, uaCustom),
+        userAgent: resolveNodeUserAgentPreset(uaPreset, uaCustom),
         timeoutMs: Number(nodeTimeout) > 0 ? Number(nodeTimeout) : undefined,
         customHeaders: textToHeaders(nodeHeadersText),
       };
@@ -124,7 +124,7 @@ export default function EditCompatibleNodeModal({ isOpen, node, onSave, onClose,
         />
         <Select
           label="User-Agent"
-          options={UA_PRESET_OPTIONS}
+          options={NODE_UA_PRESET_OPTIONS}
           value={uaPreset}
           onChange={(e) => setUaPreset(e.target.value)}
           hint="Sent with every upstream request from this node. Default = no override."

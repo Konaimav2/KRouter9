@@ -209,3 +209,22 @@ export const ZED_DEFAULT_APP_VERSION = ZED_VERSION;
 // ─── iFlow ─────────────────────────────────────────────────────────────
 // No public release cadence. Static UA — no version pin.
 export const IFLOW_USER_AGENT = "iFlow-Cli";
+
+// ─── OpenCode ──────────────────────────────────────────────────────────
+// opencode-ai 1.18.30 — verified from the installed binary's
+// `--user-agent=opencode/<version>` default. Bumped in lockstep with the CLI.
+export const OPENCODE_VERSION = "1.18.30";
+export const OPENCODE_USER_AGENT = `opencode/${OPENCODE_VERSION}`;
+
+// ─── Browser ───────────────────────────────────────────────────────────
+// Desktop Chrome on macOS; used when a provider is gated on a real browser UA.
+export const BROWSER_USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36";
+
+// ─── KRouter9 gateway (default for custom nodes) ───────────────────────
+// Identifies traffic as this gateway. Version is injected by the caller
+// (shared layer reads the app version) so it stays in sync without a bump here.
+export function gatewayUserAgent(version = "") {
+  const v = String(version || "").trim();
+  return v ? `krouter9/${v}` : "krouter9";
+}

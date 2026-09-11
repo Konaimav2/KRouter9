@@ -5,7 +5,7 @@ import PropTypes from "prop-types";
 import { Badge, Button, Input, Modal, Select } from "@/shared/components";
 import AdvancedNodeFields from "@/shared/components/AdvancedNodeFields";
 import { textToHeaders } from "@/shared/utils/nodeHeaders";
-import { UA_PRESET_OPTIONS, resolveNodeUserAgent } from "@/shared/constants/uaPresets";
+import { NODE_UA_PRESET_OPTIONS, resolveNodeUserAgentPreset } from "@/shared/constants/uaPresets";
 
 const VARIANT_CONFIG = {
   openai: {
@@ -50,7 +50,7 @@ function AddCompatibleModal({ variant, isOpen, onClose, onCreated }) {
   const [submitting, setSubmitting] = useState(false);
   const [checkKey, setCheckKey] = useState("");
   const [checkModelId, setCheckModelId] = useState("");
-  const [uaPreset, setUaPreset] = useState("default");
+  const [uaPreset, setUaPreset] = useState("krouter9");
   const [uaCustom, setUaCustom] = useState("");
   const [uaTimeout, setUaTimeout] = useState("");
   const [uaHeadersText, setUaHeadersText] = useState("");
@@ -72,7 +72,7 @@ function AddCompatibleModal({ variant, isOpen, onClose, onCreated }) {
     if (!formData.name.trim() || !formData.prefix.trim() || !formData.baseUrl.trim()) return;
     setSubmitting(true);
     try {
-      const userAgent = resolveNodeUserAgent(uaPreset, uaCustom);
+      const userAgent = resolveNodeUserAgentPreset(uaPreset, uaCustom);
       const customHeaders = textToHeaders(uaHeadersText);
       const res = await fetch("/api/provider-nodes", {
         method: "POST",
@@ -93,7 +93,7 @@ function AddCompatibleModal({ variant, isOpen, onClose, onCreated }) {
         onCreated(data.node);
         setFormData(initialFormData());
         setCheckKey("");
-        setUaPreset("default");
+        setUaPreset("krouter9");
         setUaCustom("");
         setUaTimeout("");
         setUaHeadersText("");
@@ -183,7 +183,7 @@ function AddCompatibleModal({ variant, isOpen, onClose, onCreated }) {
         />
         <Select
           label="User-Agent"
-          options={UA_PRESET_OPTIONS}
+          options={NODE_UA_PRESET_OPTIONS}
           value={uaPreset}
           onChange={(e) => setUaPreset(e.target.value)}
           hint="Sent with every upstream request from this node. Default = no override."
