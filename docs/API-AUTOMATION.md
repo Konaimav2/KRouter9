@@ -277,3 +277,80 @@ curl -b c.txt "http://127.0.0.1:20128/api/usage/request-details?provider=antigra
 
 Recent text logs (Usage → Recent Requests) now include per-row cost:
 `timestamp | model | provider | account | sent | received | $cost | status`.
+
+---
+
+## s13: LLM `/v1` API — auth and non-chat routes
+
+The `/v1/*` surface is OpenAI-compatible and documented as OpenAPI at
+`docs/openapi.yaml` (served at `GET /api/docs/openapi.yaml`, browsable at `/docs`).
+
+### Auth semantics
+
+Key locations differ by surface (verified against `extractApiKey`):
+
+| Surface | Accepted key sources |
+|---|---|
+| `/v1/*` (chat/messages/…) | `Authorization: Bearer <key>`, then `x-api-key: <key>` |
+| `/v1beta/*` (Gemini-native) | `Authorization: Bearer`, `x-api-key`, `x-goog-api-key`, or `?key=` |
+
+- If settings `requireApiKey` is true, a valid key is mandatory (401 otherwise).
+- Loopback requests (real socket IP is loopback, XFF-hardened by
+  `custom-server.js`) are allowed without a key when running locally.
+- Any presented key is enforced regardless of `requireApiKey`:
+  - `rpmLimit` — requests/minute (fixed window). Exceeded → 429 + `Retry-After`.
+  - `tpmLimit` — estimated tokens/minute. Exceeded → 429.
+  - `modelPolicy` / `allowedModels` / `blockedModels` — off | whitelist | blacklist. Denied → 403.
+  - `creditLimit` — max cumulative USD. Exhausted → 402.
+  - `quotaLimit` — max cumulative tokens. Exhausted → 429.
+- Budget is **prepaid**: an estimate is charged atomically before dispatch, then
+  reconciled to real usage when the request is recorded. A crash keeps the
+  estimate charged (fail-closed).
+
+### Non-chat routes
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/v1/responses` | Responses API (+ `/v1/responses/compact`) |
+| POST | `/v1/messages` | Anthropic Messages (+ `/v1/messages/count_tokens`) |
+| POST | `/v1/embeddings` | Embeddings |
+| POST | `/v1/images/generations` | Image generation |
+| POST | `/v1/audio/speech` | Text-to-speech |
+| POST | `/v1/audio/transcriptions` | Speech-to-text (multipart) |
+| GET | `/v1/audio/voices` | List TTS voices |
+| POST | `/v1/videos/generations` · `GET /v1/videos/{id}` · `POST /v1/videos/edits` · `POST /v1/videos/extensions` | Video jobs |
+| POST | `/v1/ocr` | OCR |
+| POST | `/v1/music` | Music (501 stub) |
+| POST | `/v1/search` · `POST /v1/web/fetch` · `POST /v1/rerank` | Search / fetch / rerank |
+| POST | `/v1/moderations` | Moderation |
+| GET | `/v1/models` · `GET /v1/models/{model}` | Model catalog |
+
+Body size is capped at 25 MB (`src/lib/bodyLimit.js`).
+
+### Error envelope
+
+```json
+{ "error": { "message": "...", "type": "...", "code": "..." } }
+```
+400 bad request · 401 missing/invalid key · 402 credit exhausted · 403 model not
+allowed · 404 model not found · 429 rate/token limit · 502/503/504 upstream.
+
+### Dashboard chat (playground)
+
+`POST /api/dashboard/chat/completions` runs the same handler in internal mode
+(no end-user API key). It ALWAYS requires a dashboard session cookie/JWT or the
+`x-9r-cli-token` header — the `requireLogin=false` bypass does not apply.
+
+### Provider connections listing (pagination)
+
+`GET /api/providers` is paginated by default (`?page=1&pageSize=50`, max 500)
+and strips heavy/sensitive fields; `?mode=full` returns the unpaginated legacy
+shape. Response includes `pagination` and optional `stats` (per-provider counts)
+when `?stats=1`.
+
+### Memory caps (observability/tuning)
+
+Dashboard Settings → Observability exposes `observabilityBodyCapBytes`,
+`streamAccumulateCapBytes`, `rateLimitMapCap`, `circuitBreakerMaxEntries`.
+`PATCH /api/settings` mirrors these to env and resets the cached observability
+config so they apply without a restart. See `.env.example` for all names.

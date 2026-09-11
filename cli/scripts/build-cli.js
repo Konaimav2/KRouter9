@@ -280,6 +280,16 @@ function buildCliPackage() {
     console.log("⏭️  No public folder found\n");
   }
 
+  // Step 5b: Copy OpenAPI spec (read at runtime by GET /api/docs/openapi.yaml)
+  const openapiSrc = path.join(appDir, "docs", "openapi.yaml");
+  const openapiDest = path.join(cliAppDir, "docs", "openapi.yaml");
+  if (fs.existsSync(openapiSrc)) {
+    copyRecursive(openapiSrc, openapiDest);
+    console.log("✅ Copied docs/openapi.yaml\n");
+  } else {
+    console.log("⏭️  No docs/openapi.yaml found\n");
+  }
+
   // Step 6: Copy vendor-chunks (required for production)
   console.log("6️⃣  Copying vendor-chunks...");
   const vendorChunksSrc = path.join(appDir, ".next", "server", "vendor-chunks");
