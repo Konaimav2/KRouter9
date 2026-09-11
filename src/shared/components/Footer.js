@@ -7,18 +7,13 @@ const footerLinks = {
   product: [
     { label: "Features", href: "#features" },
     { label: "Pricing", href: "#pricing" },
-    { label: "Changelog", href: "#" },
+    { label: "Changelog", href: "/dashboard/profile#changelog" },
   ],
   resources: [
-    { label: "Documentation", href: "#" },
-    { label: "API Reference", href: "#" },
-    { label: "Help Center", href: "#" },
+    { label: "API Reference", href: "/docs" },
+    { label: "OpenAPI Spec", href: "/api/docs/openapi.yaml" },
   ],
-  company: [
-    { label: "About", href: "#" },
-    { label: "Blog", href: "#" },
-    { label: "Contact", href: "#" },
-  ],
+  company: [],
 };
 
 export default function Footer() {

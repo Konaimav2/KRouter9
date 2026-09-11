@@ -26,6 +26,11 @@ const nextConfig = {
     root: tracingRoot
   },
   outputFileTracingRoot: tracingRoot,
+  // The OpenAPI route reads docs/openapi.yaml at runtime via process.cwd();
+  // Next's tracer cannot see that path, so include it explicitly in standalone.
+  outputFileTracingIncludes: {
+    "/api/docs/openapi.yaml": ["./docs/openapi.yaml"],
+  },
   outputFileTracingExcludes: {
     "*": ["./gitbook/**/*"]
   },
