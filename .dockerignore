@@ -9,6 +9,10 @@
 # Dependencies and build output
 node_modules
 .next
+.next-cli-build
+**/.next-cli-build
+cli/app
+cli/.build-home
 out
 build
 dist
