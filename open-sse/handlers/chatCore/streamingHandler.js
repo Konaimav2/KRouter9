@@ -4,7 +4,7 @@ import { createSSETransformStreamWithLogger, createPassthroughStreamWithLogger }
 import { pipeWithDisconnect } from "../../utils/streamHandler.js";
 import { PROVIDERS } from "../../config/providers.js";
 import { STREAM_STALL_TIMEOUT_MS } from "../../config/runtimeConfig.js";
-import { buildAbortedResponsesTerminalBytes } from "../../utils/responsesStreamHelpers.js";
+import { buildAbortedResponsesTerminalBytes, buildAbortedOpenAITerminalBytes, buildAbortedClaudeTerminalBytes } from "../../utils/responsesStreamHelpers.js";
 import { buildRequestDetail, extractRequestConfig, saveUsageStats, formatDoneLine } from "./requestDetail.js";
 import { saveRequestDetail } from "@/lib/usageDb.js";
 import { SSE_HEADERS_CORS as SSE_HEADERS } from "../../utils/sseConstants.js";
@@ -115,7 +115,16 @@ export async function handleStreamingResponse({ providerResponse, provider, mode
 
   // Responses passthrough: synthesize response.failed + [DONE] if the stream aborts/stalls before a terminal event
   const isResponsesPassthrough = sourceFormat === FORMATS.OPENAI_RESPONSES && targetFormat === FORMATS.OPENAI_RESPONSES;
-  const onAbortTerminal = isResponsesPassthrough ? buildAbortedResponsesTerminalBytes : null;
+  // Other formats get an equivalent terminal error event instead of a silent
+  // truncation: OpenAI chat and Claude get shaped error frames; anything else
+  // keeps the previous close-without-terminal behavior.
+  const onAbortTerminal = isResponsesPassthrough
+    ? buildAbortedResponsesTerminalBytes
+    : targetFormat === FORMATS.OPENAI
+      ? () => buildAbortedOpenAITerminalBytes(`[${provider}/${model}] stream closed before completion`)
+      : targetFormat === FORMATS.CLAUDE
+        ? () => buildAbortedClaudeTerminalBytes(`[${provider}/${model}] stream closed before completion`)
+        : null;
   const stallTimeoutMs = PROVIDERS[provider]?.stallTimeoutMs || STREAM_STALL_TIMEOUT_MS;
   // Combo safety: upstream 200 + SSE headers does NOT guarantee the stream
   // carries data — providers (esp. capacity-limited ones) can return 200 and
