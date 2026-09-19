@@ -377,6 +377,26 @@ cache but does not itself refresh auth.
 
 ---
 
+## Rejected forks (do not use)
+
+### allxd9router (npm `allxd9router@0.5.75`)
+
+**Verdict: rejected.** Evaluated 2026-09-19 via registry metadata + tarball
+diff against official `9router@0.5.75`:
+
+- Single published version (2026-09-12), sole maintainer, **no public source
+  repository** (no `repository`/`homepage` fields, no GitHub repo, no
+  provenance).
+- The tarball is official v0.5.75 byte-identical except a closed-source
+  billing/QRIS storefront (`/dashboard/billing`, `/buy`, `/portal`,
+  `/api/billing/*`, `pg.allxddev.com` gateway) shipped **only as minified
+  prebuilt output** — not auditable.
+- Ships a pre-seeded database with baked portal secrets; repoints the
+  auto-updater at itself (`allxd9router@latest`).
+- No AI-routing features beyond upstream; 174 vs 46,744 weekly downloads.
+
+**Do not `npm install -g allxd9router`.** There is nothing to mine here.
+
 ## KRouter9 originals
 
 ### 27. Webhook dispatcher
