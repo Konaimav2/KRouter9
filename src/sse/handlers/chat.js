@@ -33,28 +33,31 @@ import { stripModelContextMarker } from "open-sse/utils/modelMarkers.js";
 
 /**
  * Approximate character count of a request body WITHOUT a full JSON.stringify.
- * Sums string lengths recursively (capped per value) — sufficient for token
- * estimation, which only needs order-of-magnitude input size.
+ * Sums string lengths recursively. Saturates at ESTIMATE_CEILING instead of
+ * silently dropping content past a cutoff: for billing enforcement an
+ * overestimate is safe, an underestimate is a bypass. Depth cap (64) only
+ * guards call-stack depth; every reachable string is counted.
  */
+const ESTIMATE_CEILING = 100_000_000;
 function estimateBodyChars(value, depth = 0) {
   if (value == null) return 0;
-  if (typeof value === "string") return value.length;
+  if (typeof value === "string") return Math.min(value.length, ESTIMATE_CEILING);
   if (typeof value === "number" || typeof value === "boolean") return 8;
   if (typeof value !== "object") return 0;
-  // Depth cap guards pathological nesting; normal message shapes
-  // (body→messages→message→content→part→text, depth 5) must be counted.
-  // The running 2M total cap bounds worst-case work regardless of depth.
-  if (depth > 12) return 0;
+  if (depth > 64) return 0;
   let total = 2; // braces/brackets overhead
+  const add = (n) => {
+    total += n;
+    return total >= ESTIMATE_CEILING;
+  };
   if (Array.isArray(value)) {
-    for (let i = 0; i < value.length && total < 2_000_000; i++) {
-      total += estimateBodyChars(value[i], depth + 1);
+    for (let i = 0; i < value.length; i++) {
+      if (add(estimateBodyChars(value[i], depth + 1))) return ESTIMATE_CEILING;
     }
     return total;
   }
   for (const k of Object.keys(value)) {
-    if (total >= 2_000_000) break;
-    total += k.length + 4 + estimateBodyChars(value[k], depth + 1);
+    if (add(k.length + 4 + estimateBodyChars(value[k], depth + 1))) return ESTIMATE_CEILING;
   }
   return total;
 }
@@ -65,8 +68,21 @@ function estimateBodyChars(value, depth = 0) {
  * Format detection and translation handled by translator
  */
 export async function handleChat(request, clientRawRequest = null, options = {}) {
-  // Entry body-size guard (25 MB). Content-Length is checked before parsing;
-  // chunked bodies without it are measured after parse. Fail fast with 413.
+  // Entry body-size guard (25 MB, byte-accurate on RECEIVED bytes). Read the
+  // raw text once: a chunked body with no Content-Length and heavy whitespace
+  // would otherwise allocate unbounded memory before any check runs, and
+  // reserialized length can be far smaller than what was received.
+  let rawText = null;
+  try {
+    rawText = await request.text();
+  } catch {
+    log.warn("CHAT", "Unreadable request body");
+    return errorResponse(HTTP_STATUS.BAD_REQUEST, "Unreadable request body");
+  }
+  if (Buffer.byteLength(rawText, "utf8") > MAX_BODY_BYTES) {
+    log.warn("CHAT", "Request body too large");
+    return errorResponse(HTTP_STATUS.PAYLOAD_TOO_LARGE, `Request body too large: limit is ${MAX_BODY_BYTES} bytes`);
+  }
   const entryLimit = checkBodyLimit(request.headers.get("content-length"));
   if (!entryLimit.ok) {
     log.warn("CHAT", `Request body too large: ${request.headers.get("content-length")} bytes`);
@@ -74,19 +90,11 @@ export async function handleChat(request, clientRawRequest = null, options = {})
   }
   let body;
   try {
-    body = await request.json();
+    body = JSON.parse(rawText);
   } catch {
     log.warn("CHAT", "Invalid JSON body");
     return errorResponse(HTTP_STATUS.BAD_REQUEST, "Invalid JSON body");
   }
-  try {
-    // Byte-accurate: .length counts UTF-16 units, Buffer.byteLength bytes.
-    const bodyBytes = Buffer.byteLength(JSON.stringify(body), "utf8");
-    if (bodyBytes > MAX_BODY_BYTES) {
-      log.warn("CHAT", "Request body too large after parse");
-      return errorResponse(HTTP_STATUS.PAYLOAD_TOO_LARGE, `Request body too large: limit is ${MAX_BODY_BYTES} bytes`);
-    }
-  } catch { /* unmeasurable body passes through to normal handling */ }
 
   // Client IP: custom-server stamps the unspoofable socket-derived address
   // (XFF trusted only from a loopback reverse proxy). Used for request logs.

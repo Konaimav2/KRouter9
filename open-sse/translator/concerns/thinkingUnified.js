@@ -181,7 +181,11 @@ export function clampThinkingLevel(requested, supportedLevels) {
 export function validateThinkingRequest(body, model) {
   const check = (value, where) => {
     if (value === undefined || value === null) return null;
-    if (typeof value !== "string") return null;
+    // Level fields are strings; arrays/objects/numbers here are malformed and
+    // must fail closed (they would otherwise survive into outbound requests).
+    if (typeof value !== "string") {
+      return `invalid reasoning level: non-string ${where}`;
+    }
     const e = value.toLowerCase().trim();
     if (!e || e === "auto" || e === "default") return null;
     if (!isKnownThinkingLevel(value)) {

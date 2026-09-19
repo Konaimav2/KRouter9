@@ -350,10 +350,12 @@ export async function handleComboChat({ body, models, handleSingleModel, log, co
       }
 
       // Fallback to next model — announced, never silent: a swap means the
-      // client is getting a different voice than requested.
+      // client is getting a different voice than requested. Control chars are
+      // stripped so provider-controlled text cannot forge log lines.
       lastError = errorText || String(result.status);
       if (!lastStatus) lastStatus = result.status;
-      triedModels.push(`${modelStr} [${result.status}: ${String(lastError).slice(0, 160)}]`);
+      const cleanErr = String(lastError).replace(/[\r\n\x00-\x1f\x7f]+/g, " ").slice(0, 160);
+      triedModels.push(`${modelStr} [${result.status}: ${cleanErr}]`);
       log.warn("COMBO", `Model ${modelStr} failed, switching to next model in combo${comboName ? ` "${comboName}"` : ""}`, { status: result.status, tried: triedModels.length });
     } catch (error) {
       // Catch unexpected exceptions to ensure fallback continues
