@@ -1,3 +1,40 @@
+# Unreleased
+
+## Features
+- **Thinking nearest-match clamp**: requested reasoning level is clamped to the
+  model's supported set (above max → model max, below min → model min, exact
+  hits pass through; `none`/`off`/`minimal` stay distinct; `ultra`→`max`
+  alias). Dashboard `auto` passes the client's own value through and sends
+  nothing when absent; 9router never overrides request thinking.
+- **Combo swap announce**: model swaps log a warning naming the combo and the
+  failure; terminal combo errors list every tried model. Mid-stream
+  stall/abort now emits a shaped terminal error event (OpenAI/Claude/Responses)
+  instead of a silent truncation.
+- **Relay hardening**: 25 MB entry body limit wired at `/v1`; ~4 MB relay
+  egress cap with a clear 413; 413 exempt from account/model fallback.
+- **Stream decoding**: shared streamed UTF-8 decoder (no more split-multibyte
+  mojibake) in Responses transformer, Ollama transform, and Kiro inspector.
+- **Wenyan opt-in**: classical-Chinese caveman levels require explicit opt-in;
+  otherwise fall back to `ultra` so replies keep the user's language.
+- **Upstream backports**: DeepSeek v4.* effort/vision flags, 4xx-no-cooldown,
+  Kiro tool-result placeholder + underscore preservation, tool-result image
+  forwarding, Kiro thinking display preservation, opencode stable session +
+  403 UA fix, Zen `delta.reasoning` + declared-caps honoring.
+
+## Fixes
+- **Invalid reasoning level**: unknown thinking strings now fail with
+  `400 invalid reasoning level` instead of being forwarded as invalid enums.
+- **Non-empty errors**: every error path guarantees a non-empty
+  `error.message` (no more `<none>` in client retry banners).
+- **Hot path**: token estimates skip full `JSON.stringify`; settings cached
+  with 2s TTL; policy/budget helpers hoisted to static imports.
+
+## Security
+- Third-party fork `allxd9router` (npm-only, no public source, sole
+  maintainer, closed-source billing layer in minified output) evaluated and
+  **rejected**: do not install; no routing features worth mining. See
+  `docs/FEATURES.md` "Rejected forks" section.
+
 # v0.5.78 (2026-09-12)
 
 ## Features
