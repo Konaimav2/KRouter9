@@ -9,6 +9,7 @@ import { normalizeResponsesInput } from "../translator/formats/responsesApi.js";
 import { fetchImageAsBase64 } from "../translator/concerns/image.js";
 import { getModelUpstreamId } from "../config/providerModels.js";
 import { getThinkingLevels } from "../providers/thinkingLevels.js";
+import { clampThinkingLevel } from "../translator/concerns/thinkingUnified.js";
 import { DEFAULT_RETRY_CONFIG, HTTP_STATUS, resolveRetryEntry } from "../config/runtimeConfig.js";
 import { dbg } from "../utils/debugLog.js";
 import { resolveSessionId } from "../utils/sessionManager.js";
@@ -137,10 +138,18 @@ function resolveCacheSessionId(body, credentials) {
 
 function normalizeReasoningEffort(model, value) {
   const supportedLevels = getThinkingLevels("codex", model);
-  if (supportedLevels?.includes(value)) return value;
-  if (value === "ultra" && supportedLevels?.includes("max")) return "max";
-  if (value === "max" || value === "ultra") return "xhigh";
-  return value;
+  if (value === undefined || value === null || value === "") return undefined;
+  const v = String(value).toLowerCase().trim();
+  if (v === "auto" || v === "default") return undefined;
+  if (supportedLevels?.includes(v)) return v;
+  if (v === "ultra" && supportedLevels?.includes("max")) return "max";
+  // Nearest-match clamp; unknown strings are stripped here (chatCore already
+  // rejects them with 400 invalid reasoning level before dispatch).
+  try {
+    return clampThinkingLevel(v, supportedLevels);
+  } catch {
+    return undefined;
+  }
 }
 
 function findNestedMessage(value, depth = 0) {
@@ -453,12 +462,15 @@ export class CodexExecutor extends BaseExecutor {
       }
     }
 
-    // Priority: explicit reasoning.effort > reasoning_effort param > model suffix > default (medium)
+    // Priority: explicit reasoning.effort > reasoning_effort param > model suffix.
+    // No invented default: absent thinking sends nothing (provider decides).
     if (!body.reasoning) {
-      const effort = normalizeReasoningEffort(body.model, body.reasoning_effort || modelEffort || 'low');
-      body.reasoning = { effort, summary: "auto" };
+      const effort = normalizeReasoningEffort(body.model, body.reasoning_effort || modelEffort);
+      if (effort) body.reasoning = { effort, summary: "auto" };
     } else {
-      body.reasoning.effort = normalizeReasoningEffort(body.model, body.reasoning.effort);
+      const effort = normalizeReasoningEffort(body.model, body.reasoning.effort);
+      if (effort) body.reasoning.effort = effort;
+      else delete body.reasoning.effort;
       if (!body.reasoning.summary) body.reasoning.summary = "auto";
     }
     delete body.reasoning_effort;

@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { BaseExecutor } from "./base.js";
 import { PROVIDERS } from "../config/providers.js";
 import { getThinkingLevels } from "../providers/thinkingLevels.js";
+import { clampThinkingLevel, isKnownThinkingLevel } from "../translator/concerns/thinkingUnified.js";
 import { injectReasoningContent } from "../utils/reasoningContentInjector.js";
 import { resolveSessionId } from "../utils/sessionManager.js";
 import { isMuseSparkModel } from "../providers/models/helpers.js";
@@ -54,7 +55,10 @@ function normalizeOpencodeReasoning(model, body) {
 
   const cleanModel = baseModelId(model || body.model);
   const supportedLevels = getThinkingLevels("opencode", cleanModel);
-  let effort = requestedEffort.toLowerCase().trim();
+  const raw = requestedEffort.toLowerCase().trim();
+  if (raw === "auto" || raw === "default") return;
+  if (!isKnownThinkingLevel(raw)) return; // chatCore rejects with 400 first; strip here
+  let effort = clampThinkingLevel(raw, supportedLevels);
   if ((effort === "max" || effort === "ultra") && supportedLevels?.length && !supportedLevels.includes(effort)) {
     if (effort === "ultra" && supportedLevels.includes("max")) effort = "max";
     else if (supportedLevels.includes("xhigh")) effort = "xhigh";

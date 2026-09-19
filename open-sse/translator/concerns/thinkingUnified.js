@@ -118,6 +118,100 @@ function resolveFormat(targetFormat, model, provider) {
   return FORMAT_TO_NATIVE[targetFormat] || "openai";
 }
 
+// Nearest-match clamp ladder, index-ordered low→high. `none`/`off`/`minimal`
+// are distinct floor rungs (never aliased). `default` is a send-nothing
+// sentinel handled by callers; `auto` passes the client value through.
+const CLAMP_LADDER = ["off", "none", "minimal", "low", "medium", "high", "xhigh", "max"];
+const CLAMP_ALIASES = { ultra: "max" };
+
+export function isKnownThinkingLevel(value) {
+  if (typeof value !== "string") return false;
+  const e = value.toLowerCase().trim();
+  return CLAMP_LADDER.includes(e) || e === "ultra";
+}
+
+function normalizeClampAlias(value) {
+  const e = String(value).toLowerCase().trim();
+  return CLAMP_ALIASES[e] || e;
+}
+
+export function assertKnownThinkingLevel(value) {
+  if (!isKnownThinkingLevel(value)) {
+    throw new Error(`invalid reasoning level: ${value}`);
+  }
+  return normalizeClampAlias(value);
+}
+
+// Nearest-match clamp of a requested level against a model's supported set.
+// Exact hit → as-is. Above max → model's max. Below min → model's min.
+// Mid-gap → nearest supported at or below (never invent upward).
+// `none`/`off` are excluded from candidates (they are disable signals).
+// Throws `invalid reasoning level` for unknown strings.
+export function clampThinkingLevel(requested, supportedLevels) {
+  if (typeof requested !== "string" || !isKnownThinkingLevel(requested)) {
+    throw new Error(`invalid reasoning level: ${requested}`);
+  }
+  const norm = (Array.isArray(supportedLevels) ? supportedLevels : []).map((s) => String(s).toLowerCase());
+  const raw = String(requested).toLowerCase().trim();
+  // Exact hit first — a model that natively supports "ultra" keeps it.
+  if (norm.includes(raw)) return raw;
+  const level = normalizeClampAlias(requested);
+  // none/off are equivalent disable signals: accept either spelling.
+  if ((level === "none" || level === "off") && norm.some((s) => s === "none" || s === "off")) {
+    return norm.includes("none") ? "none" : "off";
+  }
+  const candidates = norm
+    .map((s) => CLAMP_LADDER.indexOf(s))
+    .filter((i) => i >= 0 && CLAMP_LADDER[i] !== "none" && CLAMP_LADDER[i] !== "off");
+  if (!candidates.length) return level;
+  const idx = CLAMP_LADDER.indexOf(level);
+  const maxSup = Math.max(...candidates);
+  const minSup = Math.min(...candidates);
+  if (idx > maxSup) return CLAMP_LADDER[maxSup];
+  if (idx < minSup) return CLAMP_LADDER[minSup];
+  let best = minSup;
+  for (const i of candidates) if (i <= idx && i > best) best = i;
+  return CLAMP_LADDER[best];
+}
+
+// Validate user-supplied thinking BEFORE translation. Returns an error message
+// or null. Checks the model suffix and every explicit level field; unknown
+// strings fail closed with `invalid reasoning level`. Budgets (numbers),
+// `auto`, `default`, `none`, `off` are always accepted here.
+export function validateThinkingRequest(body, model) {
+  const check = (value, where) => {
+    if (value === undefined || value === null) return null;
+    if (typeof value !== "string") return null;
+    const e = value.toLowerCase().trim();
+    if (!e || e === "auto" || e === "default") return null;
+    if (!isKnownThinkingLevel(value)) {
+      return `invalid reasoning level: ${value} (${where})`;
+    }
+    return null;
+  };
+
+  if (typeof model === "string") {
+    const m = model.match(/^(.*)\(([^()]+)\)\s*$/);
+    if (m) {
+      const raw = m[2].trim().toLowerCase();
+      if (!/^\d+$/.test(raw) && raw !== "auto" && raw !== "none" && raw !== "off" && !isKnownThinkingLevel(raw)) {
+        return `invalid reasoning level: ${m[2].trim()} (model suffix)`;
+      }
+    }
+  }
+  if (!body || typeof body !== "object") return null;
+
+  return (
+    check(body.reasoning_effort, "reasoning_effort") ||
+    check(typeof body.reasoning === "object" ? body.reasoning?.effort : null, "reasoning.effort") ||
+    check(body.output_config?.effort, "output_config.effort") ||
+    check(body.thinkingConfig?.thinkingLevel, "thinkingConfig.thinkingLevel") ||
+    check(body.generationConfig?.thinkingConfig?.thinkingLevel, "thinkingLevel") ||
+    check(body.request?.generationConfig?.thinkingConfig?.thinkingLevel, "thinkingLevel") ||
+    null
+  );
+}
+
 // Convert unified config to a budget number (for budget-based formats).
 function toBudget(cfg, range) {
   let budget;
@@ -141,20 +235,19 @@ function toLevel(cfg) {
 }
 
 function normalizeOpenAILevel(level, supportedLevels) {
-  if (level !== "max" && level !== "ultra") return level;
-  if (supportedLevels?.includes(level)) return level;
-  if (level === "ultra" && supportedLevels?.includes("max")) return "max";
-  return "xhigh";
+  // Nearest-match clamp (ultra→max alias inside). Throws invalid reasoning level.
+  return clampThinkingLevel(level, supportedLevels);
 }
 
 function toGeminiThinkingLevel(cfg) {
-  const raw = cfg.mode === "auto" ? "high" : (toLevel(cfg) || "high");
+  const raw = cfg.mode === "auto" ? null : (toLevel(cfg) || null);
+  if (!raw || raw === "auto") return null;
   return effortToThinkingLevel(raw);
 }
 
 function toKimiReasoningEffort(cfg) {
   const level = toLevel(cfg);
-  if (level === "auto") return "high";
+  if (!level || level === "auto") return null;
   if (level === "minimal") return "low";
   if (level === "xhigh") return "max";
   if (["low", "medium", "high", "max"].includes(level)) return level;
@@ -236,7 +329,9 @@ function applyFormat(fmt, body, cfg, caps, supportedLevels) {
     case "openai": {
       if (none && canDisable) { body.reasoning_effort = "none"; break; }
       const level = toLevel(eff);
-      if (level) body.reasoning_effort = normalizeOpenAILevel(level, supportedLevels);
+      // auto with no concrete value → send nothing (provider decides).
+      if (!level || level === "auto") break;
+      body.reasoning_effort = normalizeOpenAILevel(level, supportedLevels);
       break;
     }
     case "claude-adaptive": {
@@ -246,7 +341,9 @@ function applyFormat(fmt, body, cfg, caps, supportedLevels) {
       if (canDisable) body.thinking = { type: "adaptive" };
       else delete body.thinking;
       const level = toLevel(eff);
-      body.output_config = { effort: level === "xhigh" || level === "auto" ? "high" : level };
+      // auto with no concrete value → keep the native adaptive shape, invent no effort.
+      if (!level || level === "auto") break;
+      body.output_config = { effort: clampThinkingLevel(level, supportedLevels) };
       break;
     }
     case "claude-budget": {
@@ -256,7 +353,9 @@ function applyFormat(fmt, body, cfg, caps, supportedLevels) {
       break;
     }
     case "gemini-level": {
+      if (eff.mode === "auto") break; // pass through: omit level, provider decides
       const level = none ? "minimal" : toGeminiThinkingLevel(eff);
+      if (!level) break;
       setGeminiThinking(body, { thinkingLevel: level, includeThoughts: level !== "minimal" });
       ensureGeminiOutputFloor(body, geminiLevelOutputFloor(level), caps);
       break;
@@ -277,6 +376,8 @@ function applyFormat(fmt, body, cfg, caps, supportedLevels) {
       // don't send a field the API doesn't recognize.
       if (caps.thinkingEffortSupported) {
         const zaiLvl = toLevel(eff);
+        // auto → keep `thinking` enabled but invent no effort value.
+        if (!zaiLvl || zaiLvl === "auto") break;
         // GLM-5.3 only accepts exactly low|high|max (anything else errors); GLM-5.2 accepts
         // a wider set but z.ai maps low/medium->high and xhigh->max server-side anyway, so
         // this 3-value mapping matches both.
@@ -296,9 +397,11 @@ function applyFormat(fmt, body, cfg, caps, supportedLevels) {
     case "deepseek": {
       if (none && canDisable) { body.thinking = { type: "disabled" }; break; }
       body.thinking = { type: "enabled" };
-      // DeepSeek: low/medium→high, xhigh/max→max.
+      // Nearest-match clamp against the model's real set (hiMax: none/high/max).
+      // auto with no concrete value → enabled shape, no invented effort.
       const level = toLevel(eff);
-      body.reasoning_effort = level === "xhigh" || level === "max" ? "max" : "high";
+      if (!level || level === "auto") break;
+      body.reasoning_effort = clampThinkingLevel(level, supportedLevels);
       break;
     }
     case "kimi": {
@@ -321,7 +424,8 @@ function applyFormat(fmt, body, cfg, caps, supportedLevels) {
     case "step": {
       if (none && canDisable) break;
       const level = toLevel(eff);
-      if (level) body.reasoning_effort = level === "xhigh" || level === "max" ? "high" : level;
+      if (!level || level === "auto") break;
+      body.reasoning_effort = clampThinkingLevel(level, supportedLevels);
       break;
     }
     case "tokenrouter": {
@@ -330,7 +434,7 @@ function applyFormat(fmt, body, cfg, caps, supportedLevels) {
       // "none" → omit the field so the upstream default applies; pass levels through.
       if (none || eff.mode === "auto") break;
       const level = toLevel(eff);
-      if (level) body.reasoning_effort = level;
+      if (level) body.reasoning_effort = assertKnownThinkingLevel(level);
       break;
     }
     case "kiro":

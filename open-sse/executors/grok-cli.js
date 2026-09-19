@@ -123,9 +123,13 @@ export function _getGrokCliTurnStoreSize() {
 
 export function normalizeGrokCliEffort(value) {
   const effort = typeof value === "string" ? value.trim().toLowerCase() : "";
-  if (effort === "max") return "xhigh";
+  if (!effort || effort === "auto" || effort === "default" || effort === "none" || effort === "off") return undefined;
+  // Nearest-match on the grok wire set [low, medium, high, xhigh].
+  if (effort === "ultra" || effort === "max") return "xhigh";
+  if (effort === "minimal") return "low";
   if (EFFORT_LEVELS.includes(effort)) return effort;
-  return "high";
+  // Unknown: strip here (chatCore rejects with 400 invalid reasoning level first).
+  return undefined;
 }
 
 export { supportsGrokCliReasoningEffort } from "../config/grokCli.js";
@@ -472,19 +476,23 @@ export class GrokCliExecutor extends BaseExecutor {
     body.model = resolvedModel;
     this._currentModel = resolvedModel;
 
-    // Reasoning effort priority: explicit > reasoning_effort > model suffix > default high.
+    // Reasoning effort priority: explicit > reasoning_effort > model suffix.
+    // No invented default: absent thinking sends nothing (provider decides).
     // grok-build and Composer reject reasoningEffort but still accept summary/encrypted continuity.
     const supportsReasoningEffort = supportsGrokCliReasoningEffort(resolvedModel);
     if (!body.reasoning || typeof body.reasoning !== "object") {
       body.reasoning = { summary: "concise" };
       if (supportsReasoningEffort) {
-        body.reasoning.effort = normalizeGrokCliEffort(body.reasoning_effort || modelEffort);
+        const effort = normalizeGrokCliEffort(body.reasoning_effort || modelEffort);
+        if (effort) body.reasoning.effort = effort;
       }
     } else {
       if (supportsReasoningEffort) {
-        body.reasoning.effort = normalizeGrokCliEffort(
+        const effort = normalizeGrokCliEffort(
           body.reasoning.effort || body.reasoning_effort || modelEffort,
         );
+        if (effort) body.reasoning.effort = effort;
+        else delete body.reasoning.effort;
       } else {
         delete body.reasoning.effort;
       }
