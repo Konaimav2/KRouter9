@@ -1,6 +1,6 @@
 import { detectFormat, getTargetFormat, resolveTransport } from "../services/provider.js";
 import { translateRequest } from "../translator/index.js";
-import { applyThinking, extractThinking, stripThinkingSuffix } from "../translator/concerns/thinkingUnified.js";
+import { applyThinking, extractThinking, stripThinkingSuffix, validateThinkingRequest } from "../translator/concerns/thinkingUnified.js";
 import { FORMATS } from "../translator/formats.js";
 import { normalizeClaudePassthrough, anchorClaudeCache } from "../translator/formats/claude.js";
 import { createStreamController } from "../utils/streamHandler.js";
@@ -116,6 +116,13 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
     } else if (!body.reasoning_effort) {
       body = { ...body, reasoning_effort: mode };
     }
+  }
+
+  // Reject unknown thinking levels up front with a 400 (never forward garbage
+  // upstream, never silently downgrade). Covers both passthrough and pipeline.
+  const thinkingError = validateThinkingRequest(body, model);
+  if (thinkingError) {
+    return createErrorResult(HTTP_STATUS.BAD_REQUEST, thinkingError);
   }
 
   const clientWantsStream = clientRequestedStreaming(body, sourceFormat);

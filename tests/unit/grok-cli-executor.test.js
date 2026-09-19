@@ -308,11 +308,13 @@ describe("GrokCliExecutor", () => {
   });
 
   it("normalizes official effort aliases", () => {
-    expect(normalizeGrokCliEffort("none")).toBe("high");
-    expect(normalizeGrokCliEffort("minimal")).toBe("high");
+    expect(normalizeGrokCliEffort("none")).toBeUndefined();
+    expect(normalizeGrokCliEffort("minimal")).toBe("low");
     expect(normalizeGrokCliEffort("max")).toBe("xhigh");
     expect(normalizeGrokCliEffort("xhigh")).toBe("xhigh");
-    expect(normalizeGrokCliEffort("ultra")).toBe("high");
+    expect(normalizeGrokCliEffort("ultra")).toBe("xhigh");
+    expect(normalizeGrokCliEffort("bogus-level")).toBeUndefined();
+    expect(normalizeGrokCliEffort("auto")).toBeUndefined();
 
     const out = executor.transformRequest("grok-4.5", {
       model: "grok-4.5",
