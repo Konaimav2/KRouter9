@@ -96,12 +96,17 @@ export async function parseUpstreamError(response, executor = null) {
  * @returns {{ success: false, status: number, error: string, response: Response, resetsAtMs?: number }}
  */
 export function createErrorResult(statusCode, message, resetsAtMs) {
+  // F7: error.message must never be empty/null — clients (e.g. OpenCode retry
+  // banner) render it verbatim and show "<none>" otherwise.
+  const safeMessage = (typeof message === "string" && message.trim())
+    ? message
+    : (DEFAULT_ERROR_MESSAGES[statusCode] || `Upstream error: ${statusCode}`);
   return {
     success: false,
     status: statusCode,
-    error: message,
+    error: safeMessage,
     resetsAtMs,
-    response: errorResponse(statusCode, message)
+    response: errorResponse(statusCode, safeMessage)
   };
 }
 
@@ -115,7 +120,10 @@ export function createErrorResult(statusCode, message, resetsAtMs) {
  */
 export function unavailableResponse(statusCode, message, retryAfter, retryAfterHuman) {
   const retryAfterSec = Math.max(Math.ceil((new Date(retryAfter).getTime() - Date.now()) / 1000), 1);
-  const msg = `${message} (${retryAfterHuman})`;
+  const base = (typeof message === "string" && message.trim())
+    ? message
+    : (DEFAULT_ERROR_MESSAGES[statusCode] || `Upstream error: ${statusCode}`);
+  const msg = `${base} (${retryAfterHuman})`;
   return new Response(
     JSON.stringify({ error: { message: msg } }),
     {
@@ -137,8 +145,8 @@ export function unavailableResponse(statusCode, message, retryAfter, retryAfterH
  * @returns {string} Formatted error message
  */
 export function formatProviderError(error, provider, model, statusCode) {
-  const code = statusCode || error.code || "FETCH_FAILED";
-  const message = error.message || "Unknown error";
+  const code = statusCode || error?.code || "FETCH_FAILED";
+  const message = error?.message || "Unknown error";
   // Expose low-level cause (e.g. UND_ERR_SOCKET, ECONNRESET, ETIMEDOUT) for diagnosing fetch failures
   const causeCode = error.cause?.code;
   const causeMsg = error.cause?.message;

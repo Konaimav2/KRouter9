@@ -296,6 +296,7 @@ export async function handleComboChat({ body, models, handleSingleModel, log, co
   let lastError = null;
   let earliestRetryAfter = null;
   let lastStatus = null;
+  const triedModels = [];
 
   for (let i = 0; i < rotatedModels.length; i++) {
     const modelStr = rotatedModels[i];
@@ -348,10 +349,12 @@ export async function handleComboChat({ body, models, handleSingleModel, log, co
         await new Promise(r => setTimeout(r, cooldownMs));
       }
 
-      // Fallback to next model
+      // Fallback to next model — announced, never silent: a swap means the
+      // client is getting a different voice than requested.
       lastError = errorText || String(result.status);
       if (!lastStatus) lastStatus = result.status;
-      log.warn("COMBO", `Model ${modelStr} failed, trying next`, { status: result.status });
+      triedModels.push(`${modelStr} [${result.status}: ${String(lastError).slice(0, 160)}]`);
+      log.warn("COMBO", `Model ${modelStr} failed, switching to next model in combo${comboName ? ` "${comboName}"` : ""}`, { status: result.status, tried: triedModels.length });
     } catch (error) {
       // Catch unexpected exceptions to ensure fallback continues
       lastError = error.message || String(error);
@@ -366,7 +369,12 @@ export async function handleComboChat({ body, models, handleSingleModel, log, co
   // or have no active credentials. 503 is more accurate and retryable by clients.
   const allDisabled = lastError && lastError.toLowerCase().includes("no credentials");
   const status = allDisabled ? 503 : (lastStatus || 503);
-  const msg = lastError || "All combo models unavailable";
+  // Never emit an empty message: name every tried model and its failure so a
+  // client retry banner shows what happened instead of "<none>".
+  const triedSuffix = triedModels.length
+    ? ` (tried: ${triedModels.join(" → ")})`
+    : "";
+  const msg = `${lastError || "All combo models unavailable"}${triedSuffix}`;
 
   if (earliestRetryAfter) {
     const retryHuman = formatRetryAfter(earliestRetryAfter);
