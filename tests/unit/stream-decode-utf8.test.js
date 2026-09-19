@@ -64,5 +64,8 @@ describe("caveman wenyan opt-in", () => {
     expect(resolveCavemanLevel("wenyan-lite", {})).toBe("ultra");
     expect(resolveCavemanLevel("full", {})).toBe("full");
     expect(resolveCavemanLevel("wenyan", { wenyanOptIn: true })).toBe("wenyan");
+    expect(resolveCavemanLevel(["wenyan"], {})).toBeNull();
+    expect(resolveCavemanLevel("__proto__", {})).toBeNull();
+    expect(resolveCavemanLevel("nope", {})).toBeNull();
   });
 });

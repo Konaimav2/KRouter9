@@ -15,7 +15,11 @@ const WENYAN_LEVELS = new Set([
 // explicit opt-in; otherwise fall back to "ultra" (terse, language-preserving).
 // Unknown levels pass through to the prompt lookup (undefined → no injection).
 export function resolveCavemanLevel(level, { wenyanOptIn = false } = {}) {
+  // Strict string check: non-string levels (arrays, objects, __proto__ tricks)
+  // must not coerce into prompt keys.
+  if (typeof level !== "string") return null;
   if (WENYAN_LEVELS.has(level) && !wenyanOptIn) return "ultra";
+  if (!Object.prototype.hasOwnProperty.call(CAVEMAN_PROMPTS, level)) return null;
   return level;
 }
 

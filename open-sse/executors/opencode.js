@@ -250,10 +250,6 @@ function isResponsesModel(model) {
   return RESPONSES_MODELS.has(base) || isMuseSparkModel(base);
 }
 
-function isMessagesModel(model) {
-  return MESSAGES_MODELS.has(baseModelId(model));
-}
-
 function resolveOpencodeSession(body, credentials, providerSessionId, clientTool) {
   const headers = credentials?.rawHeaders || {};
   const native = nativeSession(headers);
@@ -315,6 +311,7 @@ export class OpenCodeExecutor extends BaseExecutor {
     return {
       ...sourceCredentials,
       [SESSION_FIELD]: resolved,
+      [REQ_FIELD]: deriveRequestId(resolved, body),
     };
   }
 

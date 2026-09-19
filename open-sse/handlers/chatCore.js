@@ -76,6 +76,13 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
 
   const sourceFormat = sourceFormatOverride || detectFormat(body);
 
+  // Reject unknown thinking levels before anything else — including synthetic
+  // bypass responses — so malformed thinking can never slip through any path.
+  const thinkingError = validateThinkingRequest(body, model);
+  if (thinkingError) {
+    return createErrorResult(HTTP_STATUS.BAD_REQUEST, thinkingError);
+  }
+
   // Check for bypass patterns (warmup, skip, cc naming)
   const bypassResponse = handleBypassRequest(body, model, userAgent, ccFilterNaming);
   if (bypassResponse) return bypassResponse;
@@ -121,9 +128,10 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
 
   // Reject unknown thinking levels up front with a 400 (never forward garbage
   // upstream, never silently downgrade). Covers both passthrough and pipeline.
-  const thinkingError = validateThinkingRequest(body, model);
-  if (thinkingError) {
-    return createErrorResult(HTTP_STATUS.BAD_REQUEST, thinkingError);
+  // Re-validated here because providerThinking injection above may add a level.
+  const injectedThinkingError = validateThinkingRequest(body, model);
+  if (injectedThinkingError) {
+    return createErrorResult(HTTP_STATUS.BAD_REQUEST, injectedThinkingError);
   }
 
   const clientWantsStream = clientRequestedStreaming(body, sourceFormat);
