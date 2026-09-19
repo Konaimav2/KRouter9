@@ -10,9 +10,19 @@ describe("client-fault classification (V6)", () => {
     expect(isClientFault(422, "unprocessable entity")).toBe(true);
   });
 
-  it("treats validation/context-length text as client faults", () => {
-    expect(isClientFault(500, "validation error: temperature")).toBe(true);
-    expect(isClientFault(200, "maximum context length exceeded")).toBe(true);
+  it("treats validation/context-length text as client faults on 4xx", () => {
+    expect(isClientFault(400, "validation error: temperature")).toBe(true);
+    expect(isClientFault(400, "maximum context length exceeded")).toBe(true);
+  });
+
+  it("server-status semantics win on 5xx even with client-fault text", () => {
+    expect(isClientFault(503, "upstream queue too long")).toBe(false);
+    expect(isClientFault(500, "validation error: temperature")).toBe(false);
+  });
+
+  it("local validation errors are always client faults (no account lock poisoning)", () => {
+    expect(isClientFault(400, "invalid reasoning level: no credentials")).toBe(true);
+    expect(isClientFault(400, "invalid reasoning level: quota exceeded")).toBe(true);
   });
 
   it("does NOT classify provider faults as client faults", () => {
