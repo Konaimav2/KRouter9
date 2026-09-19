@@ -58,6 +58,13 @@ export function isClientFault(status, errorText) {
   const lower = errorText
     ? (typeof errorText === "string" ? errorText : JSON.stringify(errorText)).toLowerCase()
     : "";
+  // Locally generated validation errors are definitively client faults, even
+  // if the reflected value contains provider-fault phrasing. Without this, a
+  // request like reasoning_effort:"no credentials" would lock every account.
+  if (lower.includes("invalid reasoning level")) return true;
+  // Server-status semantics win for 5xx: text hints apply to 4xx/unknown only,
+  // so a genuine transient (e.g. 503 "queue too long") still falls back.
+  if (status >= 500) return false;
   if (PROVIDER_FAULT_HINTS.some((h) => lower.includes(h))) return false;
   if (CLIENT_FAULT_HINTS.some((h) => lower.includes(h))) return true;
   return CLIENT_FAULT_STATUSES.has(status) && !PROVIDER_FAULT_HINTS.some((h) => lower.includes(h));

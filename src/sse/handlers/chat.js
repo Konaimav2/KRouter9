@@ -40,7 +40,11 @@ function estimateBodyChars(value, depth = 0) {
   if (value == null) return 0;
   if (typeof value === "string") return value.length;
   if (typeof value === "number" || typeof value === "boolean") return 8;
-  if (depth > 4 || typeof value !== "object") return 0;
+  if (typeof value !== "object") return 0;
+  // Depth cap guards pathological nesting; normal message shapes
+  // (body→messages→message→content→part→text, depth 5) must be counted.
+  // The running 2M total cap bounds worst-case work regardless of depth.
+  if (depth > 12) return 0;
   let total = 2; // braces/brackets overhead
   if (Array.isArray(value)) {
     for (let i = 0; i < value.length && total < 2_000_000; i++) {
@@ -76,7 +80,9 @@ export async function handleChat(request, clientRawRequest = null, options = {})
     return errorResponse(HTTP_STATUS.BAD_REQUEST, "Invalid JSON body");
   }
   try {
-    if (JSON.stringify(body).length > MAX_BODY_BYTES) {
+    // Byte-accurate: .length counts UTF-16 units, Buffer.byteLength bytes.
+    const bodyBytes = Buffer.byteLength(JSON.stringify(body), "utf8");
+    if (bodyBytes > MAX_BODY_BYTES) {
       log.warn("CHAT", "Request body too large after parse");
       return errorResponse(HTTP_STATUS.PAYLOAD_TOO_LARGE, `Request body too large: limit is ${MAX_BODY_BYTES} bytes`);
     }
