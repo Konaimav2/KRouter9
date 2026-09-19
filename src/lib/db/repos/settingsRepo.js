@@ -116,6 +116,28 @@ export async function getSettings() {
   return mergeWithDefaults(raw);
 }
 
+// In-process TTL cache for the hot path: getSettings() runs 2-4x per request
+// (DB SELECT + JSON parse + full defaults spread each time). Stale reads are
+// bounded by SETTINGS_CACHE_TTL_MS; writers must call invalidateSettingsCache().
+const SETTINGS_CACHE_TTL_MS = 2000;
+let cachedSettings = null;
+let cachedSettingsAt = 0;
+
+export async function getCachedSettings() {
+  const now = Date.now();
+  if (cachedSettings && now - cachedSettingsAt < SETTINGS_CACHE_TTL_MS) {
+    return cachedSettings;
+  }
+  cachedSettings = await getSettings();
+  cachedSettingsAt = now;
+  return cachedSettings;
+}
+
+export function invalidateSettingsCache() {
+  cachedSettings = null;
+  cachedSettingsAt = 0;
+}
+
 // Atomic read-merge-write inside transaction (prevents losing concurrent updates)
 export async function updateSettings(updates) {
   const db = await getAdapter();
@@ -129,6 +151,7 @@ export async function updateSettings(updates) {
       [stringifyJson(next)],
     );
   });
+  invalidateSettingsCache();
   return mergeWithDefaults(next);
 }
 
