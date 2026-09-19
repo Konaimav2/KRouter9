@@ -1,11 +1,15 @@
 // Transform OpenAI SSE stream to Ollama JSON lines format
+import { createStreamDecoder } from "./streamTextDecoder.js";
+
 export function transformToOllama(response, model) {
   let buffer = "";
   let pendingToolCalls = {};
-  
+  // One decoder per stream: multibyte UTF-8 split across chunks must not U+FFFD.
+  const streamDecoder = createStreamDecoder();
+
   const transform = new TransformStream({
     transform(chunk, controller) {
-      const text = new TextDecoder().decode(chunk);
+      const text = streamDecoder.decode(chunk);
       buffer += text;
       const lines = buffer.split("\n");
       buffer = lines.pop() || "";
@@ -70,6 +74,10 @@ export function transformToOllama(response, model) {
       }
     },
     flush(controller) {
+      // Drain decoder state; a trailing partial line cannot be parsed, but its
+      // bytes must not be silently lost to decoder state.
+      const tail = streamDecoder.flush();
+      if (tail) buffer += tail;
       const ollamaEnd = JSON.stringify({ model, message: { role: "assistant", content: "" }, done: true }) + "\n";
       controller.enqueue(new TextEncoder().encode(ollamaEnd));
     }

@@ -200,7 +200,16 @@ function encodeSSEError(code, message, details) {
 }
 
 function inspectSSEChunk(chunk, state) {
-  for (const line of decoder.decode(chunk).split("\n")) {
+  // Per-run decoder: the old module-level shared decoder raced across
+  // concurrent streams and split multibyte UTF-8 into U+FFFD.
+  if (!state.decoder) {
+    state.decoder = new TextDecoder("utf-8", { fatal: false });
+    state.decoderRemainder = "";
+  }
+  const text = state.decoder.decode(chunk, { stream: true });
+  const lines = (state.decoderRemainder + text).split("\n");
+  state.decoderRemainder = lines.pop() || "";
+  for (const line of lines) {
     if (!line.startsWith("data: ")) continue;
     const data = line.slice(6).trim();
     if (!data || data === "[DONE]") continue;

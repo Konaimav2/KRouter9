@@ -6,6 +6,7 @@
 
 import fs from "fs";
 import path from "path";
+import { createStreamDecoder } from "../utils/streamTextDecoder.js";
 
 // Create log directory for responses (Node.js only)
 export function createResponsesLogger(model, logsDir = null) {
@@ -52,6 +53,8 @@ export function createResponsesLogger(model, logsDir = null) {
  * @returns {TransformStream}
  */
 export function createResponsesApiTransformStream(logger = null) {
+  // One decoder per stream: multibyte UTF-8 split across chunks must not U+FFFD.
+  const streamDecoder = createStreamDecoder();
   const state = {
     seq: 0,
     responseId: `resp_${Date.now()}`,
@@ -239,15 +242,13 @@ export function createResponsesApiTransformStream(logger = null) {
     }
   };
 
-  return new TransformStream({
-    transform(chunk, controller) {
-      const text = new TextDecoder().decode(chunk);
-      logger?.logInput(text.trim());
-      state.buffer += text;
-
-      const messages = state.buffer.split("\n\n");
-      state.buffer = messages.pop() || "";
-
+  // Split complete SSE messages off the buffer and process them. At flush,
+  // `final=true` forces a terminator so a trailing partial line is processed
+  // instead of dropped (parse errors inside are caught per-message).
+  const processMessages = (controller, final = false) => {
+    if (final && state.buffer.trim()) state.buffer += "\n\n";
+    const messages = state.buffer.split("\n\n");
+    state.buffer = final ? "" : (messages.pop() || "");
       for (const msg of messages) {
         if (!msg.trim()) continue;
 
@@ -422,9 +423,22 @@ export function createResponsesApiTransformStream(logger = null) {
           sendCompleted(controller);
         }
       }
+  };
+
+  return new TransformStream({
+    transform(chunk, controller) {
+      const text = streamDecoder.decode(chunk);
+      logger?.logInput(text.trim());
+      state.buffer += text;
+
+      processMessages(controller);
     },
 
     flush(controller) {
+      // Drain any trailing decoded bytes first so a final partial line is processed.
+      const tail = streamDecoder.flush();
+      if (tail) state.buffer += tail;
+      processMessages(controller, true);
       for (const i in state.msgItemAdded) closeMessage(controller, i);
       closeReasoning(controller);
       for (const i in state.funcCallIds) closeToolCall(controller, i);

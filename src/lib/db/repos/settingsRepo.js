@@ -75,6 +75,9 @@ const DEFAULT_SETTINGS = {
   headroomTimeoutMs: 3000,
   cavemanEnabled: false,
   cavemanLevel: "full",
+  // Explicit opt-in for wenyan (classical Chinese) levels; without it the
+  // gateway falls back to "ultra" so replies keep the user's language.
+  cavemanWenyanOptIn: false,
   ponytailEnabled: false,
   ponytailLevel: "full",
   pxpipeEnabled: false,
