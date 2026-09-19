@@ -341,7 +341,10 @@ export default function TokenSaverClient() {
 
   const handleCavemanLevel = (level) => {
     setCavemanLevel(level);
-    patchSetting({ cavemanLevel: level });
+    // Picking a wenyan level is the explicit opt-in (server falls back to
+    // "ultra" without it); leaving wenyan clears the opt-in.
+    const picked = CAVEMAN_LEVELS.find((lvl) => lvl.id === level);
+    patchSetting({ cavemanLevel: level, cavemanWenyanOptIn: !!picked?.wenyan });
   };
 
   const handlePonytailEnabled = (value) => {
