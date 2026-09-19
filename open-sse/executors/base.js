@@ -188,6 +188,9 @@ export class BaseExecutor {
         dbg("FETCH", `${this.provider.toUpperCase()} ✖ ${error.name}: ${error.message}${isConnectTimeout ? " (connect timeout)" : ""}`);
         // Connect timeout is internal — convert to retryable network error, don't propagate AbortError
         if (error.name === "AbortError" && !isConnectTimeout) throw error;
+        // Pre-dispatch client faults (relay payload cap) must not be retried
+        // or reclassified: surface immediately.
+        if (error?.status === HTTP_STATUS.PAYLOAD_TOO_LARGE || error?.code === "RELAY_PAYLOAD_TOO_LARGE") throw error;
 
         // Map network/fetch exceptions to 502 retry config
         if (await tryRetry(urlIndex, HTTP_STATUS.BAD_GATEWAY, `network "${error.message}"`)) { urlIndex--; continue; }

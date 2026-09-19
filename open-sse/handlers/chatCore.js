@@ -421,6 +421,11 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
       streamController.handleError(error);
       return createErrorResult(499, "Request aborted");
     }
+    // Pre-dispatch client faults (e.g. relay payload too large) surface as-is:
+    // never reclassify as 502, never burn a retry or an account cooldown.
+    if (error?.status === HTTP_STATUS.PAYLOAD_TOO_LARGE || error?.code === "RELAY_PAYLOAD_TOO_LARGE") {
+      return createErrorResult(HTTP_STATUS.PAYLOAD_TOO_LARGE, error.message || "Request body too large for relay egress");
+    }
     const errMsg = formatProviderError(error, provider, model, HTTP_STATUS.BAD_GATEWAY);
     if (log?.errorLine) {
       log.errorLine(reqTag, "✗", `ERROR 502 · ${provider}/${model} · ${Date.now() - requestStartTime}ms\n    ${errMsg}${error.stack ? `\n    ${error.stack}` : ""}`);

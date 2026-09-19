@@ -15,7 +15,7 @@ export function getQuotaCooldown(backoffLevel = 0) {
 // Statuses that indicate the REQUEST is bad, not the account/provider. Retrying
 // another account cannot fix these, so they must not lock or cooldown a healthy
 // account.
-const CLIENT_FAULT_STATUSES = new Set([400, 406, 422]);
+const CLIENT_FAULT_STATUSES = new Set([400, 406, 413, 422]);
 // Explicit bad-request signals in the message.
 const CLIENT_FAULT_HINTS = [
   "invalid request",
@@ -26,6 +26,10 @@ const CLIENT_FAULT_HINTS = [
   "context length",
   "maximum context",
   "too long",
+  "too large",
+  "payload too large",
+  "request body too large",
+  "relay egress",
   "validation error",
 ];
 
@@ -68,6 +72,12 @@ export function isClientFault(status, errorText) {
  * @returns {{ shouldFallback: boolean, cooldownMs: number, newBackoffLevel?: number }}
  */
 export function checkFallbackError(status, errorText, backoffLevel = 0) {
+  // Client faults never fall back: retrying another account/model with the
+  // same bad request cannot succeed (e.g. 413 payload too large).
+  if (isClientFault(status, errorText)) {
+    return { shouldFallback: false, cooldownMs: 0 };
+  }
+
   const lowerError = errorText
     ? (typeof errorText === "string" ? errorText : JSON.stringify(errorText)).toLowerCase()
     : "";

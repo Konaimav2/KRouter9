@@ -16,6 +16,7 @@ import { DEFAULT_HEADROOM_URL } from "@/lib/headroom/detect";
 import { getTransform as getPxpipeTransform } from "@/lib/pxpipe/loader.js";
 import { appendPxpipeEvent } from "@/lib/pxpipe/events.js";
 import { errorResponse, unavailableResponse } from "open-sse/utils/error.js";
+import { checkBodyLimit, MAX_BODY_BYTES } from "@/lib/bodyLimit.js";
 import { handleComboChat, handleFusionChat, detectRequiredCapabilities } from "open-sse/services/combo.js";
 import { augmentModelsWithCapacityAdapter, withCapacityAdapterStripping, getActiveAdapterStrategy } from "open-sse/services/capacityAdapter.js";
 import { handleBypassRequest } from "open-sse/utils/bypassHandler.js";
@@ -32,6 +33,13 @@ import { stripModelContextMarker } from "open-sse/utils/modelMarkers.js";
  * Format detection and translation handled by translator
  */
 export async function handleChat(request, clientRawRequest = null, options = {}) {
+  // Entry body-size guard (25 MB). Content-Length is checked before parsing;
+  // chunked bodies without it are measured after parse. Fail fast with 413.
+  const entryLimit = checkBodyLimit(request.headers.get("content-length"));
+  if (!entryLimit.ok) {
+    log.warn("CHAT", `Request body too large: ${request.headers.get("content-length")} bytes`);
+    return errorResponse(HTTP_STATUS.PAYLOAD_TOO_LARGE, `Request body too large: limit is ${MAX_BODY_BYTES} bytes`);
+  }
   let body;
   try {
     body = await request.json();
@@ -39,6 +47,12 @@ export async function handleChat(request, clientRawRequest = null, options = {})
     log.warn("CHAT", "Invalid JSON body");
     return errorResponse(HTTP_STATUS.BAD_REQUEST, "Invalid JSON body");
   }
+  try {
+    if (JSON.stringify(body).length > MAX_BODY_BYTES) {
+      log.warn("CHAT", "Request body too large after parse");
+      return errorResponse(HTTP_STATUS.PAYLOAD_TOO_LARGE, `Request body too large: limit is ${MAX_BODY_BYTES} bytes`);
+    }
+  } catch { /* unmeasurable body passes through to normal handling */ }
 
   // Client IP: custom-server stamps the unspoofable socket-derived address
   // (XFF trusted only from a loopback reverse proxy). Used for request logs.

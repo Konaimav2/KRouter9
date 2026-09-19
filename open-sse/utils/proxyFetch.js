@@ -2,6 +2,10 @@ import { Readable } from "stream";
 import { MEMORY_CONFIG } from "../config/runtimeConfig.js";
 import { dbg } from "./debugLog.js";
 
+// Max request body for relay egress (Vercel/Cloudflare/Deno edge relays cap
+// bodies far below the gateway entry limit; Vercel edge is ~4.5 MB).
+export const RELAY_MAX_BODY_BYTES = 4 * 1024 * 1024;
+
 const originalFetch = globalThis.fetch;
 const proxyDispatchers = new Map();
 
@@ -297,6 +301,21 @@ export async function proxyAwareFetch(url, options = {}, proxyOptions = null) {
   // Vercel relay: forward request via relay headers
   const vercelRelayUrl = normalizeString(proxyOptions?.vercelRelayUrl);
   if (vercelRelayUrl) {
+    // Edge relays cap request bodies far below our entry limit (~4.5 MB on
+    // Vercel). Fail fast with a clear 413 instead of burning quota on a hop
+    // that is guaranteed to reject.
+    const relayBody = options.body;
+    const relayBytes = typeof relayBody === "string"
+      ? Buffer.byteLength(relayBody, "utf8")
+      : relayBody?.byteLength ?? relayBody?.length ?? 0;
+    if (relayBytes > RELAY_MAX_BODY_BYTES) {
+      const err = new Error(
+        `Request body too large for relay egress: ${relayBytes} bytes (relay limit ${RELAY_MAX_BODY_BYTES} bytes)`
+      );
+      err.code = "RELAY_PAYLOAD_TOO_LARGE";
+      err.status = 413;
+      throw err;
+    }
     const parsed = new URL(targetUrl);
     const relayHeaders = {
       ...options.headers,
