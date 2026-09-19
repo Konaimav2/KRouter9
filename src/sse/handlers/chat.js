@@ -9,7 +9,7 @@ import {
 } from "../services/auth.js";
 import { handleAntigravityQuotaError, clearAntigravityStrikes } from "../services/antigravityQuota.js";
 import { circuitBreaker } from "open-sse/utils/circuitBreaker.js";
-import { getSettings } from "@/lib/localDb";
+import { getCachedSettings } from "@/lib/localDb";
 import { getModelInfo, getComboModels } from "../services/model.js";
 import { handleChatCore } from "open-sse/handlers/chatCore.js";
 import { DEFAULT_HEADROOM_URL } from "@/lib/headroom/detect";
@@ -17,6 +17,10 @@ import { getTransform as getPxpipeTransform } from "@/lib/pxpipe/loader.js";
 import { appendPxpipeEvent } from "@/lib/pxpipe/events.js";
 import { errorResponse, unavailableResponse } from "open-sse/utils/error.js";
 import { checkBodyLimit, MAX_BODY_BYTES } from "@/lib/bodyLimit.js";
+import { getApiKeyByKey } from "@/lib/localDb";
+import { checkRateLimit, checkTpmLimit } from "@/lib/rateLimit.js";
+import { isModelAllowedForKey } from "@/lib/apiKeyPolicy.js";
+import { reserveBudget } from "@/lib/budget.js";
 import { handleComboChat, handleFusionChat, detectRequiredCapabilities } from "open-sse/services/combo.js";
 import { augmentModelsWithCapacityAdapter, withCapacityAdapterStripping, getActiveAdapterStrategy } from "open-sse/services/capacityAdapter.js";
 import { handleBypassRequest } from "open-sse/utils/bypassHandler.js";
@@ -26,6 +30,30 @@ import * as log from "../utils/logger.js";
 import { updateProviderCredentials, checkAndRefreshToken } from "../services/tokenRefresh.js";
 import { getProjectIdForConnection } from "open-sse/services/projectId.js";
 import { stripModelContextMarker } from "open-sse/utils/modelMarkers.js";
+
+/**
+ * Approximate character count of a request body WITHOUT a full JSON.stringify.
+ * Sums string lengths recursively (capped per value) — sufficient for token
+ * estimation, which only needs order-of-magnitude input size.
+ */
+function estimateBodyChars(value, depth = 0) {
+  if (value == null) return 0;
+  if (typeof value === "string") return value.length;
+  if (typeof value === "number" || typeof value === "boolean") return 8;
+  if (depth > 4 || typeof value !== "object") return 0;
+  let total = 2; // braces/brackets overhead
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length && total < 2_000_000; i++) {
+      total += estimateBodyChars(value[i], depth + 1);
+    }
+    return total;
+  }
+  for (const k of Object.keys(value)) {
+    if (total >= 2_000_000) break;
+    total += k.length + 4 + estimateBodyChars(value[k], depth + 1);
+  }
+  return total;
+}
 
 /**
  * Handle chat completion request
@@ -88,7 +116,7 @@ export async function handleChat(request, clientRawRequest = null, options = {})
   // Enforce API key if enabled in settings.
   // `options.internal` (dashboard playground) is same-origin + auth-gated by the
   // dashboard guard, so it skips the end-user API key requirement.
-  const settings = await getSettings();
+  const settings = await getCachedSettings();
   if (settings.requireApiKey && !options.internal) {
     if (!apiKey) {
       log.warn("AUTH", "Missing API key (requireApiKey=true)");
@@ -110,9 +138,6 @@ export async function handleChat(request, clientRawRequest = null, options = {})
   if (apiKey) {
     let keyRow = null;
     try {
-      const { getApiKeyByKey } = await import("@/lib/localDb");
-      const { checkRateLimit, checkTpmLimit } = await import("@/lib/rateLimit.js");
-      const { isModelAllowedForKey } = await import("@/lib/apiKeyPolicy.js");
       keyRow = await getApiKeyByKey(apiKey);
       if (keyRow) {
         if (!isModelAllowedForKey(keyRow, modelStr)) {
@@ -125,8 +150,12 @@ export async function handleChat(request, clientRawRequest = null, options = {})
           const retryIso = new Date(Date.now() + (rpm.retryAfterSec || 60) * 1000).toISOString();
           return unavailableResponse(HTTP_STATUS.RATE_LIMITED, `API key rate limit exceeded (${rpm.limit}/min)`, retryIso, `retry after ${rpm.retryAfterSec}s`);
         }
-        const estTokens = Math.max(1, Math.ceil(JSON.stringify(body?.messages || body || "").length / 4));
-        const tpm = checkTpmLimit(keyRow.id, estTokens, keyRow.tpmLimit || 0);
+        const tpmLimit = keyRow.tpmLimit || 0;
+        // Skip the estimate entirely when unlimited: no full-body stringify.
+        const estTokens = tpmLimit > 0
+          ? Math.max(1, Math.ceil(estimateBodyChars(body) / 4))
+          : 0;
+        const tpm = checkTpmLimit(keyRow.id, estTokens, tpmLimit);
         if (!tpm.ok) {
           log.warn("AUTH", `API key TPM exceeded (limit ${tpm.limit})`);
           const retryIso = new Date(Date.now() + (tpm.retryAfterSec || 60) * 1000).toISOString();
@@ -157,8 +186,7 @@ export async function handleChat(request, clientRawRequest = null, options = {})
   // but the reserve step throws. Reconciled to real usage by usageRepo.
   if (enforcementKeyRow && ((Number(enforcementKeyRow.creditLimit) || 0) > 0 || (Number(enforcementKeyRow.quotaLimit) || 0) > 0)) {
     try {
-      const { reserveBudget } = await import("@/lib/budget.js");
-      const estTokens = Math.max(1, Math.ceil(JSON.stringify(body?.messages || body || "").length / 4)) + 1024;
+      const estTokens = Math.max(1, Math.ceil(estimateBodyChars(body) / 4)) + 1024;
       const res = await reserveBudget(enforcementKeyRow, { apiKey, estTokens });
       if (!res.ok) {
         log.warn("AUTH", res.message);
@@ -248,7 +276,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
 
   // KRouter9 guardrails (fail-open, settings-gated, default OFF)
   try {
-    const gs = await getSettings();
+    const gs = await getCachedSettings();
     if (gs.guardrailsEnabled) {
       const { redactCredentials } = await import("@/lib/guardrails/credentialMasker.js");
       const { evaluatePromptInjection } = await import("@/lib/guardrails/promptInjection.js");
@@ -265,7 +293,6 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       }
       const inj = evaluatePromptInjection(body, { block: !!gs.guardrailBlockInjection });
       if (inj.block) {
-        const { errorResponse } = await import("open-sse/utils/error.js");
         return errorResponse(400, "Blocked by prompt-injection guardrail");
       }
     }
@@ -275,7 +302,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
   if (!modelInfo.provider) {
     const comboModels = await getComboModels(modelStr);
     if (comboModels) {
-      const chatSettings = await getSettings();
+      const chatSettings = await getCachedSettings();
       // Check for combo-specific strategy first, fallback to global
       const comboStrategies = chatSettings.comboStrategies || {};
       const comboSpecificStrategy = comboStrategies[modelStr]?.fallbackStrategy;
@@ -368,7 +395,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
     }
 
     // Use shared chatCore
-    const chatSettings = await getSettings();
+    const chatSettings = await getCachedSettings();
     const providerThinking = (chatSettings.providerThinking || {})[provider] || null;
     const result = await handleChatCore({
       body: { ...body, model: `${provider}/${model}` },
