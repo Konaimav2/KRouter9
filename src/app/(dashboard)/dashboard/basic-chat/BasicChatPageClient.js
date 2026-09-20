@@ -3,7 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge, Button } from "@/shared/components";
 import { getModelsByProviderId } from "@/shared/constants/models";
-import { isAnthropicCompatibleProvider, isOpenAICompatibleProvider } from "@/shared/constants/providers";
+import {
+  getProviderLabel,
+  requestPrefixFor,
+  normalizeStaticModel,
+  normalizeLiveModel,
+  dedupeModels,
+} from "@/shared/utils/playgroundModels.js";
+
 
 const STORAGE_KEYS = {
   sessions: "basic-chat.sessions",
@@ -109,61 +116,12 @@ function cloneSession(session) {
   };
 }
 
-function getProviderLabel(connection) {
-  return connection?.name || humanize(connection?.provider || connection?.id || "provider");
-}
-
-function normalizeStaticModel(model, connection) {
-  if (!model?.id) return null;
-  return {
-    id: `${connection.provider}/${model.id}`,
-    requestModel: `${connection.provider}/${model.id}`,
-    name: model.name || model.id,
-    providerId: connection.provider,
-    providerName: getProviderLabel(connection),
-    source: "static",
-  };
-}
-
-function normalizeLiveModel(model, connection) {
-  const rawId = typeof model === "string" ? model : model?.id || model?.name || model?.model || "";
-  if (!rawId) return null;
-
-  const displayName = typeof model === "string"
-    ? model
-    : model?.name || model?.displayName || rawId;
-
-  let requestModel = rawId;
-  const isCompatible = isOpenAICompatibleProvider(connection.provider) || isAnthropicCompatibleProvider(connection.provider);
-  if (isCompatible && !rawId.includes("/")) {
-    requestModel = `${connection.provider}/${rawId}`;
-  }
-
-  return {
-    id: requestModel,
-    requestModel,
-    name: displayName,
-    providerId: connection.provider,
-    providerName: getProviderLabel(connection),
-    source: "live",
-  };
-}
-
 function parseProviderModelsPayload(data) {
   if (Array.isArray(data?.models)) return data.models;
   if (Array.isArray(data?.data)) return data.data;
   if (Array.isArray(data?.results)) return data.results;
   if (Array.isArray(data)) return data;
   return [];
-}
-
-function dedupeModels(models) {
-  const map = new Map();
-  for (const model of models) {
-    if (!model?.id) continue;
-    if (!map.has(model.id)) map.set(model.id, model);
-  }
-  return Array.from(map.values());
 }
 
 export default function BasicChatPageClient() {
@@ -219,6 +177,13 @@ export default function BasicChatPageClient() {
 
       try {
         const providersRes = await fetch("/api/providers?mode=full", { cache: "no-store" });
+        if (providersRes.status === 401) {
+          if (!cancelled) {
+            setProviderGroups([]);
+            setLoadError("Session expired — please log in again.");
+          }
+          return;
+        }
         const providersData = await providersRes.json().catch(() => ({}));
         const connections = Array.isArray(providersData.connections)
           ? providersData.connections.filter((connection) => connection?.isActive !== false)
@@ -288,12 +253,27 @@ export default function BasicChatPageClient() {
         }
 
         const normalized = Array.from(providerMap.values())
-          .map((group) => ({
-            ...group,
-            models: dedupeModels(group.models).sort((a, b) => a.name.localeCompare(b.name)),
-          }))
+          .map((group) => {
+            const models = dedupeModels(group.models).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+            // Keep connected groups even when model discovery fails, with a
+            // typeable placeholder — like ModelSelectModal — instead of vanishing.
+            if (models.length === 0 && group.connections.length > 0) {
+              const conn = group.connections[0];
+              const prefix = requestPrefixFor(conn);
+              models.push({
+                id: `${prefix}/model-id`,
+                requestModel: `${prefix}/model-id`,
+                name: `${prefix}/model-id`,
+                providerId: group.providerId,
+                providerName: group.providerName,
+                source: "placeholder",
+                isPlaceholder: true,
+              });
+            }
+            return { ...group, models };
+          })
           .filter((group) => group.models.length > 0)
-          .sort((a, b) => a.providerName.localeCompare(b.providerName));
+          .sort((a, b) => String(a.providerName).localeCompare(String(b.providerName)));
 
         if (!cancelled) {
           setProviderGroups(normalized);
@@ -383,6 +363,7 @@ export default function BasicChatPageClient() {
     const savedModel = activeModelId && modelIndex.has(activeModelId)
       ? modelIndex.get(activeModelId)
       : savedProvider.models[0];
+    if (!savedModel) return;
 
     if (sessions.length > 0) {
       const session = sessions.find((item) => item.id === activeSessionId) || sessions[0];
