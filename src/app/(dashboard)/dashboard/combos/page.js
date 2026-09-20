@@ -417,6 +417,8 @@ function CapacityAdapterSection({ capacityAdapter, onChange, activeProviders, ge
           <p className="text-sm font-medium">Vision Adapter</p>
           <p className="text-xs text-text-muted mt-0.5">
             Your model can&apos;t read image/audio? Auto-switches to a model in the pool below.
+            Pools accept individual models and combo names of any kind — combos expand to
+            their members at request time and capability is checked per member.
           </p>
           <ul className="mt-1.5 text-[11px] text-text-muted flex flex-col gap-0.5">
             <li><span className="font-medium text-text-main">Vision</span> — images (png, jpg, webp, …)</li>
@@ -545,6 +547,7 @@ function CapacityAdapterCap({ cap, entry, onChange, activeProviders, getCaps }) 
           title={`Add ${cap.label} Model`}
           addedModelValues={models}
           capFilter={cap.key}
+          includeCombos
           closeOnSelect={false}
         />
       )}

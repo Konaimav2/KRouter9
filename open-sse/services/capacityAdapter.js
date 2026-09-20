@@ -9,6 +9,7 @@
  * never overrides a combo that already has a member covering the capability.
  */
 import { getCapabilitiesForModel } from "../providers/capabilities.js";
+import { getComboModelsFromData } from "./combo.js";
 
 const CAPABILITY_KEYS = ["vision", "pdf", "audioInput", "videoInput"];
 const HARD_CAPS = new Set(CAPABILITY_KEYS);
@@ -41,16 +42,25 @@ export function getCapacityAdapterConfig(cap, settings) {
 }
 
 // Flatten enabled models across all capability pools, in priority order, deduped.
-export function getCapacityAdapterModels(settings) {
+// Pool entries that name a combo (no slash) expand to that combo's members so
+// the capability pre-check below applies to the members, not the combo name.
+// combosData is [{name, models}] like getComboModelsFromData expects; empty
+// keeps old behavior (combo names never satisfy and get filtered out).
+export function getCapacityAdapterModels(settings, combosData = []) {
   const seen = new Set();
   const models = [];
   for (const cap of CAPABILITY_KEYS) {
     const { enabled, models: pool } = getCapacityAdapterConfig(cap, settings);
     if (!enabled) continue;
     for (const m of pool) {
-      if (!seen.has(m)) {
-        seen.add(m);
-        models.push(m);
+      const members = typeof m === "string" && !m.includes("/") && combosData.length > 0
+        ? getComboModelsFromData(m, combosData)
+        : null;
+      for (const resolved of members || [m]) {
+        if (!seen.has(resolved)) {
+          seen.add(resolved);
+          models.push(resolved);
+        }
       }
     }
   }
@@ -89,12 +99,12 @@ function modelSatisfies(modelStr, requiredHard) {
 // original models follow as fallback. Leaves `models` untouched when the
 // original list already covers it (combo.js's reorderByCapabilities handles
 // that case via autoSwitch).
-export function augmentModelsWithCapacityAdapter(models, requiredCapabilities, settings) {
+export function augmentModelsWithCapacityAdapter(models, requiredCapabilities, settings, combosData = []) {
   const hard = [...(requiredCapabilities || [])].filter((c) => HARD_CAPS.has(c));
   if (hard.length === 0 || !Array.isArray(models) || models.length === 0) return models;
   if (models.some((m) => modelSatisfies(m, hard))) return models;
 
-  const pool = getCapacityAdapterModels(settings).filter((m) => !models.includes(m) && modelSatisfies(m, hard));
+  const pool = getCapacityAdapterModels(settings, combosData).filter((m) => !models.includes(m) && modelSatisfies(m, hard));
   if (pool.length === 0) return models;
   return [...pool, ...models];
 }

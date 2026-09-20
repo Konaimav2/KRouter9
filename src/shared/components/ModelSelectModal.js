@@ -81,6 +81,7 @@ export default function ModelSelectModal({
   capFilter = null,
   addedModelValues = [],
   closeOnSelect = true,
+  includeCombos = false,
 }) {
   // Filter activeProviders by serviceKinds when kindFilter set (e.g. "webSearch", "webFetch")
   const filteredActiveProviders = useMemo(() => {
@@ -423,12 +424,16 @@ export default function ModelSelectModal({
   }, [filteredActiveProviders, modelAliases, allProviders, providerNodes, customModels, disabledModels, kindFilter, activeProviders, cursorModels, clineModels, clinepassModels]);
 
   // Filter combos by search query (and hide combos when kindFilter is set — combos are LLM-only by design)
+  // includeCombos overrides the capFilter hide: capacity-adapter pools accept
+  // combo names (expanded to members server-side), capability pre-check applies
+  // to the members, not the combo entry itself.
   const filteredCombos = useMemo(() => {
-    if (kindFilter || capFilter) return [];
+    if (kindFilter) return [];
+    if (capFilter && !includeCombos) return [];
     if (!searchQuery.trim()) return combos;
     const query = searchQuery.toLowerCase();
     return combos.filter(c => (c?.name || "").toLowerCase().includes(query));
-  }, [combos, searchQuery, kindFilter]);
+  }, [combos, searchQuery, kindFilter, capFilter, includeCombos]);
 
   // Sort models alphabetically, with added models floated to top
   const sortModels = (models) => {
@@ -499,7 +504,10 @@ export default function ModelSelectModal({
       {/* Info bar */}
       <div className="flex items-center gap-2 mb-3 px-2.5 py-2 bg-primary/8 border border-primary/20 rounded-lg text-xs text-text-muted">
         <span className="material-symbols-outlined text-primary shrink-0" style={{ fontSize: "14px" }}>info</span>
-        <span>Click to add, click again to remove. Changes are saved automatically.</span>
+        <span>
+          Click to add, click again to remove. Changes are saved automatically.
+          {includeCombos && capFilter && " Combos are listed for convenience — capability is checked against their members at request time."}
+        </span>
       </div>
 
       {/* Search - compact */}
@@ -653,6 +661,8 @@ ModelSelectModal.propTypes = {
   title: PropTypes.string,
   modelAliases: PropTypes.object,
   kindFilter: PropTypes.string,
+  capFilter: PropTypes.string,
   addedModelValues: PropTypes.arrayOf(PropTypes.string),
   closeOnSelect: PropTypes.bool,
+  includeCombos: PropTypes.bool,
 };

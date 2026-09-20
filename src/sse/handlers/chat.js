@@ -9,7 +9,7 @@ import {
 } from "../services/auth.js";
 import { handleAntigravityQuotaError, clearAntigravityStrikes } from "../services/antigravityQuota.js";
 import { circuitBreaker } from "open-sse/utils/circuitBreaker.js";
-import { getCachedSettings } from "@/lib/localDb";
+import { getCachedSettings, getCombos } from "@/lib/localDb";
 import { getModelInfo, getComboModels } from "../services/model.js";
 import { handleChatCore } from "open-sse/handlers/chatCore.js";
 import { DEFAULT_HEADROOM_URL } from "@/lib/headroom/detect";
@@ -39,6 +39,23 @@ import { stripModelContextMarker } from "open-sse/utils/modelMarkers.js";
  * guards call-stack depth; every reachable string is counted.
  */
 const ESTIMATE_CEILING = 100_000_000;
+
+// Capacity-adapter pools may name combos (slash-less) instead of models.
+// Load combo defs only then, so plain model pools cost no extra DB read.
+async function getAdapterCombosData(settings) {
+  const pools = settings?.capacityAdapter;
+  if (!pools || typeof pools !== "object") return [];
+  const hasComboRef = Object.values(pools).some((entry) =>
+    Array.isArray(entry?.models) && entry.models.some((m) => typeof m === "string" && !m.includes("/"))
+  );
+  if (!hasComboRef) return [];
+  try {
+    return await getCombos();
+  } catch {
+    return [];
+  }
+}
+
 function estimateBodyChars(value, depth = 0) {
   if (value == null) return 0;
   if (typeof value === "string") return Math.min(value.length, ESTIMATE_CEILING);
@@ -221,7 +238,8 @@ export async function handleChat(request, clientRawRequest = null, options = {})
     const comboStrategies = settings.comboStrategies || {};
     const comboSpecificStrategy = comboStrategies[modelStr]?.fallbackStrategy;
     const comboStrategy = comboSpecificStrategy || settings.comboStrategy || "fallback";
-    const augmentedModels = augmentModelsWithCapacityAdapter(comboModels, requiredCapabilities, settings);
+    const adapterCombos = await getAdapterCombosData(settings);
+    const augmentedModels = augmentModelsWithCapacityAdapter(comboModels, requiredCapabilities, settings, adapterCombos);
     const adapterAdded = augmentedModels.filter((m) => !comboModels.includes(m));
 
     if (comboStrategy === "fusion") {
@@ -262,7 +280,8 @@ export async function handleChat(request, clientRawRequest = null, options = {})
 
   // Single model request — may still switch to a capacity-adapter model if the
   // target lacks a capability the request needs (e.g. no vision, request has an image).
-  const soloAugmented = augmentModelsWithCapacityAdapter([modelStr], requiredCapabilities, settings);
+  const adapterCombos = await getAdapterCombosData(settings);
+  const soloAugmented = augmentModelsWithCapacityAdapter([modelStr], requiredCapabilities, settings, adapterCombos);
   if (soloAugmented.length > 1) {
     const adapterAdded = soloAugmented.filter((m) => m !== modelStr);
     log.info("CHAT", `Capacity adapter for [${[...requiredCapabilities].join(",")}] on "${modelStr}" → trying ${soloAugmented.join(", ")}`);
@@ -322,7 +341,8 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       const comboSpecificStrategy = comboStrategies[modelStr]?.fallbackStrategy;
       const comboStrategy = comboSpecificStrategy || chatSettings.comboStrategy || "fallback";
       const requiredCapabilities = detectRequiredCapabilities(body);
-      const augmentedModels = augmentModelsWithCapacityAdapter(comboModels, requiredCapabilities, chatSettings);
+      const adapterCombos = await getAdapterCombosData(chatSettings);
+      const augmentedModels = augmentModelsWithCapacityAdapter(comboModels, requiredCapabilities, chatSettings, adapterCombos);
       const adapterAdded = augmentedModels.filter((m) => !comboModels.includes(m));
 
       if (comboStrategy === "fusion") {
