@@ -15,28 +15,25 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
   const proxyPoolMap = new Map((proxyPools || []).map((pool) => [pool.id, pool]));
   const boundProxyPoolId = connection.providerSpecificData?.proxyPoolId || null;
   const boundProxyPool = boundProxyPoolId ? proxyPoolMap.get(boundProxyPoolId) : null;
-  const hasLegacyProxy = connection.providerSpecificData?.connectionProxyEnabled === true && !!connection.providerSpecificData?.connectionProxyUrl;
+  const hasLegacyProxy = connection.providerSpecificData?.connectionProxyEnabled === true && (!!connection.providerSpecificData?.connectionProxyUrl || !!connection.providerSpecificData?.connectionProxyUrlMasked);
   const hasAnyProxy = !!boundProxyPoolId || hasLegacyProxy;
   const proxyDisplayText = boundProxyPool
     ? `Pool: ${boundProxyPool.name}`
     : boundProxyPoolId
       ? `Pool: ${boundProxyPoolId} (inactive/missing)`
       : hasLegacyProxy
-        ? `Legacy: ${connection.providerSpecificData?.connectionProxyUrl}`
+        ? "Legacy proxy (credentials hidden)"
         : "";
   const autoPingTooltip = autoPing?.provider === "codex"
     ? "Auto-starts the next 5h Codex window after reset by sending a tiny gpt-5.5 request. Consumes a small amount of quota."
     : "When your 5h quota runs out, auto-sends a request the moment it resets so a new window starts right away.";
 
   let maskedProxyUrl = "";
-  if (boundProxyPool?.proxyUrl || connection.providerSpecificData?.connectionProxyUrl) {
-    const rawProxyUrl = boundProxyPool?.proxyUrl || connection.providerSpecificData?.connectionProxyUrl;
-    try {
-      const parsed = new URL(rawProxyUrl);
-      maskedProxyUrl = `${parsed.protocol}//${parsed.hostname}${parsed.port ? `:${parsed.port}` : ""}`;
-    } catch {
-      maskedProxyUrl = rawProxyUrl;
-    }
+  // Server-masked fields only — never render a raw proxy URL (see proxyMask.js).
+  const rawMasked = boundProxyPool?.proxyUrlMasked
+    || connection.providerSpecificData?.connectionProxyUrlMasked;
+  if (rawMasked) {
+    maskedProxyUrl = rawMasked;
   }
 
   const noProxyText = boundProxyPool?.noProxy || connection.providerSpecificData?.connectionNoProxy || "";

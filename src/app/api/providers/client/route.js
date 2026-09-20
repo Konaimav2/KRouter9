@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getProviderConnections } from "@/lib/localDb";
 import { backfillCodexEmails } from "@/lib/oauth/providers";
 import { USAGE_APIKEY_PROVIDERS, USAGE_SUPPORTED_PROVIDERS } from "@/shared/constants/providers";
+import { maskProxyUrl, hasProxyAuth } from "@/lib/proxyMask.js";
 
 const SAFE_FIELDS = [
   "id", "provider", "authType", "name", "email", "displayName",
@@ -14,7 +15,7 @@ const SAFE_FIELDS = [
 const SAFE_PSD_FIELDS = [
   "baseUrl", "azureEndpoint", "deployment", "apiVersion", "accountId",
   "region", "projectId", "resourceUrl", "proxyPoolId",
-  "connectionProxyEnabled", "connectionProxyUrl", "connectionNoProxy",
+  "connectionProxyEnabled", "connectionNoProxy",
   "githubLogin", "githubName", "githubEmail", "githubUserId",
   "username", "firstName", "lastName", "authMethod", "authKind",
   "profileArn",
@@ -37,6 +38,11 @@ function sanitize(c) {
     const psd = {};
     for (const f of SAFE_PSD_FIELDS) {
       if (c.providerSpecificData[f] !== undefined) psd[f] = c.providerSpecificData[f];
+    }
+    // Legacy per-connection proxy secret: expose masked form + flag only.
+    if (c.providerSpecificData.connectionProxyUrl !== undefined) {
+      psd.connectionProxyUrlMasked = maskProxyUrl(c.providerSpecificData.connectionProxyUrl);
+      psd.hasConnectionProxyAuth = hasProxyAuth(c.providerSpecificData.connectionProxyUrl);
     }
     safe.providerSpecificData = psd;
   }

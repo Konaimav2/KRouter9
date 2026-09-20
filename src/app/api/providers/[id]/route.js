@@ -6,6 +6,7 @@ import {
   deleteProviderConnection,
 } from "@/models";
 import { applyCustomHeaders } from "open-sse/utils/customHeaders.js";
+import { sanitizeConnectionForBrowser } from "@/lib/proxyMask.js";
 
 function normalizeProxyConfig(body = {}) {
   const hasAnyProxyField =
@@ -16,7 +17,10 @@ function normalizeProxyConfig(body = {}) {
   if (!hasAnyProxyField) return { hasAnyProxyField: false };
 
   const enabled = body?.connectionProxyEnabled === true;
-  const url = typeof body?.connectionProxyUrl === "string" ? body.connectionProxyUrl.trim() : "";
+  const rawUrl = typeof body?.connectionProxyUrl === "string" ? body.connectionProxyUrl.trim() : "";
+  // Empty/masked URL = keep existing secret (browser only ever sees the masked
+  // form; never persist it over the real URL).
+  const url = (!rawUrl || rawUrl.includes("***")) ? null : rawUrl;
   const noProxy = typeof body?.connectionNoProxy === "string" ? body.connectionNoProxy.trim() : "";
 
   if (enabled && !url) {
@@ -71,11 +75,7 @@ export async function GET(request, { params }) {
     }
 
     // Hide sensitive fields
-    const result = { ...connection };
-    delete result.apiKey;
-    delete result.accessToken;
-    delete result.refreshToken;
-    delete result.idToken;
+    const result = sanitizeConnectionForBrowser(connection);
 
     return NextResponse.json({ connection: result });
   } catch (error) {
@@ -158,7 +158,10 @@ export async function PUT(request, { params }) {
 
       if (proxyConfig.hasAnyProxyField) {
         updateData.providerSpecificData.connectionProxyEnabled = proxyConfig.connectionProxyEnabled;
-        updateData.providerSpecificData.connectionProxyUrl = proxyConfig.connectionProxyUrl;
+        // Only overwrite when a real new URL was provided (null = keep existing).
+        if (proxyConfig.connectionProxyUrl !== null) {
+          updateData.providerSpecificData.connectionProxyUrl = proxyConfig.connectionProxyUrl;
+        }
         updateData.providerSpecificData.connectionNoProxy = proxyConfig.connectionNoProxy;
       }
 
@@ -189,11 +192,7 @@ export async function PUT(request, { params }) {
     const updated = await updateProviderConnection(id, updateData);
 
     // Hide sensitive fields
-    const result = { ...updated };
-    delete result.apiKey;
-    delete result.accessToken;
-    delete result.refreshToken;
-    delete result.idToken;
+    const result = sanitizeConnectionForBrowser(updated);
 
     return NextResponse.json({ connection: result });
   } catch (error) {

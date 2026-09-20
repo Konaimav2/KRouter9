@@ -5,6 +5,7 @@ import {
   getProxyPoolById,
   updateProxyPool,
 } from "@/models";
+import { sanitizeProxyFields } from "@/lib/proxyMask.js";
 
 function normalizeProxyPoolUpdate(body = {}) {
   const updates = {};
@@ -19,10 +20,11 @@ function normalizeProxyPoolUpdate(body = {}) {
 
   if (Object.prototype.hasOwnProperty.call(body, "proxyUrl")) {
     const proxyUrl = typeof body?.proxyUrl === "string" ? body.proxyUrl.trim() : "";
-    if (!proxyUrl) {
-      return { error: "Proxy URL is required" };
+    // Empty string = keep existing secret (edit modal sends masked display
+    // separately; never persist a blank or masked value over the real URL).
+    if (proxyUrl && !proxyUrl.includes("***")) {
+      updates.proxyUrl = proxyUrl;
     }
-    updates.proxyUrl = proxyUrl;
   }
 
   if (Object.prototype.hasOwnProperty.call(body, "noProxy")) {
@@ -59,7 +61,7 @@ export async function GET(request, { params }) {
       return NextResponse.json({ error: "Proxy pool not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ proxyPool });
+    return NextResponse.json({ proxyPool: sanitizeProxyFields(proxyPool) });
   } catch (error) {
     console.log("Error fetching proxy pool:", error);
     return NextResponse.json({ error: "Failed to fetch proxy pool" }, { status: 500 });
@@ -84,7 +86,7 @@ export async function PUT(request, { params }) {
     }
 
     const updated = await updateProxyPool(id, normalized.updates);
-    return NextResponse.json({ proxyPool: updated });
+    return NextResponse.json({ proxyPool: sanitizeProxyFields(updated) });
   } catch (error) {
     console.log("Error updating proxy pool:", error);
     return NextResponse.json({ error: "Failed to update proxy pool" }, { status: 500 });

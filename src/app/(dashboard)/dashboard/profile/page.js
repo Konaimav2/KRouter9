@@ -1567,8 +1567,14 @@ export default function ProfilePage() {
               <form onSubmit={updateOutboundProxy} className="flex flex-col gap-4 pt-2 border-t border-border/50">
                 <div className="flex flex-col gap-2">
                   <label className="font-medium text-sm sm:text-base">Proxy URL</label>
+                  {settings.hasOutboundProxyAuth && !proxyForm.outboundProxyUrl ? (
+                    <p className="text-xs sm:text-sm text-text-muted">
+                      Configured: <code className="font-mono">{settings.outboundProxyUrlMasked || "hidden"}</code> — enter a new URL below to replace it, or leave blank to keep it.
+                    </p>
+                  ) : null}
                   <Input
-                    placeholder="http://127.0.0.1:7897"
+                    type="password"
+                    placeholder={settings.hasOutboundProxyAuth ? "Leave blank to keep current" : "http://127.0.0.1:7897"}
                     value={proxyForm.outboundProxyUrl}
                     onChange={(e) => setProxyForm((prev) => ({ ...prev, outboundProxyUrl: e.target.value }))}
                     disabled={loading || proxyLoading}

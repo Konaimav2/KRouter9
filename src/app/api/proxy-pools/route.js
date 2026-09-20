@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createProxyPool, getProviderConnections, getProxyPools } from "@/models";
+import { sanitizeProxyFields } from "@/lib/proxyMask.js";
 
 function toBoolean(value) {
   if (value === "true") return true;
@@ -56,14 +57,14 @@ export async function GET(request) {
     const proxyPools = await getProxyPools(filter);
 
     if (!includeUsage) {
-      return NextResponse.json({ proxyPools });
+      return NextResponse.json({ proxyPools: proxyPools.map((p) => sanitizeProxyFields(p)) });
     }
 
     const connections = await getProviderConnections();
     const usageMap = buildUsageMap(connections);
 
     const enrichedProxyPools = proxyPools.map((pool) => ({
-      ...pool,
+      ...sanitizeProxyFields(pool),
       boundConnectionCount: usageMap.get(pool.id) || 0,
     }));
 
@@ -85,7 +86,7 @@ export async function POST(request) {
     }
 
     const proxyPool = await createProxyPool(normalized);
-    return NextResponse.json({ proxyPool }, { status: 201 });
+    return NextResponse.json({ proxyPool: sanitizeProxyFields(proxyPool) }, { status: 201 });
   } catch (error) {
     console.log("Error creating proxy pool:", error);
     return NextResponse.json({ error: "Failed to create proxy pool" }, { status: 500 });

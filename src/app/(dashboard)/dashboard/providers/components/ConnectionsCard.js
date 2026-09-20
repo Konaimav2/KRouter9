@@ -39,16 +39,18 @@ function ConnectionRow({ connection, proxyPools, isOAuth, isFirst, isLast, onMov
   const proxyPoolMap = new Map((proxyPools || []).map((p) => [p.id, p]));
   const boundProxyPoolId = connection.providerSpecificData?.proxyPoolId || null;
   const boundProxyPool = boundProxyPoolId ? proxyPoolMap.get(boundProxyPoolId) : null;
-  const hasLegacyProxy = connection.providerSpecificData?.connectionProxyEnabled === true && !!connection.providerSpecificData?.connectionProxyUrl;
+  const hasLegacyProxy = connection.providerSpecificData?.connectionProxyEnabled === true && (!!connection.providerSpecificData?.connectionProxyUrl || !!connection.providerSpecificData?.connectionProxyUrlMasked);
   const hasAnyProxy = !!boundProxyPoolId || hasLegacyProxy;
 
   const proxyDisplayText = boundProxyPool
     ? `Pool: ${boundProxyPool.name}`
     : boundProxyPoolId ? `Pool: ${boundProxyPoolId} (inactive/missing)`
-    : hasLegacyProxy ? `Legacy: ${connection.providerSpecificData?.connectionProxyUrl}` : "";
+    : hasLegacyProxy ? "Legacy proxy (credentials hidden)" : "";
 
   let maskedProxyUrl = "";
-  const rawProxyUrl = boundProxyPool?.proxyUrl || connection.providerSpecificData?.connectionProxyUrl;
+  // Server-masked fields only — never render a raw proxy URL (see proxyMask.js).
+  const rawProxyUrl = boundProxyPool?.proxyUrlMasked
+    || connection.providerSpecificData?.connectionProxyUrlMasked;
   if (rawProxyUrl) {
     try {
       const p = new URL(rawProxyUrl);
