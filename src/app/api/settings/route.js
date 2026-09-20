@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSettings, updateSettings } from "@/lib/localDb";
 import { applyOutboundProxyEnv } from "@/lib/network/outboundProxy";
 import { resetComboRotation } from "open-sse/services/combo.js";
+import { maskProxyUrl, hasProxyAuth } from "@/lib/proxyMask.js";
 import bcrypt from "bcryptjs";
 
 export const dynamic = "force-dynamic";
@@ -17,8 +18,12 @@ const PROTECTED_SETTING_KEYS = ["password", "mitmSudoEncrypted"];
 export async function GET() {
   try {
     const settings = await getSettings();
-    const { password, oidcClientSecret, ...safeSettings } = settings;
+    const { password, oidcClientSecret, outboundProxyUrl, ...safeSettings } = settings;
     safeSettings.oidcConfigured = !!(safeSettings.oidcIssuerUrl && safeSettings.oidcClientId && oidcClientSecret);
+    if (outboundProxyUrl !== undefined) {
+      safeSettings.outboundProxyUrlMasked = maskProxyUrl(outboundProxyUrl);
+      safeSettings.hasOutboundProxyAuth = hasProxyAuth(outboundProxyUrl);
+    }
     
     const enableRequestLogs = process.env.ENABLE_REQUEST_LOGS === "true";
     const enableTranslator = process.env.ENABLE_TRANSLATOR === "true";
@@ -74,6 +79,13 @@ export async function PATCH(request) {
       if (!body.oidcClientSecret || !String(body.oidcClientSecret).trim()) {
         delete body.oidcClientSecret;
       }
+    }
+
+    // Empty/masked outbound proxy URL = keep existing secret (the GET response
+    // only exposes the masked form; never persist it over the real URL).
+    if (Object.prototype.hasOwnProperty.call(body, "outboundProxyUrl")) {
+      const v = typeof body.outboundProxyUrl === "string" ? body.outboundProxyUrl.trim() : "";
+      if (!v || v.includes("***")) delete body.outboundProxyUrl;
     }
 
     const settings = await updateSettings(body);
@@ -135,8 +147,12 @@ export async function PATCH(request) {
         .catch((error) => console.warn("[AutoPing] settings update failed:", error.message));
     }
 
-    const { password, oidcClientSecret, ...safeSettings } = settings;
+    const { password, oidcClientSecret, outboundProxyUrl, ...safeSettings } = settings;
     safeSettings.oidcConfigured = !!(safeSettings.oidcIssuerUrl && safeSettings.oidcClientId && oidcClientSecret);
+    if (outboundProxyUrl !== undefined) {
+      safeSettings.outboundProxyUrlMasked = maskProxyUrl(outboundProxyUrl);
+      safeSettings.hasOutboundProxyAuth = hasProxyAuth(outboundProxyUrl);
+    }
     return NextResponse.json(safeSettings, { headers: SETTINGS_RESPONSE_HEADERS });
   } catch (error) {
     console.log("Error updating settings:", error);

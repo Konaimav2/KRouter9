@@ -12,6 +12,7 @@ import { APIKEY_PROVIDERS } from "@/shared/constants/config";
 import { AI_PROVIDERS, FREE_TIER_PROVIDERS, WEB_COOKIE_PROVIDERS, isOpenAICompatibleProvider, isAnthropicCompatibleProvider, isCustomEmbeddingProvider } from "@/shared/constants/providers";
 import { normalizeProviderId, normalizeProviderSpecificData } from "@/lib/providerNormalization";
 import { applyCustomHeaders } from "open-sse/utils/customHeaders.js";
+import { sanitizeConnectionForBrowser } from "@/lib/proxyMask.js";
 
 export const dynamic = "force-dynamic";
 
@@ -90,13 +91,7 @@ export async function GET(request) {
 
     if (mode === "full") {
       const connections = await getProviderConnections(baseFilter);
-      const safeConnections = connections.map((c) => ({
-        ...enrich(c),
-        apiKey: undefined,
-        accessToken: undefined,
-        refreshToken: undefined,
-        idToken: undefined,
-      }));
+      const safeConnections = connections.map((c) => enrich(sanitizeConnectionForBrowser(c)));
       return NextResponse.json({ connections: safeConnections, ...(stats ? { stats } : {}) });
     }
 
@@ -274,8 +269,7 @@ export async function POST(request) {
     });
 
     // Hide sensitive fields
-    const result = { ...newConnection };
-    delete result.apiKey;
+    const result = sanitizeConnectionForBrowser(newConnection);
 
     return NextResponse.json({ connection: result }, { status: 201 });
   } catch (error) {

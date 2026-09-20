@@ -17,10 +17,11 @@ function formatDateTime(value) {
   return date.toLocaleString();
 }
 
-function normalizeFormData(data = {}) {
+function normalizeFormData(data = {}, isEdit = false) {
   return {
     name: data.name || "",
-    proxyUrl: data.proxyUrl || "",
+    // On edit the browser never sees the real secret — leave blank to keep it.
+    proxyUrl: isEdit ? "" : data.proxyUrl || "",
     noProxy: data.noProxy || "",
     isActive: data.isActive !== false,
     strictProxy: data.strictProxy === true,
@@ -96,7 +97,7 @@ export default function ProxyPoolsPage() {
 
   const openEditModal = (proxyPool) => {
     setEditingProxyPool(proxyPool);
-    setFormData(normalizeFormData(proxyPool));
+    setFormData(normalizeFormData(proxyPool, true));
     setShowFormModal(true);
   };
 
@@ -106,19 +107,20 @@ export default function ProxyPoolsPage() {
   };
 
   const handleSave = async () => {
+    const isEdit = !!editingProxyPool;
     const payload = {
       name: formData.name.trim(),
-      proxyUrl: formData.proxyUrl.trim(),
+      // Empty on edit = keep existing secret (backend ignores blank/masked).
+      ...(formData.proxyUrl.trim() || !isEdit ? { proxyUrl: formData.proxyUrl.trim() } : {}),
       noProxy: formData.noProxy.trim(),
       isActive: formData.isActive === true,
       strictProxy: formData.strictProxy === true,
     };
 
-    if (!payload.name || !payload.proxyUrl) return;
+    if (!payload.name || (!isEdit && !payload.proxyUrl)) return;
 
     setSaving(true);
     try {
-      const isEdit = !!editingProxyPool;
       const res = await fetch(isEdit ? `/api/proxy-pools/${editingProxyPool.id}` : "/api/proxy-pools", {
         method: isEdit ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -726,7 +728,7 @@ export default function ProxyPoolsPage() {
                       {pool.boundConnectionCount || 0} bound
                     </Badge>
                   </div>
-                  <p className="text-xs text-text-muted truncate mt-1">{pool.proxyUrl}</p>
+                  <p className="text-xs text-text-muted truncate mt-1" title={pool.hasProxyAuth ? "Credentials hidden — edit the pool to replace the URL" : undefined}>{pool.proxyUrlMasked || pool.proxyUrl || ""}{pool.hasProxyAuth ? " · auth hidden" : ""}</p>
                   {pool.noProxy ? (
                     <p className="text-xs text-text-muted truncate">No proxy: {pool.noProxy}</p>
                   ) : null}
@@ -998,9 +1000,11 @@ export default function ProxyPoolsPage() {
           />
           <Input
             label="Proxy URL"
+            type="password"
             value={formData.proxyUrl}
             onChange={(e) => setFormData((prev) => ({ ...prev, proxyUrl: e.target.value }))}
             placeholder="http://127.0.0.1:7897"
+            hint={editingProxyPool ? "Leave blank to keep the current URL." : undefined}
           />
           <Input
             label="No Proxy"
