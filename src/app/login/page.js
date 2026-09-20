@@ -157,9 +157,11 @@ export default function LoginPage() {
       <div className="relative z-10 w-full max-w-md">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-3">
-            <div className="flex items-center justify-center size-11 rounded-[12px] bg-gradient-to-br from-brand-500 to-brand-700 shadow-[var(--shadow-warm)]">
-              <span className="material-symbols-outlined text-white text-[24px]">hub</span>
-            </div>
+            <img
+              src="/krouter9.png"
+              alt="KRouter9 logo"
+              className="size-11 rounded-[12px] object-contain shadow-[var(--shadow-warm)]"
+            />
             <h1 className="text-3xl font-bold tracking-tight text-text-main">KRouter9</h1>
           </div>
           <p className="text-xs uppercase tracking-widest text-brand-600 dark:text-brand-400 font-semibold mb-1">AI Gateway Control Panel</p>
