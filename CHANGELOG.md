@@ -1,4 +1,4 @@
-# Unreleased
+# v1.0.0 (2026-09-20) — first complete release
 
 ## Features
 - **Playground model picker**: live + static catalogs merge into canonical
