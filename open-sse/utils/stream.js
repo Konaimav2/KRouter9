@@ -53,6 +53,25 @@ export function createSSEStream(options = {}) {
     credentials = null
   } = options;
 
+  // Wave 0 stall instrumentation: throttled tool-use/thinking boundary log.
+  // Production-visible via log.line (INFO); throttled to first 3 + every 50th
+  // to avoid log spam on long streams. Fail-open: never throws.
+  const streamLog = options.log || null;
+  const streamReqTag = options.reqTag || "";
+  const streamT0 = Date.now();
+  let toolChunkCount = 0;
+  let thinkChunkCount = 0;
+  const noteBoundary = (kind) => {
+    try {
+      const n = kind === "tool" ? ++toolChunkCount : ++thinkChunkCount;
+      if (n <= 3 || n % 50 === 0) {
+        const emit = streamLog?.line;
+        const msg = `SSE ${kind} #${n} · ${provider}/${model} · ${Date.now() - streamT0}ms`;
+        if (emit) emit(streamReqTag, "🔧", msg);
+      }
+    } catch { /* logging must never break streams */ }
+  };
+
   let buffer = "";
   let usage = null;
 
@@ -217,6 +236,7 @@ export function createSSEStream(options = {}) {
               const delta = parsed.choices?.[0]?.delta;
               const content = delta?.content;
               const reasoning = delta?.reasoning_content;
+              if (delta?.tool_calls && Array.isArray(delta.tool_calls) && delta.tool_calls.length > 0) noteBoundary("tool");
               if (content && typeof content === "string") {
                 totalContentLength += content.length;
                 accumulatedContent = capAppend(accumulatedContent, content);
@@ -224,6 +244,7 @@ export function createSSEStream(options = {}) {
               if (reasoning && typeof reasoning === "string") {
                 totalContentLength += reasoning.length;
                 accumulatedThinking = capAppend(accumulatedThinking, reasoning);
+                noteBoundary("think");
               }
 
               const extracted = extractUsage(parsed);
@@ -320,7 +341,10 @@ export function createSSEStream(options = {}) {
         if (parsed.delta?.thinking) {
           totalContentLength += parsed.delta.thinking.length;
           accumulatedThinking = capAppend(accumulatedThinking, parsed.delta.thinking);
+          noteBoundary("think");
         }
+        // OpenAI format - tool calls
+        if (parsed.choices?.[0]?.delta?.tool_calls?.length > 0) noteBoundary("tool");
         
         // OpenAI format - content
         if (parsed.choices?.[0]?.delta?.content) {
@@ -331,6 +355,7 @@ export function createSSEStream(options = {}) {
         if (parsed.choices?.[0]?.delta?.reasoning_content) {
           totalContentLength += parsed.choices[0].delta.reasoning_content.length;
           accumulatedThinking = capAppend(accumulatedThinking, parsed.choices[0].delta.reasoning_content);
+          noteBoundary("think");
         }
         
         // Gemini format
@@ -520,7 +545,7 @@ export function createSSEStream(options = {}) {
   });
 }
 
-export function createSSETransformStreamWithLogger(targetFormat, sourceFormat, provider = null, reqLogger = null, toolNameMap = null, model = null, connectionId = null, body = null, onStreamComplete = null, apiKey = null, customToolNames = null, credentials = null) {
+export function createSSETransformStreamWithLogger(targetFormat, sourceFormat, provider = null, reqLogger = null, toolNameMap = null, model = null, connectionId = null, body = null, onStreamComplete = null, apiKey = null, customToolNames = null, credentials = null, log = null, reqTag = "") {
   return createSSEStream({
     mode: STREAM_MODE.TRANSLATE,
     targetFormat,
@@ -534,11 +559,13 @@ export function createSSETransformStreamWithLogger(targetFormat, sourceFormat, p
     body,
     onStreamComplete,
     apiKey,
-    credentials
+    credentials,
+    log,
+    reqTag
   });
 }
 
-export function createPassthroughStreamWithLogger(provider = null, reqLogger = null, model = null, connectionId = null, body = null, onStreamComplete = null, apiKey = null) {
+export function createPassthroughStreamWithLogger(provider = null, reqLogger = null, model = null, connectionId = null, body = null, onStreamComplete = null, apiKey = null, log = null, reqTag = "") {
   return createSSEStream({
     mode: STREAM_MODE.PASSTHROUGH,
     provider,
@@ -547,6 +574,8 @@ export function createPassthroughStreamWithLogger(provider = null, reqLogger = n
     connectionId,
     body,
     onStreamComplete,
-    apiKey
+    apiKey,
+    log,
+    reqTag
   });
 }
