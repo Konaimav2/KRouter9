@@ -234,27 +234,38 @@ export async function handleChat(request, clientRawRequest = null, options = {})
   // Check if model is a combo (has multiple models with fallback)
   const comboModels = await getComboModels(modelStr);
   if (comboModels) {
-    // Cycle guard: a combo member that resolves back to this combo (e.g.
-    // member "cx/gpt-5.6-sol" whose tail matches combo "gpt-5.6-sol") would
-    // recurse forever, log-spamming at 100+ lines/sec (papi incident).
-    // visitedCombos threads through handleSingleModelChat's comboName chain.
-    const visitedCombos = new Set(
-      String(comboName || "").split(">").map((s) => s.trim()).filter(Boolean)
-    );
+    // Cycle guard: top-level entry has no parent chain — seed it with this
+    // combo so a member resolving back (e.g. member "cx/gpt-5.6-sol" whose
+    // tail matches combo "gpt-5.6-sol") trips the child guard instead of
+    // recursing forever (papi hot-loop: 100+ lines/sec, process wedged).
     const comboKey = modelStr.includes("/") ? modelStr.split("/").pop() : modelStr;
-    if (visitedCombos.has(comboKey)) {
-      log.warn("CHAT", `Combo cycle detected: "${modelStr}" already in chain [${[...visitedCombos].join(" > ")}]`);
-      return errorResponse(503, `Combo cycle detected: "${modelStr}" references itself (via ${[...visitedCombos].join(" > ")}). Rename the member or combo.`);
-    }
-    visitedCombos.add(comboKey);
-    const childComboName = [...visitedCombos].join(" > ");
+    const visitedCombos = new Set([comboKey]);
+    const childComboName = comboKey;
     // Check for combo-specific strategy first, fallback to global
     const comboStrategies = settings.comboStrategies || {};
     const comboSpecificStrategy = comboStrategies[modelStr]?.fallbackStrategy;
     const comboStrategy = comboSpecificStrategy || settings.comboStrategy || "fallback";
     const adapterCombos = await getAdapterCombosData(settings);
     const augmentedModels = augmentModelsWithCapacityAdapter(comboModels, requiredCapabilities, settings, adapterCombos);
-    const adapterAdded = augmentedModels.filter((m) => !comboModels.includes(m));
+    // Pre-filter: drop members that resolve straight back to this combo
+    // (bare or slash-qualified tail match). Without this, each self-member
+    // costs a nested combo round-trip + 503 before the visited-chain guard
+    // trips — with N self-members the log still churns. Fail fast here.
+    const selfMembers = augmentedModels.filter((m) => {
+      const tail = String(m).includes("/") ? String(m).split("/").pop() : String(m);
+      return tail === comboKey;
+    });
+    if (selfMembers.length > 0) {
+      log.warn("CHAT", `Combo "${modelStr}" drops self-referencing member(s): ${selfMembers.join(", ")}`);
+    }
+    const safeModels = augmentedModels.filter((m) => {
+      const tail = String(m).includes("/") ? String(m).split("/").pop() : String(m);
+      return tail !== comboKey;
+    });
+    if (safeModels.length === 0) {
+      return errorResponse(503, `Combo "${modelStr}" has no usable models (all ${augmentedModels.length} member(s) reference the combo itself). Rename the member or combo.`);
+    }
+    const adapterAdded = safeModels.filter((m) => !comboModels.includes(m));
 
     if (comboStrategy === "fusion") {
       log.info("CHAT", `Combo "${modelStr}" with ${comboModels.length} models (strategy: fusion)`);
@@ -277,10 +288,10 @@ export async function handleChat(request, clientRawRequest = null, options = {})
     }
 
     const comboStickyLimit = settings.comboStickyRoundRobinLimit;
-    log.info("CHAT", `Combo "${modelStr}" with ${augmentedModels.length} models (strategy: ${comboStrategy}, sticky: ${comboStickyLimit})`);
+    log.info("CHAT", `Combo "${modelStr}" with ${safeModels.length} models (strategy: ${comboStrategy}, sticky: ${comboStickyLimit})`);
     return handleComboChat({
       body,
-      models: augmentedModels,
+      models: safeModels,
       handleSingleModel: withCapacityAdapterStripping(
         (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey, childComboName, clientIp),
         adapterAdded
@@ -369,7 +380,23 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       const requiredCapabilities = detectRequiredCapabilities(body);
       const adapterCombos = await getAdapterCombosData(chatSettings);
       const augmentedModels = augmentModelsWithCapacityAdapter(comboModels, requiredCapabilities, chatSettings, adapterCombos);
-      const adapterAdded = augmentedModels.filter((m) => !comboModels.includes(m));
+      // Same pre-filter as top-level, but against the full ancestor chain:
+      // drop any member whose tail revisits a combo already in the chain.
+      const selfMembers = augmentedModels.filter((m) => {
+        const tail = String(m).includes("/") ? String(m).split("/").pop() : String(m);
+        return visitedCombos.has(tail);
+      });
+      if (selfMembers.length > 0) {
+        log.warn("CHAT", `Combo "${modelStr}" drops cyclic member(s): ${selfMembers.join(", ")} (chain: ${[...visitedCombos].join(" > ")})`);
+      }
+      const safeModels = augmentedModels.filter((m) => {
+        const tail = String(m).includes("/") ? String(m).split("/").pop() : String(m);
+        return !visitedCombos.has(tail);
+      });
+      if (safeModels.length === 0) {
+        return errorResponse(503, `Combo cycle detected: "${modelStr}" has no usable models (all ${augmentedModels.length} member(s) revisit [${[...visitedCombos].join(" > ")}]). Rename the member or combo.`);
+      }
+      const adapterAdded = safeModels.filter((m) => !comboModels.includes(m));
 
       if (comboStrategy === "fusion") {
         log.info("CHAT", `Combo "${modelStr}" with ${comboModels.length} models (strategy: fusion)`);
@@ -392,10 +419,10 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       }
 
       const comboStickyLimit = chatSettings.comboStickyRoundRobinLimit;
-      log.info("CHAT", `Combo "${modelStr}" with ${augmentedModels.length} models (strategy: ${comboStrategy}, sticky: ${comboStickyLimit})`);
+      log.info("CHAT", `Combo "${modelStr}" with ${safeModels.length} models (strategy: ${comboStrategy}, sticky: ${comboStickyLimit})`);
       return handleComboChat({
         body,
-        models: augmentedModels,
+        models: safeModels,
         handleSingleModel: withCapacityAdapterStripping(
           (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey, childComboName, clientIp),
           adapterAdded
