@@ -1404,6 +1404,18 @@ export default function ProviderDetailPage() {
                   {providerInfo.notice?.apiKeyUrl ? "Get API Key" : "Sign up / Learn more"}
                 </a>
               )}
+              {providerId === "cursor" && (
+                <a
+                  href="https://status.cursor.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                  title="Check whether Cursor's API is having an outage"
+                >
+                  <span className="material-symbols-outlined text-sm">monitor_heart</span>
+                  Service status
+                </a>
+              )}
             </div>
             <p className="text-text-muted">
               {connections.length} connection{connections.length === 1 ? "" : "s"}

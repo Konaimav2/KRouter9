@@ -60,6 +60,10 @@ const AUTO_PING_SETTINGS_KEYS = {
   codex: "codexAutoPing",
 };
 
+// Client-side ceiling so a hanging upstream can never spin the card forever;
+// the error branch renders instead of the loading spinner.
+const QUOTA_FETCH_TIMEOUT_MS = 30000;
+
 const AUTO_PING_TOOLTIPS = {
   claude: "When your 5h quota runs out, auto-sends a request the moment it resets so a new window starts right away.",
   codex: "Auto-starts the next 5h Codex window after reset by sending a tiny gpt-5.5 request. Consumes a small amount of quota.",
@@ -219,13 +223,15 @@ export default function ProviderLimits() {
   const fetchQuota = useCallback(async (connectionId, provider, { force = false } = {}) => {
     setLoading((prev) => ({ ...prev, [connectionId]: true }));
     setErrors((prev) => ({ ...prev, [connectionId]: null }));
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), QUOTA_FETCH_TIMEOUT_MS);
 
     try {
       console.log(
         `[ProviderLimits] Fetching quota for ${provider} (${connectionId})`,
       );
       const url = `/api/usage/${connectionId}${force ? "?force=1" : ""}`;
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: controller.signal });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -284,11 +290,15 @@ export default function ProviderLimits() {
         `[ProviderLimits] Error fetching quota for ${provider} (${connectionId}):`,
         error,
       );
+      const isTimeout = error?.name === "AbortError";
       setErrors((prev) => ({
         ...prev,
-        [connectionId]: error.message || "Failed to fetch quota",
+        [connectionId]: isTimeout
+          ? `Quota request timed out after ${QUOTA_FETCH_TIMEOUT_MS / 1000}s`
+          : error.message || "Failed to fetch quota",
       }));
     } finally {
+      clearTimeout(timeoutId);
       setLoading((prev) => ({ ...prev, [connectionId]: false }));
     }
   }, []);
@@ -1057,6 +1067,11 @@ export default function ProviderLimits() {
           const rawQuotas = quota?.quotas || [];
           const visibleQuotas = filterQuotasByVisibility(conn.provider, rawQuotas, quotaVisibility);
           const hiddenQuotaRows = getHiddenQuotaRows(conn.provider, rawQuotas, quotaVisibility);
+          const hasNoQuotas = visibleQuotas.length === 0;
+          const isDepleted = rawQuotas.length > 0 && rawQuotas.every((q) => {
+            if (!q.total || q.total <= 0) return false;
+            return calculatePercentage(q.used, q.total) <= DEPLETED_QUOTA_THRESHOLD;
+          });
 
           return (
             <Card
@@ -1276,16 +1291,30 @@ export default function ProviderLimits() {
                   <div className="text-center py-5">
                     <p className="text-xs text-text-muted">{quota.message}</p>
                   </div>
+                ) : hasNoQuotas ? (
+                  <div className="text-center py-5">
+                    <span className="material-symbols-outlined text-[28px] text-text-muted opacity-40">
+                      data_usage
+                    </span>
+                    <p className="mt-1.5 text-xs text-text-muted">No quota reported by this provider</p>
+                  </div>
                 ) : (
-                  <QuotaTable
-                    quotas={visibleQuotas}
-                    compact
-                    sortMode="default"
-                    showSortLabel={
-                      conn.provider === "codex" && quotaSortMode !== "default"
-                    }
-                    onHideQuota={(quotaRow) => handleHideQuota(conn.provider, quotaRow)}
-                  />
+                  <>
+                    {isDepleted && (
+                      <div className="mb-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-2 py-1 text-center text-[11px] font-medium text-red-600 dark:text-red-400">
+                        Quota depleted — resets at the time shown below
+                      </div>
+                    )}
+                    <QuotaTable
+                      quotas={visibleQuotas}
+                      compact
+                      sortMode="default"
+                      showSortLabel={
+                        conn.provider === "codex" && quotaSortMode !== "default"
+                      }
+                      onHideQuota={(quotaRow) => handleHideQuota(conn.provider, quotaRow)}
+                    />
+                  </>
                 )}
                 {quota?.message && !error && !isLoading && (
                   <p className="mt-2 px-1 text-[10px] leading-relaxed text-text-muted">
