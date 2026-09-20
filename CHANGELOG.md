@@ -1,6 +1,23 @@
 # Unreleased
 
 ## Features
+- **Playground model picker**: live + static catalogs merge into canonical
+  `alias/model` ids (re-rooted per connection, deduped), connected-but-empty
+  providers show a typeable placeholder, 401 surfaces the sign-in message.
+- **Key model policy picker**: whitelist/blacklist edited as chips + "Pick from
+  catalog" (`ModelSelectModal` multi-toggle, placeholders rejected) with manual
+  `provider/model-id` entry fallback.
+- **Quota card states**: 30s client fetch timeout (no more forever-spinners),
+  "No quota reported" empty state, "Quota depleted" banner.
+- **Capacity-adapter combo pools**: pools accept combo names of any kind;
+  server expands them to members (`getCapacityAdapterModels`/`augment…` take
+  combosData, loaded lazily only when a pool entry is slash-less) and checks
+  capability per member. Adapter picker lists combos with a capability note.
+- **Local changelog**: `GET /api/changelog` serves this deployment's own
+  CHANGELOG.md; dashboard modal uses it instead of a hardcoded upstream URL.
+- **Brand/links**: real KRouter9 logo in sidebar/login/landing; all repo links
+  point at `Konaimav2/KRouter9` (the old `decolua/krouter9` URLs 404);
+  Cursor provider page links to `status.cursor.com`.
 - **Thinking nearest-match clamp**: requested reasoning level is clamped to the
   model's supported set (above max → model max, below min → model min, exact
   hits pass through; `none`/`off`/`minimal` stay distinct; `ultra`→`max`
