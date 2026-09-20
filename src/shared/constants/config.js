@@ -9,7 +9,9 @@ export const APP_CONFIG = {
 
 // GitHub configuration
 export const GITHUB_CONFIG = {
-  changelogUrl: "https://raw.githubusercontent.com/decolua/krouter9/refs/heads/master/CHANGELOG.md",
+  // Served by /api/changelog from this deployment's own CHANGELOG.md —
+  // never hardcode an upstream raw URL here (org/repo renames 404 it).
+  changelogUrl: "/api/changelog",
   donateUrl: "https://krouter9.com/api/donate",
 };
 
