@@ -22,12 +22,16 @@ export function createStreamController({ onDisconnect, onError, log, provider, m
   let abortTimeout = null;
 
   // Only abnormal terminations are logged; normal completion is covered by "📊 done".
+  // Wave 0 stall instrumentation also logs complete/disconnect at INFO so a hung
+  // session's tail is visible in prod (fail-open, never throws).
   // isError uses errorLine (always shown, ignores LOG_LEVEL) so failures survive quiet levels.
   const logStream = (symbol, status, isError = false) => {
-    const duration = Date.now() - startTime;
-    const emit = isError ? log?.errorLine : log?.line;
-    if (emit) emit(reqTag, symbol, `${status} · ${provider}/${model} · ${duration}ms`);
-    else console.log(`[${getTimeString()}] ${symbol} ${provider}/${model} · ${status} · ${duration}ms`);
+    try {
+      const duration = Date.now() - startTime;
+      const emit = isError ? log?.errorLine : log?.line;
+      if (emit) emit(reqTag, symbol, `${status} · ${provider}/${model} · ${duration}ms`);
+      else console.log(`[${getTimeString()}] ${symbol} ${provider}/${model} · ${status} · ${duration}ms`);
+    } catch { /* logging must never break streams */ }
   };
 
   return {
@@ -203,8 +207,18 @@ export function pipeWithDisconnect(providerResponse, transformStream, streamCont
     clearStall();
     stallTimer = setTimeout(() => {
       stallTimer = null;
-      dbg(tag, `STALL TIMEOUT ${stallTimeoutMs}ms | chunks=${chunkCount} | bytes=${totalBytes} | sinceLast=${Date.now() - lastChunkAt}ms`);
-      streamController.handleError?.(new Error("stream stall timeout"));
+      const idleFor = Date.now() - lastChunkAt;
+      const dur = Date.now() - t0;
+      dbg(tag, `STALL TIMEOUT ${stallTimeoutMs}ms | chunks=${chunkCount} | bytes=${totalBytes} | sinceLast=${idleFor}ms`);
+      // Production-visible: handleError logs via errorLine (always shown), so
+      // enrich the message — a hung session's log shows exactly where it died.
+      let err;
+      try {
+        err = new Error(`stream stall timeout after ${stallTimeoutMs}ms (chunks=${chunkCount} bytes=${totalBytes} idle=${idleFor}ms dur=${dur}ms)`);
+      } catch {
+        err = new Error("stream stall timeout");
+      }
+      streamController.handleError?.(err);
       streamController.abort?.();
     }, stallTimeoutMs);
   };
