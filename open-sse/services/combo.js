@@ -297,10 +297,21 @@ export async function handleComboChat({ body, models, handleSingleModel, log, co
   let earliestRetryAfter = null;
   let lastStatus = null;
   const triedModels = [];
+  // Log throttle: a hot client retrying a dead combo must not bury the log
+  // (papi incident: hundreds of "Trying model 1/6" lines/sec). First attempt
+  // and every failure still log; identical per-model lines are capped.
+  let attemptLogCount = 0;
+  const MAX_ATTEMPT_LOGS = 3;
 
   for (let i = 0; i < rotatedModels.length; i++) {
     const modelStr = rotatedModels[i];
-    log.info("COMBO", `Trying model ${i + 1}/${rotatedModels.length}: ${modelStr}`);
+    if (attemptLogCount < MAX_ATTEMPT_LOGS) {
+      log.info("COMBO", `Trying model ${i + 1}/${rotatedModels.length}: ${modelStr}`);
+      attemptLogCount++;
+    } else if (attemptLogCount === MAX_ATTEMPT_LOGS) {
+      log.info("COMBO", `... further attempts muted for combo${comboName ? ` "${comboName}"` : ""} (see terminal line)`);
+      attemptLogCount++;
+    }
 
     try {
       const result = await handleSingleModel(body, modelStr);
