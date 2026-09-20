@@ -234,6 +234,20 @@ export async function handleChat(request, clientRawRequest = null, options = {})
   // Check if model is a combo (has multiple models with fallback)
   const comboModels = await getComboModels(modelStr);
   if (comboModels) {
+    // Cycle guard: a combo member that resolves back to this combo (e.g.
+    // member "cx/gpt-5.6-sol" whose tail matches combo "gpt-5.6-sol") would
+    // recurse forever, log-spamming at 100+ lines/sec (papi incident).
+    // visitedCombos threads through handleSingleModelChat's comboName chain.
+    const visitedCombos = new Set(
+      String(comboName || "").split(">").map((s) => s.trim()).filter(Boolean)
+    );
+    const comboKey = modelStr.includes("/") ? modelStr.split("/").pop() : modelStr;
+    if (visitedCombos.has(comboKey)) {
+      log.warn("CHAT", `Combo cycle detected: "${modelStr}" already in chain [${[...visitedCombos].join(" > ")}]`);
+      return errorResponse(503, `Combo cycle detected: "${modelStr}" references itself (via ${[...visitedCombos].join(" > ")}). Rename the member or combo.`);
+    }
+    visitedCombos.add(comboKey);
+    const childComboName = [...visitedCombos].join(" > ");
     // Check for combo-specific strategy first, fallback to global
     const comboStrategies = settings.comboStrategies || {};
     const comboSpecificStrategy = comboStrategies[modelStr]?.fallbackStrategy;
@@ -253,7 +267,7 @@ export async function handleChat(request, clientRawRequest = null, options = {})
             const { tools, tool_choice, ...cleanBody } = clientRawRequest.body || {};
             cleanRawReq = { ...clientRawRequest, body: cleanBody };
           }
-          return handleSingleModelChat(b, m, cleanRawReq, request, apiKey, comboName, clientIp);
+          return handleSingleModelChat(b, m, cleanRawReq, request, apiKey, childComboName, clientIp);
         },
         log,
         comboName: modelStr,
@@ -268,7 +282,7 @@ export async function handleChat(request, clientRawRequest = null, options = {})
       body,
       models: augmentedModels,
       handleSingleModel: withCapacityAdapterStripping(
-        (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey, modelStr, clientIp),
+        (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey, childComboName, clientIp),
         adapterAdded
       ),
       log,
@@ -335,6 +349,18 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
   if (!modelInfo.provider) {
     const comboModels = await getComboModels(modelStr);
     if (comboModels) {
+      // Cycle guard (same as handleChat path): member tail matching an
+      // ancestor combo name recurses forever. Chain threads via comboName.
+      const visitedCombos = new Set(
+        String(comboName || "").split(">").map((s) => s.trim()).filter(Boolean)
+      );
+      const comboKey = modelStr.includes("/") ? modelStr.split("/").pop() : modelStr;
+      if (visitedCombos.has(comboKey)) {
+        log.warn("CHAT", `Combo cycle detected: "${modelStr}" already in chain [${[...visitedCombos].join(" > ")}]`);
+        return errorResponse(503, `Combo cycle detected: "${modelStr}" references itself (via ${[...visitedCombos].join(" > ")}). Rename the member or combo.`);
+      }
+      visitedCombos.add(comboKey);
+      const childComboName = [...visitedCombos].join(" > ");
       const chatSettings = await getCachedSettings();
       // Check for combo-specific strategy first, fallback to global
       const comboStrategies = chatSettings.comboStrategies || {};
@@ -356,7 +382,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
               const { tools, tool_choice, ...cleanBody } = clientRawRequest.body || {};
               cleanRawReq = { ...clientRawRequest, body: cleanBody };
             }
-            return handleSingleModelChat(b, m, cleanRawReq, request, apiKey, comboName, clientIp);
+            return handleSingleModelChat(b, m, cleanRawReq, request, apiKey, childComboName, clientIp);
           },
           log,
           comboName: modelStr,
@@ -371,7 +397,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
         body,
         models: augmentedModels,
         handleSingleModel: withCapacityAdapterStripping(
-          (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey),
+          (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey, childComboName, clientIp),
           adapterAdded
         ),
         log,
