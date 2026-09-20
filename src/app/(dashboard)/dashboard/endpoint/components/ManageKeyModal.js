@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import PropTypes from "prop-types";
-import { Button, Input, Modal, Select, Toggle } from "@/shared/components";
+import { Button, Input, Modal, ModelSelectModal, Select, Toggle } from "@/shared/components";
 
 const POLICY_OPTIONS = [
   { value: "off", label: "Off — all models allowed" },
@@ -21,6 +21,7 @@ function asText(v) {
 }
 
 function parseList(text) {
+  if (Array.isArray(text)) return text.map((s) => String(s).trim()).filter(Boolean);
   return String(text || "").split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
 }
 
@@ -32,13 +33,96 @@ export default function ManageKeyModal({ apiKey, onClose, onSaved, onRotated }) 
   const [rpmLimit, setRpmLimit] = useState(apiKey?.rpmLimit ? String(apiKey.rpmLimit) : "");
   const [tpmLimit, setTpmLimit] = useState(apiKey?.tpmLimit ? String(apiKey.tpmLimit) : "");
   const [modelPolicy, setModelPolicy] = useState(apiKey?.modelPolicy || "off");
-  const [allowedModels, setAllowedModels] = useState(asText(apiKey?.allowedModels));
-  const [blockedModels, setBlockedModels] = useState(asText(apiKey?.blockedModels));
+  const [allowedList, setAllowedList] = useState(parseList(asText(apiKey?.allowedModels)));
+  const [blockedList, setBlockedList] = useState(parseList(asText(apiKey?.blockedModels)));
+  const [manualEntry, setManualEntry] = useState("");
+  const [pickerFor, setPickerFor] = useState(null); // "allowed" | "blocked" | null
+  const [pickerProviders, setPickerProviders] = useState([]);
+  const [pickerAliases, setPickerAliases] = useState({});
   const [creditLimit, setCreditLimit] = useState(apiKey?.creditLimit ? String(apiKey.creditLimit) : "");
   const [quotaLimit, setQuotaLimit] = useState(apiKey?.quotaLimit ? String(apiKey.quotaLimit) : "");
   const [saving, setSaving] = useState(false);
   const [rotating, setRotating] = useState(false);
   const [error, setError] = useState(null);
+
+  const openPicker = async (which) => {
+    setPickerFor(which);
+    try {
+      const [providersRes, aliasesRes] = await Promise.all([
+        fetch("/api/providers?mode=full"),
+        fetch("/api/models/alias"),
+      ]);
+      if (providersRes.ok) {
+        const data = await providersRes.json();
+        setPickerProviders(data.connections || []);
+      }
+      if (aliasesRes.ok) {
+        const data = await aliasesRes.json();
+        setPickerAliases(data.aliases || {});
+      }
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const togglePickerModel = (model, remove) => {
+    const value = model?.value || model?.name || model;
+    // Placeholders ("prefix/model-id") are type-in hints, not real models.
+    if (!value || model?.isPlaceholder) return;
+    const setList = pickerFor === "blocked" ? setBlockedList : setAllowedList;
+    setList((prev) => remove ? prev.filter((v) => v !== value) : (prev.includes(value) ? prev : [...prev, value]));
+  };
+
+  const addManualEntry = (which) => {
+    const values = parseList(manualEntry);
+    if (values.length === 0) return;
+    const setList = which === "blocked" ? setBlockedList : setAllowedList;
+    setList((prev) => [...prev, ...values.filter((v) => !prev.includes(v))]);
+    setManualEntry("");
+  };
+
+  const renderModelListEditor = (which, list, setList) => (
+    <div className="rounded-md border border-border bg-surface-2 p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-sm font-medium text-text-primary">
+          {which === "blocked" ? "Blocked models" : "Allowed models"}
+          <span className="ml-1 text-xs font-normal text-text-muted">({list.length})</span>
+        </p>
+        <Button variant="secondary" onClick={() => openPicker(which)}>
+          Pick from catalog
+        </Button>
+      </div>
+      {list.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {list.map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setList((prev) => prev.filter((v) => v !== value))}
+              title="Click to remove"
+              className="rounded-xl border border-primary bg-primary px-2 py-1 text-xs font-medium text-white transition-all hover:bg-primary-hover"
+            >
+              <span className="flex items-center gap-1">
+                <span className="material-symbols-outlined leading-none" style={{ fontSize: "10px" }}>check</span>
+                {value}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <Input
+          value={manualEntry}
+          onChange={(e) => setManualEntry(e.target.value)}
+          placeholder="provider/model-id — type, then Add"
+          hint={which === "blocked" ? "These models are rejected with 403." : "Empty = allow all. Matches trailing segment too."}
+        />
+        <Button variant="secondary" onClick={() => addManualEntry(which)} disabled={!manualEntry.trim()}>
+          Add
+        </Button>
+      </div>
+    </div>
+  );
 
   const handleSave = async () => {
     if (!apiKey || !name.trim()) return;
@@ -54,8 +138,8 @@ export default function ManageKeyModal({ apiKey, onClose, onSaved, onRotated }) 
           rpmLimit: rpmLimit === "" ? 0 : Number(rpmLimit),
           tpmLimit: tpmLimit === "" ? 0 : Number(tpmLimit),
           modelPolicy,
-          allowedModels: modelPolicy === "whitelist" ? parseList(allowedModels) : null,
-          blockedModels: modelPolicy === "blacklist" ? parseList(blockedModels) : null,
+          allowedModels: modelPolicy === "whitelist" ? allowedList : null,
+          blockedModels: modelPolicy === "blacklist" ? blockedList : null,
           creditLimit: creditLimit === "" ? 0 : Number(creditLimit),
           quotaLimit: quotaLimit === "" ? 0 : Number(quotaLimit),
         }),
@@ -163,22 +247,19 @@ export default function ManageKeyModal({ apiKey, onClose, onSaved, onRotated }) 
           value={modelPolicy}
           onChange={(e) => setModelPolicy(e.target.value)}
         />
-        {modelPolicy === "whitelist" && (
-          <Input
-            label="Allowed models"
-            value={allowedModels}
-            onChange={(e) => setAllowedModels(e.target.value)}
-            placeholder="oc/model-a, provider/model-b"
-            hint="Comma separated. Empty = allow all. Matches trailing segment too."
-          />
-        )}
-        {modelPolicy === "blacklist" && (
-          <Input
-            label="Blocked models"
-            value={blockedModels}
-            onChange={(e) => setBlockedModels(e.target.value)}
-            placeholder="bad/model, provider/other"
-            hint="Comma separated. These models are rejected with 403."
+        {modelPolicy === "whitelist" && renderModelListEditor("allowed", allowedList, setAllowedList)}
+        {modelPolicy === "blacklist" && renderModelListEditor("blocked", blockedList, setBlockedList)}
+        {pickerFor && (
+          <ModelSelectModal
+            isOpen={!!pickerFor}
+            onClose={() => setPickerFor(null)}
+            onSelect={(m) => togglePickerModel(m, false)}
+            onDeselect={(m) => togglePickerModel(m, true)}
+            activeProviders={pickerProviders}
+            modelAliases={pickerAliases}
+            title={pickerFor === "blocked" ? "Block models for this key" : "Allow models for this key"}
+            addedModelValues={pickerFor === "blocked" ? blockedList : allowedList}
+            closeOnSelect={false}
           />
         )}
         {error && <p className="text-xs text-error">{error}</p>}
