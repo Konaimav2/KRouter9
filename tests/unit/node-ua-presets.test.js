@@ -62,13 +62,16 @@ describe("node UA presets", () => {
   });
 });
 
-describe("node UA selector (curated 5)", () => {
-  it("exposes exactly the 5 node choices", () => {
+describe("node UA selector (U1/U2: full provider-level list)", () => {
+  it("exposes krouter9 default + all 12 ex-per-key presets + browser/custom", () => {
     expect(NODE_UA_PRESET_OPTIONS.map((o) => o.value)).toEqual([
-      "krouter9", "opencode", "claude_code", "browser", "custom",
+      "krouter9", "opencode", "claude_code", "codex_cli_rs", "copilot",
+      "antigravity", "gemini_cli", "kiro", "trae", "codebuddy_cn",
+      "codebuddy_intl", "grok_cli", "kimchi", "zed", "iflow",
+      "browser", "custom",
     ]);
   });
-  it("9router default resolves to krouter9/<version>", () => {
+  it("KRouter9 default resolves to krouter9/<version>", () => {
     expect(resolveNodeUserAgentPreset("krouter9", "")).toMatch(/^krouter9\/\d/);
   });
   it("opencode resolves to the opencode UA", () => {
@@ -87,6 +90,12 @@ describe("node UA selector (curated 5)", () => {
     expect(presetForNodeUserAgent(BROWSER_USER_AGENT).preset).toBe("browser");
     expect(presetForNodeUserAgent(CLAUDE_CLI_USER_AGENT).preset).toBe("claude_code");
     expect(presetForNodeUserAgent("myapp/1.0")).toEqual({ preset: "custom", custom: "myapp/1.0" });
+  });
+  it("round-trips every merged preset UA back to its preset", () => {
+    for (const o of NODE_UA_PRESET_OPTIONS) {
+      if (!o.ua) continue;
+      expect(presetForNodeUserAgent(o.ua).preset).toBe(o.value);
+    }
   });
   it("stays in sync with clientVersions for opencode/browser", () => {
     expect(resolveNodeUserAgentPreset("opencode", "")).toBe(OPENCODE_USER_AGENT);

@@ -191,6 +191,19 @@ export async function POST(request) {
       return NextResponse.json({ error: "Name is required" }, { status: 400 });
     }
 
+    // U1: node-based (compatible) connections inherit the node-level UA —
+    // per-key body.userAgent is ignored for them. Built-in providers keep it.
+    const isNodeOwned =
+      isOpenAICompatibleProvider(provider) ||
+      isAnthropicCompatibleProvider(provider) ||
+      isCustomEmbeddingProvider(provider);
+    if (isNodeOwned) {
+      delete body.userAgent;
+      if (body.providerSpecificData && typeof body.providerSpecificData === "object") {
+        delete body.providerSpecificData.userAgent;
+      }
+    }
+
     let providerSpecificData = normalizeProviderSpecificData(provider, body, body.providerSpecificData);
 
     // Compatible LLM nodes support multiple API-key connections (key pool); runtime
@@ -247,7 +260,7 @@ export async function POST(request) {
       const clean = applyCustomHeaders({}, body.customHeaders);
       if (Object.keys(clean).length > 0) mergedProviderSpecificData.customHeaders = clean;
     }
-    if (typeof body.userAgent === "string" && body.userAgent.trim()) {
+    if (!isNodeOwned && typeof body.userAgent === "string" && body.userAgent.trim()) {
       mergedProviderSpecificData.userAgent = body.userAgent.trim();
     }
 

@@ -3,7 +3,11 @@
 import { TABLES, buildCreateTableSql } from "../schema.js";
 
 export default {
-  version: 1,
+  // Baseline version MUST stay in sync with SCHEMA_VERSION in ../schema.js:
+  // historically-stamped schemaVersions (up to 4) predate this registry, so
+  // registry versions start at 4 — otherwise old DBs (e.g. stamped 3) would
+  // look "newer" than the registry and skip pending migrations forever.
+  version: 4,
   name: "initial",
   up(db) {
     for (const [name, def] of Object.entries(TABLES)) {

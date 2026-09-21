@@ -5,7 +5,7 @@ import { Badge, Button } from "@/shared/components";
 import { getModelsByProviderId } from "@/shared/constants/models";
 import { isAnthropicCompatibleProvider, isOpenAICompatibleProvider } from "@/shared/constants/providers";
 import {
-  getProviderLabel,
+  getProviderGroupLabel,
   requestPrefixFor,
   normalizeStaticModel,
   normalizeLiveModel,
@@ -202,7 +202,8 @@ export default function BasicChatPageClient() {
 
         for (const connection of connections) {
           const providerId = connection.provider || connection.id;
-          const providerName = getProviderLabel(connection);
+          // Per-provider label (U1) — key names never reach the picker.
+          const providerName = getProviderGroupLabel(connection, providerId);
           const providerType = isOpenAICompatibleProvider(providerId)
             ? "openai-compatible"
             : isAnthropicCompatibleProvider(providerId)
@@ -256,6 +257,9 @@ export default function BasicChatPageClient() {
         const normalized = Array.from(providerMap.values())
           .map((group) => {
             const models = dedupeModels(group.models).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+            // Stamp the provider label on every model so no per-key name leaks
+            // through normalize* helpers (U1).
+            for (const model of models) model.providerName = group.providerName;
             // Keep connected groups even when model discovery fails, with a
             // typeable placeholder — like ModelSelectModal — instead of vanishing.
             if (models.length === 0 && group.connections.length > 0) {
@@ -762,7 +766,10 @@ export default function BasicChatPageClient() {
                     <div key={group.providerId} className="mb-2 rounded-[16px] border border-white/10 bg-black/20 p-2">
                       <div className="flex items-center justify-between px-2 py-2">
                         <p className="text-sm font-semibold text-white">{group.providerName}</p>
-                        <Badge size="sm" variant="default">{group.models.length}</Badge>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] text-white/45">{group.connections.length} key{group.connections.length === 1 ? "" : "s"}</span>
+                          <Badge size="sm" variant="default">{group.models.length}</Badge>
+                        </div>
                       </div>
                       <div className="grid gap-2 sm:grid-cols-2">
                         {group.models.map((model) => {
