@@ -1,3 +1,47 @@
+# v1.1.0 (2026-09-21) — combo hot-loop + provider-level UA + incomplete fix
+
+## Fixes
+- **Combo hot-loop (P0a, live on papi)**: self-referencing members
+  (`cx/…`, `ohh/…`, `cca/…`, `grip/…`) are pre-filtered with a log line instead
+  of recursing; top-level `comboName` ReferenceError fixed; visited-chain 503
+  with attempt-log throttle (3 + 1 mute notice). Cyclic combo now fails fast
+  (~30ms) instead of wedging the gateway.
+- **User-Agent is provider-level only (U1/U2)**: per-key UA fields deleted from
+  Add-Key/Edit-Connection modals (the Add-Key modal had a live ReferenceError —
+  it crashed on render); the 12 ex-per-key presets merged into the node-level
+  list; API strips per-key UA on write for node-owned providers; startup
+  migration 002 clears orphans. Built-in providers keep per-connection UA (no
+  node entity exists for them).
+- **Migration version rebase**: registry versions re-based to 4/5 above
+  historically-stamped schemaVersions, plus a loud warning if stored version
+  ever exceeds the registry again (the old numbering silently skipped
+  migrations on old DBs — caught live on papi).
+- **Responses `incomplete` mislabeled as stop**: upstream `response.incomplete`
+  (e.g. output tokens burned on reasoning, zero content) now translates to
+  `finish_reason: "length"` with usage instead of a dead empty `stop` turn —
+  the "run ends on tool task" killer. Tool-calls-already-emitted still reports
+  `tool_calls`.
+- **Disabled accounts stick (U9)**: re-add/re-login can only deactivate, never
+  reactivate; re-enable only via explicit toggle. Bulk provider disable asks
+  for confirmation with the affected count.
+
+## Features
+- **Playground picker per-provider**: group headers show the provider/node name
+  + key count, never key names; request routing unchanged (provider prefixes).
+- **Docs button (U7)**: header menu gains Docs next to Change Log, serving the
+  local `/docs` API reference.
+- **AgentRouter UA verified (U6)**: echo-probe proves the configured UA
+  (`opencode/1.18.30`) leaves the gateway byte-identical — no code change
+  needed.
+- **Repo docs**: root `AGENTS.md` (routing, no-stall discipline, planning
+  protocol, pre-ship gate), `DESIGN.md` (operations-console world, teal band),
+  `TARGET.md` (P0 → 1.0.1 → 1.1.0 with U1–U21/OC1 mapping).
+
+## Tests
+- New: `ua-migration-002` (+ v3-stamped replay), `isactive-sticky` (7),
+  `openai-responses-incomplete` (captured live shape), group-label tests.
+  Touched-area suites 51/51 green; responses path 50/50 green.
+
 # v1.0.0 (2026-09-20) — first complete release
 
 ## Features

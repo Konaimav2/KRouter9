@@ -1,4 +1,4 @@
-import { getProviderAlias, isAnthropicCompatibleProvider, isOpenAICompatibleProvider } from "@/shared/constants/providers";
+import { AI_PROVIDERS, getProviderAlias, isAnthropicCompatibleProvider, isOpenAICompatibleProvider } from "@/shared/constants/providers";
 
 function humanize(value = "") {
   return String(value)
@@ -9,6 +9,18 @@ function humanize(value = "") {
 
 export function getProviderLabel(connection) {
   return connection?.name || humanize(connection?.provider || connection?.id || "provider");
+}
+
+// Picker group label — per PROVIDER, never per key (U1). Compatible nodes show
+// the node name; built-ins show the registry display name. Key names must not
+// leak into the picker.
+export function getProviderGroupLabel(connection, providerId) {
+  const id = providerId || connection?.provider || connection?.id || "";
+  const psd = connection?.providerSpecificData || {};
+  if (isOpenAICompatibleProvider(id) || isAnthropicCompatibleProvider(id)) {
+    return psd.nodeName || psd.prefix || humanize(id);
+  }
+  return AI_PROVIDERS?.[id]?.name || humanize(id);
 }
 
 export function requestPrefixFor(connection) {

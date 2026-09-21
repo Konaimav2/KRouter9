@@ -219,7 +219,11 @@ export async function createProviderConnection(data) {
 
     if (existing) {
       const normalized = resetHealthStateOnActivation(existing, data);
-      const merged = { ...existing, ...normalized, updatedAt: now };
+      // U9: a disabled account stays disabled across re-adds/re-imports/
+      // re-logins until explicitly toggled back via updateProviderConnection.
+      // Re-adding may only deactivate, never reactivate.
+      const stickyActive = data.isActive === false ? false : existing.isActive;
+      const merged = { ...existing, ...normalized, isActive: stickyActive, updatedAt: now };
       upsert(db, merged);
       result = merged;
       return;

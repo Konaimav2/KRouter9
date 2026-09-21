@@ -7,6 +7,7 @@ import {
 } from "@/models";
 import { applyCustomHeaders } from "open-sse/utils/customHeaders.js";
 import { sanitizeConnectionForBrowser } from "@/lib/proxyMask.js";
+import { isOpenAICompatibleProvider, isAnthropicCompatibleProvider, isCustomEmbeddingProvider } from "@/shared/constants/providers";
 
 function normalizeProxyConfig(body = {}) {
   const hasAnyProxyField =
@@ -128,7 +129,16 @@ export async function PUT(request, { params }) {
       }
     }
     const userAgentUpdate = typeof body.userAgent === "string" ? body.userAgent.trim() : undefined;
-    const hasUserAgentUpdate = body.userAgent !== undefined;
+    // U1: node-based (compatible) connections inherit the node-level UA —
+    // per-key userAgent updates are ignored for them (node editor owns it).
+    const isNodeOwned =
+      isOpenAICompatibleProvider(existing.provider) ||
+      isAnthropicCompatibleProvider(existing.provider) ||
+      isCustomEmbeddingProvider(existing.provider);
+    const hasUserAgentUpdate = body.userAgent !== undefined && !isNodeOwned;
+    if (isNodeOwned && providerSpecificData && typeof providerSpecificData === "object") {
+      delete providerSpecificData.userAgent;
+    }
 
     const updateData = {};
     if (name !== undefined) updateData.name = name;

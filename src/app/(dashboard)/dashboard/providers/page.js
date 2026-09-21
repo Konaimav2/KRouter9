@@ -8,6 +8,7 @@ import {
   Badge,
   Button,
   Toggle,
+  ConfirmModal,
 } from "@/shared/components";
 import ProviderIcon from "@/shared/components/ProviderIcon";
 import { getProviderIconSrc } from "@/shared/utils/providerIcon";
@@ -107,6 +108,8 @@ export default function ProvidersPage() {
   const [testingMode, setTestingMode] = useState(null);
   const [testResults, setTestResults] = useState(null);
   const [statusFilter, setStatusFilter] = useState("all");
+  // U9: bulk disable asks for confirmation before flipping N connections.
+  const [pendingToggle, setPendingToggle] = useState(null);
   const notify = useNotificationStore();
   const searchQuery = useHeaderSearchStore((s) => s.query);
   const registerSearch = useHeaderSearchStore((s) => s.register);
@@ -232,7 +235,20 @@ export default function ProvidersPage() {
 
   // Toggle all connections for a provider on/off. authType may be a single
   // string or an array (kiro counts oauth + api_key/apikey together).
-  const handleToggleProvider = async (providerId, authType, newActive) => {
+  // Disabling is bulk-destructive (U9) → confirm first; enabling applies now.
+  const handleToggleProvider = (providerId, authType, newActive) => {
+    if (newActive === false) {
+      const authTypes = Array.isArray(authType) ? authType : [authType];
+      const count = connections.filter(
+        (c) => c.provider === providerId && authTypes.includes(c.authType) && c.isActive !== false
+      ).length;
+      setPendingToggle({ providerId, authTypes, count });
+      return;
+    }
+    doToggleProvider(providerId, authType, newActive);
+  };
+
+  const doToggleProvider = async (providerId, authType, newActive) => {
     const authTypes = Array.isArray(authType) ? authType : [authType];
     const matches = (c) =>
       c.provider === providerId && authTypes.includes(c.authType);
@@ -702,6 +718,20 @@ export default function ProvidersPage() {
           </div>
         </div>
       )}
+      <ConfirmModal
+        isOpen={!!pendingToggle}
+        onClose={() => setPendingToggle(null)}
+        onConfirm={() => {
+          const t = pendingToggle;
+          setPendingToggle(null);
+          if (t) doToggleProvider(t.providerId, t.authTypes, false);
+        }}
+        title="Disable provider connections?"
+        message={`This will disable ${pendingToggle?.count ?? 0} active connection${(pendingToggle?.count ?? 0) === 1 ? "" : "s"}. Disabled accounts stay disabled until you toggle them back.`}
+        confirmText="Disable"
+        cancelText="Cancel"
+        variant="danger"
+      />
     </div>
   );
 }

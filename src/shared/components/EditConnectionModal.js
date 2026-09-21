@@ -199,7 +199,7 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
       } else {
         updates.customHeaders = {};
       }
-      updates.userAgent = resolveNodeUserAgent(uaPreset, uaCustom);
+      updates.userAgent = isCompatible ? undefined : resolveNodeUserAgent(uaPreset, uaCustom);
 
       await onSave(updates);
     } finally {
@@ -302,6 +302,10 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
           />
         )}
 
+        {/* U1: compatible (node-based) connections inherit the node-level UA —
+            set it in the provider/node editor. Per-connection UA remains only
+            for built-in providers, which have no node entity. */}
+        {!isCompatible && (<>
         <Select
           label="User-Agent"
           value={uaPreset}
@@ -317,6 +321,7 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
             placeholder="myapp/1.0"
           />
         )}
+        </>)}
 
         <Input
           label="Custom request headers (JSON)"

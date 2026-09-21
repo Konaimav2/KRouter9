@@ -45,15 +45,29 @@ export function presetForUserAgent(ua) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Node-level UA selector: the curated 5-choice list for Add/Edit Compatible
-// Provider modals. "9router" is the default and sends the krouter9/<version>
-// gateway string. Connection-level modals keep the full list above.
+// Provider-level UA selector for Add/Edit Compatible Provider modals.
+// U1/U2: User-Agent is provider-level only — the 12 ex-per-key presets above
+// are merged here (single source: UA_BY_VALUE). The node value propagates to
+// every key-pool connection on the node, so one select covers all keys.
+// "krouter9" is the default and sends the krouter9/<version> gateway string.
 // ─────────────────────────────────────────────────────────────────────────
 export const NODE_UA_PRESET_OPTIONS = [
-  { value: "krouter9", label: "9Router (default)" },
-  { value: "opencode", label: "OpenCode" },
+  { value: "krouter9", label: "KRouter9 (default)" },
+  { value: "opencode", label: "OpenCode", ua: "opencode/1.18.30" },
   { value: "claude_code", label: "Claude Code", ua: UA_BY_VALUE.claude_code },
-  { value: "browser", label: "Browser" },
+  { value: "codex_cli_rs", label: "OpenAI Codex CLI", ua: UA_BY_VALUE.codex_cli_rs },
+  { value: "copilot", label: "GitHub Copilot Chat", ua: UA_BY_VALUE.copilot },
+  { value: "antigravity", label: "Antigravity IDE", ua: UA_BY_VALUE.antigravity },
+  { value: "gemini_cli", label: "Gemini CLI", ua: UA_BY_VALUE.gemini_cli },
+  { value: "kiro", label: "Kiro IDE", ua: UA_BY_VALUE.kiro },
+  { value: "trae", label: "Trae", ua: UA_BY_VALUE.trae },
+  { value: "codebuddy_cn", label: "CodeBuddy CN", ua: UA_BY_VALUE.codebuddy_cn },
+  { value: "codebuddy_intl", label: "CodeBuddy Intl", ua: UA_BY_VALUE.codebuddy_intl },
+  { value: "grok_cli", label: "Grok CLI", ua: UA_BY_VALUE.grok_cli },
+  { value: "kimchi", label: "Kimchi", ua: UA_BY_VALUE.kimchi },
+  { value: "zed", label: "Zed", ua: UA_BY_VALUE.zed },
+  { value: "iflow", label: "iFlow CLI", ua: UA_BY_VALUE.iflow },
+  { value: "browser", label: "Browser", ua: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36" },
   { value: "custom", label: "Custom..." },
 ];
 
@@ -66,7 +80,8 @@ export function presetForNodeUserAgent(ua) {
   if (!t) return { preset: "krouter9", custom: "" };
   if (t.startsWith("krouter9/") || t === "krouter9") return { preset: "krouter9", custom: "" };
   if (t.startsWith("opencode/")) return { preset: "opencode", custom: "" };
-  if (t === UA_BY_VALUE.claude_code) return { preset: "claude_code", custom: "" };
+  const hit = NODE_UA_PRESET_OPTIONS.find((o) => o.ua === t);
+  if (hit) return { preset: hit.value, custom: "" };
   if (t.startsWith("Mozilla/")) return { preset: "browser", custom: "" };
   return { preset: "custom", custom: t };
 }
