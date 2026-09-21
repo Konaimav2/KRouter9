@@ -538,8 +538,12 @@ export function openaiResponsesToOpenAIResponse(chunk, state) {
     return null;
   }
 
-  // Response completed
-  if (eventType === "response.completed" || eventType === "response.done") {
+  // Response completed — or incomplete (e.g. max_output_tokens exhausted while
+  // the model was still reasoning: no content items follow). Incomplete maps
+  // to OpenAI finish_reason "length" (unless tool calls were already emitted,
+  // which the client must still execute) so callers retry/continue instead of
+  // recording a dead stop turn with empty text.
+  if (eventType === "response.completed" || eventType === "response.done" || eventType === "response.incomplete") {
     // Extract usage from response.completed event
     const responseUsage = data.response?.usage;
     if (responseUsage && typeof responseUsage === "object") {
@@ -553,7 +557,10 @@ export function openaiResponsesToOpenAIResponse(chunk, state) {
     }
     
     if (!state.finishReasonSent) {
-      const finishReason = computeFinishReason(state);
+      let finishReason = computeFinishReason(state);
+      if (eventType === "response.incomplete" && finishReason !== OPENAI_FINISH.TOOL_CALLS) {
+        finishReason = OPENAI_FINISH.LENGTH;
+      }
 
       state.finishReasonSent = true;
       state.finishReason = finishReason; // Mark for usage injection in stream.js

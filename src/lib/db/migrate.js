@@ -61,6 +61,11 @@ function runVersionedMigrations(adapter) {
 
   const current = parseInt(getMetaSync(adapter, "schemaVersion", "0"), 10) || 0;
   const target = latestVersion();
+  if (current > target) {
+    // Stored version newer than the registry = numbering drift (this exact bug
+    // once skipped migrations forever). Loud warning, not silent skip.
+    console.warn(`[DB][migrate] stored schemaVersion ${current} is NEWER than registry latest ${target} — check migration version numbering`);
+  }
   if (current >= target) return { applied: 0, from: current, to: current };
 
   const pending = MIGRATIONS.filter((m) => m.version > current);
