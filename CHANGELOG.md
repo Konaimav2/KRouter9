@@ -1,5 +1,9 @@
 # v1.1.1 (2026-09-28) — combo routing order, opencode free-tier cloak, 4xx fall-through, disabled-toggle, 3 providers
 
+> Shipped to papi 2026-09-28 (GHCR `:1.1.1`, digest `6e450b1a6ea9`; previous container kept as
+> `krouter9-1.1.0-rollback`). Note: first image build preceded the version bump, so
+> `/api/version` initially reported `1.1.0`; rebuilt with the bumped tree — reports `1.1.1`.
+
 ## Fixes
 - **Combo skips members sharing its name (papi-proven)**: `getModelInfo` resolved
   `<provider>/<comboName>` to the combo before provider resolution, so the P0a
