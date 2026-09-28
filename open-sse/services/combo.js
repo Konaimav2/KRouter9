@@ -266,6 +266,42 @@ export function getComboModelsFromData(modelStr, combosData) {
 }
 
 /**
+ * Partition combo members into self-referencing (drop) vs safe (try).
+ * A member is self-referencing ONLY if its tail matches a combo already in the
+ * ancestor chain AND it actually resolves back to the combo path
+ * (`resolveInfo(m)` returns a null provider). Provider-qualified members whose
+ * model merely shares the combo's bare name (e.g. `cx/gpt-5.6-terra` with combo
+ * `gpt-5.6-terra`) resolve to their provider and must be kept — dropping them
+ * by tail-match alone silently empties real combos.
+ * Fail-closed: a resolver throw counts as self (preserves the P0a loop guard).
+ * @param {string[]} models - Augmented member list
+ * @param {Set<string>} visited - Ancestor combo names (bare tails)
+ * @param {Function} resolveInfo - Async (modelStr) => { provider, model } | null
+ * @returns {Promise<{safe: string[], self: string[]}>}
+ */
+export async function partitionComboMembers(models, visited, resolveInfo) {
+  const safe = [];
+  const self = [];
+  for (const m of models || []) {
+    const tail = String(m).includes("/") ? String(m).split("/").pop() : String(m);
+    if (!visited.has(tail)) {
+      safe.push(m);
+      continue;
+    }
+    let isSelf = true;
+    try {
+      const info = await resolveInfo(m);
+      isSelf = !info || !info.provider;
+    } catch {
+      isSelf = true;
+    }
+    if (isSelf) self.push(m);
+    else safe.push(m);
+  }
+  return { safe, self };
+}
+
+/**
  * Handle combo chat with fallback
  * @param {Object} options
  * @param {Object} options.body - Request body
