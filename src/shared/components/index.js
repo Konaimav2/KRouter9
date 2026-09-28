@@ -31,6 +31,7 @@ export { default as CursorAuthModal } from "./CursorAuthModal";
 export { default as IFlowCookieModal } from "./IFlowCookieModal";
 export { default as GitLabAuthModal } from "./GitLabAuthModal";
 export { default as EditConnectionModal } from "./EditConnectionModal";
+export { default as MaskedProxyValue, PROXY_REVEAL_AUTO_HIDE_MS } from "./MaskedProxyValue";
 export { default as AddCustomEmbeddingModal } from "./AddCustomEmbeddingModal";
 export { default as NoAuthProxyCard } from "./NoAuthProxyCard";
 export { default as SegmentedControl } from "./SegmentedControl";

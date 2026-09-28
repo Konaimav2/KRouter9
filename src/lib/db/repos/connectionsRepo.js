@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { v4 as uuidv4 } from "uuid";
 import { getAdapter } from "../driver.js";
 import { parseJson, stringifyJson } from "../helpers/jsonCol.js";
@@ -87,6 +88,40 @@ function deriveConnectionName(data, fallbackName) {
       || fallbackName;
   }
   return fallbackName;
+}
+
+// Upstream key dedupe: per-provider scope, trim-normalized, constant-time
+// SHA-256 compare (never plaintext-compare). `all` callers pass only the
+// same-provider rows, so scope is enforced by the query, not the helper.
+export function timingSafeApiKeyEqual(a, b) {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  const ta = a.trim();
+  const tb = b.trim();
+  if (!ta || !tb) return false;
+  const da = crypto.createHash("sha256").update(ta, "utf8").digest();
+  const dbDigest = crypto.createHash("sha256").update(tb, "utf8").digest();
+  return crypto.timingSafeEqual(da, dbDigest);
+}
+
+export function findDuplicateApiKeyConnection(all, incomingKey) {
+  if (typeof incomingKey !== "string" || !incomingKey.trim()) return null;
+  for (const c of all || []) {
+    if (typeof c?.apiKey !== "string" || !c.apiKey.trim()) continue;
+    if (timingSafeApiKeyEqual(incomingKey, c.apiKey)) return c;
+  }
+  return null;
+}
+
+export class DuplicateApiKeyError extends Error {
+  constructor(existing) {
+    const label = existing?.name || existing?.id || "existing connection";
+    super(`API key already exists as ${label}`);
+    this.name = "DuplicateApiKeyError";
+    this.code = "DUPLICATE_API_KEY";
+    this.status = 409;
+    this.existingId = existing?.id;
+    this.existingName = existing?.name;
+  }
 }
 
 export async function getProviderConnections(filter = {}) {

@@ -7,6 +7,7 @@ import {
   getProviderNodeById,
   getProviderNodes,
   getProxyPoolById,
+  findDuplicateApiKeyConnection,
 } from "@/models";
 import { APIKEY_PROVIDERS } from "@/shared/constants/config";
 import { AI_PROVIDERS, FREE_TIER_PROVIDERS, WEB_COOKIE_PROVIDERS, isOpenAICompatibleProvider, isAnthropicCompatibleProvider, isCustomEmbeddingProvider } from "@/shared/constants/providers";
@@ -266,6 +267,21 @@ export async function POST(request) {
 
     if (proxyPoolId !== null) {
       mergedProviderSpecificData.proxyPoolId = proxyPoolId;
+    }
+
+    // Upstream key dedupe (U1b): same trimmed key on the same provider is a
+    // 409 naming the existing connection. Scope is per-provider (query above);
+    // compare is constant-time SHA-256 (timingSafeApiKeyEqual). Cookie/web
+    // providers are exempt (rotating values); empty keys are exempt.
+    if (typeof apiKey === "string" && apiKey.trim() && !isWebCookieProvider) {
+      const siblings = await getProviderConnections({ provider });
+      const dupe = findDuplicateApiKeyConnection(siblings, apiKey);
+      if (dupe) {
+        return NextResponse.json(
+          { error: `API key already exists as ${dupe.name || dupe.id}` },
+          { status: 409 }
+        );
+      }
     }
 
     const newConnection = await createProviderConnection({

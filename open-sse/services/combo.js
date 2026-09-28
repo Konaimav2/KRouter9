@@ -2,7 +2,7 @@
  * Shared combo (model combo) handling with fallback support
  */
 
-import { checkFallbackError, formatRetryAfter } from "./accountFallback.js";
+import { checkFallbackError, isModelScopedError, formatRetryAfter } from "./accountFallback.js";
 import { unavailableResponse } from "../utils/error.js";
 import { getCapabilitiesForModel } from "../providers/capabilities.js";
 import { extractTextContent } from "../translator/formats/gemini.js";
@@ -343,8 +343,16 @@ export async function handleComboChat({ body, models, handleSingleModel, log, co
         try { errorText = JSON.stringify(errorText); } catch { errorText = String(errorText); }
       }
 
-      // Check if should fallback to next model
-      const { shouldFallback, cooldownMs } = checkFallbackError(result.status, errorText);
+      // Check if should fallback to next model.
+      // A model-scoped 4xx (unentitled slug, retired model) ends this member but
+      // not the combo: the point of a combo is to try the next model, and the
+      // members behind it may well be usable. checkFallbackError() reports no
+      // fallback for generic 4xx so a request-scoped fault doesn't cool down a
+      // healthy account — correct for account rotation, wrong here. #4271
+      const modelScoped = isModelScopedError(result.status, errorText);
+      const { shouldFallback, cooldownMs } = modelScoped
+        ? { shouldFallback: true, cooldownMs: 0 }
+        : checkFallbackError(result.status, errorText);
 
       if (!shouldFallback) {
         log.warn("COMBO", `Model ${modelStr} failed (no fallback)`, { status: result.status });
@@ -369,9 +377,12 @@ export async function handleComboChat({ body, models, handleSingleModel, log, co
       triedModels.push(`${modelStr} [${result.status}: ${cleanErr}]`);
       log.warn("COMBO", `Model ${modelStr} failed, switching to next model in combo${comboName ? ` "${comboName}"` : ""}`, { status: result.status, tried: triedModels.length });
     } catch (error) {
-      // Catch unexpected exceptions to ensure fallback continues
+      // Catch unexpected exceptions to ensure fallback continues.
+      // Throw-path models must still appear in the terminal tried-chain.
       lastError = error.message || String(error);
       if (!lastStatus) lastStatus = 500;
+      const cleanThrow = String(lastError).replace(/[\r\n\x00-\x1f\x7f]+/g, " ").slice(0, 160);
+      triedModels.push(`${modelStr} [throw: ${cleanThrow}]`);
       log.warn("COMBO", `Model ${modelStr} threw error, trying next`, { error: lastError });
     }
   }

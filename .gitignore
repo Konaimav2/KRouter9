@@ -103,3 +103,6 @@ cli/krouter9-*.tgz
 
 # agent handover (local only)
 HANDOVER.md
+# Migration memory (canonical AGENT is a symlink to /root/AGENT.md; local-only)
+AGENT.md
+TARGET.md

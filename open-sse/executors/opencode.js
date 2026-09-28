@@ -10,6 +10,75 @@ import { isMuseSparkModel } from "../providers/models/helpers.js";
 import { ANTHROPIC_API_VERSION } from "../providers/shared.js";
 
 const OPENCODE_UA = "opencode/1.18.31";
+
+// OpenCode free tier requires both 'bash' and 'read' in tools payload.
+// Injected as cloaked decoy tools so external CLI tools (e.g. Claude Code's Bash/Read)
+// take precedence while satisfying upstream verification.
+// Port of upstream PR #4146 head 7b56f179 (exact-case decoy matching;
+// unconditional cloak on the Responses free-tier path). The quartet approach
+// (upstream 822aa958) is reference-only and NOT ported.
+export const OPENCODE_DECOY_CHAT_TOOLS = [
+  {
+    type: "function",
+    function: {
+      name: "bash",
+      description: "This tool is currently unavailable and must not be used.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "read",
+      description: "This tool is currently unavailable and must not be used.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+];
+
+export const OPENCODE_DECOY_RESPONSES_TOOLS = [
+  {
+    type: "function",
+    name: "bash",
+    description: "This tool is currently unavailable and must not be used.",
+    parameters: { type: "object", properties: {} },
+  },
+  {
+    type: "function",
+    name: "read",
+    description: "This tool is currently unavailable and must not be used.",
+    parameters: { type: "object", properties: {} },
+  },
+];
+
+// Exact-case matching: custom PascalCase tools (Bash, Read) must NOT prevent
+// injection of the lowercase decoys the free tier requires.
+export function cloakOpencodeTools(body, isResponses) {
+  if (!body || typeof body !== "object") return;
+  if (isResponses) {
+    const hasTools = Array.isArray(body.tools) && body.tools.length > 0;
+    if (!hasTools) body.tools = [];
+    const exactNames = new Set(body.tools.map((t) => t?.name || t?.function?.name || ""));
+    for (const tool of OPENCODE_DECOY_RESPONSES_TOOLS) {
+      if (!exactNames.has(tool.name)) body.tools.push({ ...tool });
+    }
+    // Default tool_choice only when the caller sent none (7b56f179).
+    if (!hasTools && !body.tool_choice) body.tool_choice = "auto";
+  } else {
+    const hasTools = Array.isArray(body.tools) && body.tools.length > 0;
+    if (!hasTools) {
+      body.tools = OPENCODE_DECOY_CHAT_TOOLS.map((t) => ({ ...t, function: { ...t.function } }));
+      if (!body.tool_choice) body.tool_choice = "none";
+    } else {
+      const exactNames = new Set(body.tools.map((t) => t?.function?.name || t?.name || ""));
+      for (const tool of OPENCODE_DECOY_CHAT_TOOLS) {
+        if (!exactNames.has(tool.function.name)) {
+          body.tools.push({ ...tool, function: { ...tool.function } });
+        }
+      }
+    }
+  }
+}
 const MAX_SESSION_LENGTH = 256;
 const SESSION_HEADER = "x-opencode-session";
 const SESSION_FIELD = "_opencodeSession";
@@ -318,6 +387,13 @@ export class OpenCodeExecutor extends BaseExecutor {
   transformRequest(model, body, stream, credentials) {
     if (body && typeof body === "object" && model && !body.model) body.model = model;
     if (isResponsesModel(model) && body && typeof body === "object") {
+      // Upstream free-tier gate: only muse-spark-1.3-contributor-free is confirmed
+      // auto-only. Demote named/required/none to "auto"; widen the allowlist only
+      // with upstream evidence (ported from #4146/7b56f179 tool_choice check).
+      if ("tool_choice" in body && body.tool_choice !== "auto"
+        && this.config.quirks?.forceAutoToolChoiceModels?.includes(baseModelId(model))) {
+        body.tool_choice = "auto";
+      }
       // Responses API names the output cap max_output_tokens and takes thinking
       // as reasoning:{effort,summary} — normalize the Chat fields at this boundary.
       if (body.max_output_tokens === undefined) {
@@ -327,6 +403,11 @@ export class OpenCodeExecutor extends BaseExecutor {
       delete body.max_tokens;
       delete body.max_completion_tokens;
       normalizeOpencodeReasoning(model, body);
+      // Free-tier fingerprint decoys are required even when an agent client
+      // already supplied tools; skipping cloak here triggers 403 FreeTierError.
+      cloakOpencodeTools(body, true);
+    } else if (body && typeof body === "object") {
+      cloakOpencodeTools(body, false);
     }
     return injectReasoningContent({ provider: this.provider, model, body });
   }

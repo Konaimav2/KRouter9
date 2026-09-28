@@ -39,14 +39,27 @@ export async function getModelInfo(modelStr) {
   const parsed = parseModel(modelStr);
 
   // Some clients (hermes, some OpenAI SDKs) qualify every model id as <slug>/<model>.
-  // If the trailing segment matches a combo name, resolve as that combo BEFORE
-  // provider resolution — otherwise "<anything>/<combo>" would be parsed as a
-  // provider id and fail.
+  // If the trailing segment matches a combo name, resolve as that combo — but
+  // ONLY when the head segment is not a known provider. A known head
+  // (registry id/alias in RESERVED_PROVIDER_PREFIXES, or an `openai-compatible` /
+  // `anthropic-compatible` node prefix) means the request is an explicit provider
+  // route like `cx/gpt-5.6-terra` and must not be swallowed by the combo path.
+  // Model aliases are deliberately NOT heads here: an alias is not a provider, and
+  // letting it suppress the combo path would misroute `<alias>/<combo-tail>` to a
+  // literal `{provider:<alias>}` downstream. Unknown head + tail combo hit keeps the
+  // slug-qualify behavior ("zzz/<combo>" resolves as the combo).
   if (modelStr.includes("/") && !parsed.isAlias) {
     const tail = modelStr.split("/").pop();
     const prefixedCombo = await getComboByName(tail);
-    if (prefixedCombo) {
-      return { provider: null, model: tail };
+    if (prefixedCombo && !RESERVED_PROVIDER_PREFIXES.has(parsed.providerAlias)) {
+      const providerNodes = await getProviderNodes({ type: "openai-compatible" });
+      const anthropicNodes = await getProviderNodes({ type: "anthropic-compatible" });
+      const isNodePrefix =
+        providerNodes.some((node) => node.prefix === parsed.providerAlias) ||
+        anthropicNodes.some((node) => node.prefix === parsed.providerAlias);
+      if (!isNodePrefix) {
+        return { provider: null, model: tail };
+      }
     }
   }
 

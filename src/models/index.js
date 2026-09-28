@@ -7,6 +7,7 @@ export {
   createProviderConnection,
   updateProviderConnection,
   deleteProviderConnection,
+  timingSafeApiKeyEqual, findDuplicateApiKeyConnection, DuplicateApiKeyError,
   getProviderNodes,
   getProviderNodeById,
   createProviderNode,

@@ -2,12 +2,28 @@ import { getProviderConnections, validateApiKey, updateProviderConnection, getSe
 import { resolveConnectionProxyConfig, pickProxyPoolId } from "@/lib/network/connectionProxy";
 import { formatRetryAfter, checkFallbackError, isClientFault, isModelLockActive, buildModelLockUpdate, getEarliestModelLockUntil } from "open-sse/services/accountFallback.js";
 import { MAX_RATE_LIMIT_COOLDOWN_MS } from "open-sse/config/errorConfig.js";
-import { resolveProviderId, FREE_PROVIDERS } from "@/shared/constants/providers.js";
+import { resolveProviderId, getProviderAlias, FREE_PROVIDERS } from "@/shared/constants/providers.js";
+import { getDisabledByProvider } from "@/lib/disabledModelsDb";
 import { getAntigravityQuotaCache } from "./antigravityQuota.js";
 import * as log from "../utils/logger.js";
 
 // Mutex to prevent race conditions during account selection
 let selectionMutex = Promise.resolve();
+
+export const DEFAULT_STICKY_FALLBACK_TTL_MS = 5 * 60 * 1000;
+
+// Sticky fallback TTL (ms): per-provider override → global → default.
+// NaN/negative fall back to default; 0 disables stickiness.
+export function resolveStickyFallbackTtlMs(override, settings) {
+  const raw = override?.stickyFallbackTtlMs ?? settings?.stickyFallbackTtlMs ?? DEFAULT_STICKY_FALLBACK_TTL_MS;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return DEFAULT_STICKY_FALLBACK_TTL_MS;
+  return Math.floor(n);
+}
+
+function newestStickyFirst(a, b) {
+  return Date.parse(b.failoverStickyUntil) - Date.parse(a.failoverStickyUntil);
+}
 
 const GITHUB_MONTHLY_USAGE_LIMIT = "you've reached your additional usage limit for your plan";
 
@@ -16,6 +32,26 @@ function githubMonthlyResetMs(status, errorText, provider) {
   if (!String(errorText || "").toLowerCase().includes(GITHUB_MONTHLY_USAGE_LIMIT)) return null;
   const now = new Date();
   return Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1);
+}
+
+/**
+ * Read the dashboard's disabled-model list for a provider.
+ * The UI writes kv scope "disabledModels" keyed by BOTH alias and provider id,
+ * so check both. Fail-open: a DB error must never block routing.
+ */
+async function isModelDisabled(providerId, model) {
+  if (!model) return false;
+  try {
+    const alias = getProviderAlias(providerId);
+    const keys = alias && alias !== providerId ? [alias, providerId] : [providerId];
+    for (const key of keys) {
+      const disabled = await getDisabledByProvider(key);
+      if (Array.isArray(disabled) && disabled.includes(model)) return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
 }
 
 /**
@@ -41,6 +77,15 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
 
     // Resolve alias to provider ID (e.g., "kc" -> "kilocode")
     const providerId = resolveProviderId(provider);
+
+    // Honour the dashboard's disabled-model toggle at request time (#4249, #4246).
+    // Without this the toggle is UI-only: a model switched off in the dashboard is
+    // still routed, and a dead upstream model burns the full connect timeout first.
+    // Returning null is the shape every caller already handles as "unavailable".
+    if (await isModelDisabled(providerId, model)) {
+      log.warn("AUTH", `${provider}|${model} is disabled in the dashboard — rejecting`);
+      return null;
+    }
 
     // Inject a virtual connection for no-auth free providers (with optional proxy pool from settings)
     if (FREE_PROVIDERS[providerId]?.noAuth) {
@@ -137,6 +182,7 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
     // Per-provider strategy overrides global setting
     const providerOverride = (settings.providerStrategies || {})[providerId] || {};
     const strategy = providerOverride.fallbackStrategy || settings.fallbackStrategy || "fill-first";
+    const stickyTtlMs = resolveStickyFallbackTtlMs(providerOverride, settings);
 
     let connection;
     // Pin to preferred connection if specified and available
@@ -144,6 +190,23 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
       connection = availableConnections.find((c) => c.id === preferredConnectionId);
       if (connection) {
         log.info("AUTH", `${provider} | pinned to ${connection.id?.slice(0, 8)} (${connection.name || connection.email || "unnamed"})`);
+      }
+    }
+    // Sticky fallback (U1d): after a failover, fresh requests (nothing
+    // excluded) pin to the newest unexpired failoverStickyUntil for the TTL.
+    // No write here — refreshing on sticky hits would stick forever.
+    // Excluded/locked connections never reach this list (filtered above).
+    if (!connection && stickyTtlMs > 0 && excludeSet.size === 0) {
+      const now = Date.now();
+      const sticky = availableConnections
+        .filter((c) => {
+          const t = Date.parse(c.failoverStickyUntil || "");
+          return Number.isFinite(t) && t > now;
+        })
+        .sort(newestStickyFirst)[0];
+      if (sticky) {
+        connection = sticky;
+        log.info("AUTH", `${provider} | sticky ${connection.id?.slice(0, 8)} until ${connection.failoverStickyUntil}`);
       }
     }
     if (connection) {
@@ -166,9 +229,13 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
         // Stay with current account
         connection = current;
         // Update lastUsedAt and increment count (await to ensure persistence)
+        // On a real failover pick, also stamp the sticky TTL (U1d).
         await updateProviderConnection(connection.id, {
           lastUsedAt: new Date().toISOString(),
-          consecutiveUseCount: (connection.consecutiveUseCount || 0) + 1
+          consecutiveUseCount: (connection.consecutiveUseCount || 0) + 1,
+          ...(excludeSet.size > 0 && stickyTtlMs > 0
+            ? { failoverStickyUntil: new Date(Date.now() + stickyTtlMs).toISOString() }
+            : {}),
         });
       } else {
         // Pick the least recently used (excluding current if possible)
@@ -182,14 +249,25 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
         connection = sortedByOldest[0];
 
         // Update lastUsedAt and reset count to 1 (await to ensure persistence)
+        // On a real failover pick, also stamp the sticky TTL (U1d).
         await updateProviderConnection(connection.id, {
           lastUsedAt: new Date().toISOString(),
-          consecutiveUseCount: 1
+          consecutiveUseCount: 1,
+          ...(excludeSet.size > 0 && stickyTtlMs > 0
+            ? { failoverStickyUntil: new Date(Date.now() + stickyTtlMs).toISOString() }
+            : {}),
         });
       }
     } else {
       // Default: fill-first (already sorted by priority in getProviderConnections)
       connection = availableConnections[0];
+      // Single write for the failover pick (U1d sticky stamp). No write on
+      // sticky hits — the pin branch above is read-only.
+      if (connection && excludeSet.size > 0 && stickyTtlMs > 0) {
+        await updateProviderConnection(connection.id, {
+          failoverStickyUntil: new Date(Date.now() + stickyTtlMs).toISOString(),
+        });
+      }
     }
 
     const resolvedProxy = await resolveConnectionProxyConfig(connection.providerSpecificData || {});
