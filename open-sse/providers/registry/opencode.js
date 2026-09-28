@@ -17,7 +17,11 @@ export default {
     headers: {
       "x-opencode-client": "desktop",
     },
+    forceStream: true,
     noAuth: true,
+    quirks: {
+      forceAutoToolChoiceModels: ["muse-spark-1.3-contributor-free"],
+    },
   },
   models: [
     // Muse Spark models are served by /zen/v1/responses; the rest stay on

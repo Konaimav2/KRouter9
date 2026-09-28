@@ -12,9 +12,19 @@ const resultsPath = process.argv[2];
 if (!resultsPath) { console.error("Missing results.json path"); process.exit(2); }
 
 const r = JSON.parse(readFileSync(resultsPath, "utf8"));
+// File key: vitest names are repo-relative locally but /app/-prefixed in
+// Docker. Normalize to the trailing path so both shapes key identically.
+const fileKey = (name) => {
+  const s = String(name || "");
+  const app = s.lastIndexOf("/app/");
+  if (app >= 0) return s.slice(app + 5);
+  const t = s.indexOf("tests/");
+  if (t >= 0) return s.slice(t);
+  return s.replace(/^\.\//, "");
+};
 const nowFails = r.testResults.flatMap(f =>
   f.assertionResults.filter(a => a.status === "failed")
-    .map(a => f.name.split("/app/")[1] + " :: " + a.fullName)
+    .map(a => fileKey(f.name) + " :: " + a.fullName)
 );
 
 // Regression = fail bây giờ NHƯNG không có trong baseline known-fails

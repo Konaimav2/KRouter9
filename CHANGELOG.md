@@ -1,3 +1,25 @@
+# v1.1.1 (2026-09-28) — combo routing order, opencode free-tier cloak, 4xx fall-through, disabled-toggle, 3 providers
+
+## Fixes
+- **Combo skips members sharing its name (papi-proven)**: `getModelInfo` resolved
+  `<provider>/<comboName>` to the combo before provider resolution, so the P0a
+  pre-filter dropped 5/7 members of `gpt-5.6-terra` (all traffic fell through to one
+  model). Known-provider heads (registry ids/aliases, node prefixes) now route to the
+  provider; unknown heads keep slug-qualify behavior. Combo log reports `N of M models`.
+- **Opencode free-tier 403 (selective port of upstream #4146/#4155)**: exact-case
+  `bash`/`read` decoy cloak unconditional on Responses + Chat paths, `tool_choice`
+  default-only-when-absent, `forceStream` declaration. Live-probed `PROBE_OK`, no 403.
+- **Combo 4xx fall-through (port of upstream #4340)**: model-scoped 4xx (unentitled slug,
+  retired model) advances the combo with `cooldownMs: 0`; account-scoped 401/402/403/429
+  unchanged. Terminal errors name every tried model.
+- **Disabled-model toggle honored at request time (port of upstream #4318)**:
+  fail-open, alias+id keys. Sticky fallback (1d) behaviorally intact (6/6).
+- **Build**: fixed stray `);` in dashboard providers page (pre-existing 1a damage).
+
+## Features
+- **Three providers wired**: AgentRouter (`agentr`), B.AI (`bai`), TokenHarbor (`tkhb`,
+  id kept for papi `tkhb/` route compat); registry index regen (122 entries) + tests.
+
 # v1.1.0 (2026-09-21) — combo hot-loop + provider-level UA + incomplete fix
 
 ## Fixes

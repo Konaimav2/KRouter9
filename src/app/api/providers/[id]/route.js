@@ -9,7 +9,7 @@ import { applyCustomHeaders } from "open-sse/utils/customHeaders.js";
 import { sanitizeConnectionForBrowser } from "@/lib/proxyMask.js";
 import { isOpenAICompatibleProvider, isAnthropicCompatibleProvider, isCustomEmbeddingProvider } from "@/shared/constants/providers";
 
-function normalizeProxyConfig(body = {}) {
+export function normalizeProxyConfig(body = {}, existingProxyUrl = "") {
   const hasAnyProxyField =
     Object.prototype.hasOwnProperty.call(body, "connectionProxyEnabled") ||
     Object.prototype.hasOwnProperty.call(body, "connectionProxyUrl") ||
@@ -24,7 +24,9 @@ function normalizeProxyConfig(body = {}) {
   const url = (!rawUrl || rawUrl.includes("***")) ? null : rawUrl;
   const noProxy = typeof body?.connectionNoProxy === "string" ? body.connectionNoProxy.trim() : "";
 
-  if (enabled && !url) {
+  // Blank on edit keeps the stored secret when one exists; a missing secret
+  // with proxy enabled is still a 400 (create path / first-time setup).
+  if (enabled && !url && !String(existingProxyUrl || "").trim()) {
     return {
       hasAnyProxyField: true,
       error: "Connection proxy URL is required when connection proxy is enabled",
@@ -108,7 +110,7 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 });
     }
 
-    const proxyConfig = normalizeProxyConfig(body);
+    const proxyConfig = normalizeProxyConfig(body, existing?.providerSpecificData?.connectionProxyUrl);
     if (proxyConfig.error) {
       return NextResponse.json({ error: proxyConfig.error }, { status: 400 });
     }

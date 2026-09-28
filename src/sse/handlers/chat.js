@@ -288,7 +288,8 @@ export async function handleChat(request, clientRawRequest = null, options = {})
     }
 
     const comboStickyLimit = settings.comboStickyRoundRobinLimit;
-    log.info("CHAT", `Combo "${modelStr}" with ${safeModels.length} models (strategy: ${comboStrategy}, sticky: ${comboStickyLimit})`);
+    const droppedSuffix = selfMembers.length > 0 ? `, dropped ${selfMembers.length} self-referencing` : "";
+    log.info("CHAT", `Combo "${modelStr}" with ${safeModels.length} of ${augmentedModels.length} models${droppedSuffix} (strategy: ${comboStrategy}, sticky: ${comboStickyLimit})`);
     return handleComboChat({
       body,
       models: safeModels,
@@ -419,7 +420,8 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       }
 
       const comboStickyLimit = chatSettings.comboStickyRoundRobinLimit;
-      log.info("CHAT", `Combo "${modelStr}" with ${safeModels.length} models (strategy: ${comboStrategy}, sticky: ${comboStickyLimit})`);
+      const droppedSuffix = selfMembers.length > 0 ? `, dropped ${selfMembers.length} cyclic` : "";
+      log.info("CHAT", `Combo "${modelStr}" with ${safeModels.length} of ${augmentedModels.length} models${droppedSuffix} (strategy: ${comboStrategy}, sticky: ${comboStickyLimit})`);
       return handleComboChat({
         body,
         models: safeModels,

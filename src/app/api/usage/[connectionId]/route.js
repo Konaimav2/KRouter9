@@ -52,6 +52,14 @@ export async function refreshAndUpdateCredentials(connection, force = false, pro
     if (connection.accessToken) {
       return { connection, refreshed: false };
     }
+    // No usable token: persist the distinct refresh-invalid state so the UI
+    // badges it separately from generic auth errors (U1c). Cleared on the
+    // next successful test/refresh via resetHealthStateOnActivation.
+    await updateProviderConnection(connection.id, {
+      testStatus: "refresh-invalid",
+      lastError: "Failed to refresh credentials. Please re-authorize the connection.",
+      lastErrorAt: new Date().toISOString(),
+    });
     throw new Error("Failed to refresh credentials. Please re-authorize the connection.");
   }
 

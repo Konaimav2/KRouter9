@@ -27,8 +27,9 @@ import { useHeaderSearchStore } from "@/store/headerSearchStore";
 import ModelAvailabilityBadge from "./components/ModelAvailabilityBadge";
 import AddCompatibleModal from "./components/AddCompatibleModal";
 import { STATUS_FILTER_OPTIONS, matchesStatusFilter } from "./utils";
+import { normalizeErrorClass, errorClassLabel, errorClassVariant } from "@/shared/utils/errorClass";
 
-function getStatusDisplay(connected, error, errorCode) {
+function getStatusDisplay(connected, error, errorCode, errorClass) {
   const parts = [];
   if (connected > 0) {
     parts.push(
@@ -38,12 +39,12 @@ function getStatusDisplay(connected, error, errorCode) {
     );
   }
   if (error > 0) {
-    const errText = errorCode
-      ? `${error} Error (${errorCode})`
-      : `${error} Error`;
+    // Normalized error class drives the badge (U1c); raw code kept as detail.
+    const label = errorClass && errorClass !== "unknown" ? errorClassLabel(errorClass) : "Error";
+    const detail = errorCode ? ` (${errorCode})` : "";
     parts.push(
-      <Badge key="error" variant="error" size="sm" dot>
-        {errText}
+      <Badge key="error" variant={errorClassVariant(errorClass)} size="sm" dot>
+        {error} {label}{detail}
       </Badge>,
     );
   }
@@ -108,6 +109,8 @@ export default function ProvidersPage() {
   const [testingMode, setTestingMode] = useState(null);
   const [testResults, setTestResults] = useState(null);
   const [statusFilter, setStatusFilter] = useState("all");
+  // U1c: group providers by normalized error class.
+  const [errorClassFilter, setErrorClassFilter] = useState("all");
   // U9: bulk disable asks for confirmation before flipping N connections.
   const [pendingToggle, setPendingToggle] = useState(null);
   const notify = useNotificationStore();
@@ -210,7 +213,8 @@ export default function ProvidersPage() {
     const errorConns = providerConnections.filter((c) => {
       const status = getEffectiveStatus(c);
       return (
-        status === "error" || status === "expired" || status === "unavailable"
+        status === "error" || status === "expired" || status === "unavailable" ||
+        status === "refresh-invalid"
       );
     });
 
@@ -223,15 +227,22 @@ export default function ProvidersPage() {
       (a, b) => new Date(b.lastErrorAt || 0) - new Date(a.lastErrorAt || 0),
     )[0];
     const errorCode = latestError ? getConnectionErrorTag(latestError) : null;
+    const errorClass = latestError ? normalizeErrorClass(latestError) : null;
+    // Normalized classes present on this provider (for the error-class filter).
+    const errorClasses = [...new Set(
+      errorConns.map((c) => normalizeErrorClass(c)).filter((c) => c !== "unknown")
+    )];
     const errorTime = latestError?.lastErrorAt
       ? getRelativeTime(latestError.lastErrorAt)
       : null;
 
-    return { connected, error, total, errorCode, errorTime, allDisabled };
+    return { connected, error, total, errorCode, errorClass, errorClasses, errorTime, allDisabled };
   };
 
   const matchStatus = (stats, isNoAuth) =>
-    matchesStatusFilter(statusFilter, stats, isNoAuth);
+    matchesStatusFilter(statusFilter, stats, isNoAuth) &&
+    (errorClassFilter === "all" ||
+      (stats?.errorClasses || []).includes(errorClassFilter));
 
   // Toggle all connections for a provider on/off. authType may be a single
   // string or an array (kiro counts oauth + api_key/apikey together).
@@ -415,7 +426,7 @@ export default function ProvidersPage() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6 px-1 sm:px-0">
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-end gap-2">
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
@@ -427,6 +438,19 @@ export default function ProvidersPage() {
               {option.label}
             </option>
           ))}
+        </select>
+        <select
+          value={errorClassFilter}
+          onChange={(e) => setErrorClassFilter(e.target.value)}
+          className="h-8 rounded-lg border border-black/10 bg-black/[0.02] px-2 text-xs text-text-primary outline-none transition-colors hover:bg-black/5 dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/10"
+          aria-label="Filter providers by error class"
+          title="Group by normalized error class"
+        >
+          <option value="all">All errors</option>
+          <option value="auth-invalid">Auth invalid</option>
+          <option value="refresh-invalid">Refresh invalid</option>
+          <option value="ratelimited">Rate limited</option>
+          <option value="network">Network</option>
         </select>
       </div>
 
@@ -737,7 +761,7 @@ export default function ProvidersPage() {
 }
 
 function ProviderCard({ providerId, provider, stats, authType, onToggle }) {
-  const { connected, error, errorCode, errorTime, allDisabled } = stats;
+  const { connected, error, errorCode, errorClass, errorTime, allDisabled } = stats;
   const isNoAuth = !!provider.noAuth;
 
   const dotColors = {
@@ -794,7 +818,7 @@ function ProviderCard({ providerId, provider, stats, authType, onToggle }) {
                   <Badge variant="success" size="sm" dot>Ready</Badge>
                 ) : (
                   <>
-                    {getStatusDisplay(connected, error, errorCode)}
+                    {getStatusDisplay(connected, error, errorCode, errorClass)}
                     {errorTime && (
                       <span className="text-text-muted">{errorTime}</span>
                     )}
@@ -920,7 +944,7 @@ function ApiKeyProviderCard({
                   </Badge>
                 ) : (
                   <>
-                    {getStatusDisplay(connected, error, errorCode)}
+                    {getStatusDisplay(connected, error, errorCode, errorClass)}
                     {isCompatible && (
                       <Badge variant="default" size="sm">
                         {provider.apiType === "responses"

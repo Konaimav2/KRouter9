@@ -42,6 +42,7 @@ import Card from "@/shared/components/Card";
 import { ConfirmModal, EditConnectionModal } from "@/shared/components";
 import { USAGE_SUPPORTED_PROVIDERS } from "@/shared/constants/providers";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
+import { normalizeErrorClass, errorClassLabel } from "@/shared/utils/errorClass";
 
 // Maps the stored providerSpecificData.authMethod to a human label for Kiro.
 // Values come from the Kiro connect flows: builder-id/idc (device code),
@@ -1123,12 +1124,15 @@ export default function ProviderLimits() {
                                 ? "bg-surface-2 text-text-muted"
                                 : conn.testStatus === "active" || conn.testStatus === "success"
                                   ? "bg-green-500/10 text-green-600 dark:text-green-400"
-                                  : conn.testStatus === "error" || conn.testStatus === "expired" || conn.testStatus === "unavailable"
-                                    ? "bg-red-500/10 text-red-600 dark:text-red-400"
-                                    : "bg-surface-2 text-text-muted"
+                                  : conn.testStatus === "refresh-invalid"
+                                    ? "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400"
+                                    : conn.testStatus === "error" || conn.testStatus === "expired" || conn.testStatus === "unavailable"
+                                      ? "bg-red-500/10 text-red-600 dark:text-red-400"
+                                      : "bg-surface-2 text-text-muted"
                             }`}
+                            title={conn.lastError ? `${errorClassLabel(normalizeErrorClass(conn))}: ${conn.lastError}` : undefined}
                           >
-                            {isInactive ? "disabled" : conn.testStatus || "unknown"}
+                            {isInactive ? "disabled" : conn.testStatus === "refresh-invalid" ? "Refresh invalid" : conn.testStatus || "unknown"}
                           </span>
                           {conn.providerSpecificData?.profileArn && (
                             <button

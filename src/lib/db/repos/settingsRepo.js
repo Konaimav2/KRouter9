@@ -17,6 +17,12 @@ const DEFAULT_SETTINGS = {
   tailscaleEnabled: false,
   tailscaleUrl: "",
   stickyRoundRobinLimit: 3,
+  // Sticky fallback TTL (ms): after a failover, stick to the working
+  // connection for this long (fallback + round-robin). 0 disables.
+  stickyFallbackTtlMs: (() => {
+    const raw = Number(process.env?.STICKY_FALLBACK_TTL_MS);
+    return Number.isFinite(raw) && raw >= 0 ? Math.floor(raw) : 5 * 60 * 1000;
+  })(),
   providerStrategies: {},
   quotaAwareSelection: true,
   quotaCacheTtlMs: 45000,

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { getStatusVariant as getConnectionStatusVariant } from "@/shared/utils/connectionStatus";
 import PropTypes from "prop-types";
 import { Badge, Toggle, Tooltip } from "@/shared/components";
+import MaskedProxyValue from "@/shared/components/MaskedProxyValue";
 import { useCooldownNow } from "@/shared/hooks/useCooldownNow";
 import CooldownTimer from "./CooldownTimer";
 
