@@ -21,7 +21,7 @@ import { getApiKeyByKey } from "@/lib/localDb";
 import { checkRateLimit, checkTpmLimit } from "@/lib/rateLimit.js";
 import { isModelAllowedForKey } from "@/lib/apiKeyPolicy.js";
 import { reserveBudget } from "@/lib/budget.js";
-import { handleComboChat, handleFusionChat, detectRequiredCapabilities } from "open-sse/services/combo.js";
+import { handleComboChat, handleFusionChat, detectRequiredCapabilities, partitionComboMembers } from "open-sse/services/combo.js";
 import { augmentModelsWithCapacityAdapter, withCapacityAdapterStripping, getActiveAdapterStrategy } from "open-sse/services/capacityAdapter.js";
 import { handleBypassRequest } from "open-sse/utils/bypassHandler.js";
 import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
@@ -247,21 +247,17 @@ export async function handleChat(request, clientRawRequest = null, options = {})
     const comboStrategy = comboSpecificStrategy || settings.comboStrategy || "fallback";
     const adapterCombos = await getAdapterCombosData(settings);
     const augmentedModels = augmentModelsWithCapacityAdapter(comboModels, requiredCapabilities, settings, adapterCombos);
-    // Pre-filter: drop members that resolve straight back to this combo
-    // (bare or slash-qualified tail match). Without this, each self-member
-    // costs a nested combo round-trip + 503 before the visited-chain guard
-    // trips — with N self-members the log still churns. Fail fast here.
-    const selfMembers = augmentedModels.filter((m) => {
-      const tail = String(m).includes("/") ? String(m).split("/").pop() : String(m);
-      return tail === comboKey;
-    });
+    // Pre-filter: drop members that resolve straight back to this combo.
+    // Resolution-aware (not tail-match alone): provider-qualified members whose
+    // model shares the combo's bare name resolve to their provider and are kept.
+    // Without this, each self-member costs a nested combo round-trip + 503 before
+    // the visited-chain guard trips — with N self-members the log still churns.
+    const { safe: safeModels, self: selfMembers } = await partitionComboMembers(
+      augmentedModels, new Set([comboKey]), (m) => getModelInfo(m)
+    );
     if (selfMembers.length > 0) {
       log.warn("CHAT", `Combo "${modelStr}" drops self-referencing member(s): ${selfMembers.join(", ")}`);
     }
-    const safeModels = augmentedModels.filter((m) => {
-      const tail = String(m).includes("/") ? String(m).split("/").pop() : String(m);
-      return tail !== comboKey;
-    });
     if (safeModels.length === 0) {
       return errorResponse(503, `Combo "${modelStr}" has no usable models (all ${augmentedModels.length} member(s) reference the combo itself). Rename the member or combo.`);
     }
@@ -381,19 +377,15 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       const requiredCapabilities = detectRequiredCapabilities(body);
       const adapterCombos = await getAdapterCombosData(chatSettings);
       const augmentedModels = augmentModelsWithCapacityAdapter(comboModels, requiredCapabilities, chatSettings, adapterCombos);
-      // Same pre-filter as top-level, but against the full ancestor chain:
-      // drop any member whose tail revisits a combo already in the chain.
-      const selfMembers = augmentedModels.filter((m) => {
-        const tail = String(m).includes("/") ? String(m).split("/").pop() : String(m);
-        return visitedCombos.has(tail);
-      });
+      // Same pre-filter as top-level, but against the full ancestor chain.
+      // Resolution-aware: only members that actually resolve back into the chain
+      // are dropped; provider-qualified same-name members are kept.
+      const { safe: safeModels, self: selfMembers } = await partitionComboMembers(
+        augmentedModels, visitedCombos, (m) => getModelInfo(m)
+      );
       if (selfMembers.length > 0) {
         log.warn("CHAT", `Combo "${modelStr}" drops cyclic member(s): ${selfMembers.join(", ")} (chain: ${[...visitedCombos].join(" > ")})`);
       }
-      const safeModels = augmentedModels.filter((m) => {
-        const tail = String(m).includes("/") ? String(m).split("/").pop() : String(m);
-        return !visitedCombos.has(tail);
-      });
       if (safeModels.length === 0) {
         return errorResponse(503, `Combo cycle detected: "${modelStr}" has no usable models (all ${augmentedModels.length} member(s) revisit [${[...visitedCombos].join(" > ")}]). Rename the member or combo.`);
       }
