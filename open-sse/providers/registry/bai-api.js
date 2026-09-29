@@ -24,11 +24,11 @@ export default {
     baseUrl: "https://api.b.ai/v1/chat/completions",
     format: "openai",
     validateUrl: "https://api.b.ai/v1/models",
-    modelsFetcher: { url: "https://api.b.ai/v1/models", type: "openai" },
+    modelsFetcher: { url: "https://api.b.ai/v1/models", type: "bai-free" },
   },
   // No ids hardcoded: the catalogue rotates, so the live endpoint
   // is the source of truth and any id is accepted via passthroughModels.
-  modelsFetcher: { url: "https://api.b.ai/v1/models", type: "openai" },
+  modelsFetcher: { url: "https://api.b.ai/v1/models", type: "bai-free" },
   // Catalog requires a key; live list loads per connection, other ids pass through.
   models: [],
   passthroughModels: true,

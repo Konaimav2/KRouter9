@@ -36,7 +36,7 @@ function cookieToken(request) {
   }
 }
 
-async function hasValidDashboardSession(request) {
+export async function hasValidDashboardSession(request) {
   try {
     const token = cookieToken(request);
     if (!token) return false;
