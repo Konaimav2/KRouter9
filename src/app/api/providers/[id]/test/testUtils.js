@@ -472,12 +472,30 @@ async function fetchWithConnectionProxy(url, options = {}, effectiveProxy = null
   });
 }
 
-async function testApiKeyConnection(connection, effectiveProxy = null) {
-  if (isOpenAICompatibleProvider(connection.provider)) {
-    const modelsBase = connection.providerSpecificData?.baseUrl;
+// Registry-defined OpenAI-format provider (transport.format openai/default).
+// Used where node-prefix checks (isOpenAICompatibleProvider) don't apply,
+// e.g. built-in providers whose connections carry no node baseUrl.
+function isRegistryOpenAIProvider(providerId) {
+  if (typeof providerId !== "string" || !providerId) return false;
+  const entry = PROVIDERS[providerId];
+  if (!entry) return false;
+  return (entry.format || "openai") === "openai";
+}
+
+export async function testApiKeyConnection(connection, effectiveProxy = null) {
+  if (isOpenAICompatibleProvider(connection.provider) || isRegistryOpenAIProvider(connection.provider)) {
+    // Registry providers (e.g. tokenharbor) carry baseUrl in the registry transport;
+    // migrated connections may lack psd.baseUrl — fall back to it (P-SUG).
+    // Prefer validateUrl when present: registry baseUrl is the full chat-completions
+    // URL, while node baseUrls end at /v1 and take a /models suffix.
+    const psd = connection.providerSpecificData || {};
+    const modelsBase = psd.baseUrl || PROVIDERS[connection.provider]?.baseUrl;
     if (!modelsBase) return { valid: false, error: "Missing base URL" };
+    const modelsUrl = !psd.baseUrl && PROVIDERS[connection.provider]?.validateUrl
+      ? PROVIDERS[connection.provider].validateUrl
+      : `${modelsBase.replace(/\/$/, "")}/models`;
     try {
-      const res = await fetchWithConnectionProxy(`${modelsBase.replace(/\/$/, "")}/models`, {
+      const res = await fetchWithConnectionProxy(modelsUrl, {
         headers: { "Authorization": `Bearer ${connection.apiKey}` },
       }, effectiveProxy);
       return { valid: res.ok, error: res.ok ? null : "Invalid API key or base URL" };
