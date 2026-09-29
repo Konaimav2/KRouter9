@@ -18,7 +18,11 @@ import { describe, it, expect, vi } from "vitest";
 
 vi.mock("@/lib/localDb", () => ({
   getModelAliases: vi.fn(async () => ({})),
-  getProviderNodes: vi.fn(async () => []),
+  getProviderNodes: vi.fn(async ({ type } = {}) =>
+    type === "openai-compatible"
+      ? [{ id: "openai-compatible-chat-tkhbnode", prefix: "tkhb", type }]
+      : []
+  ),
   getComboByName: vi.fn(async (name) =>
     name === "gpt-5.6-terra"
       ? {
@@ -59,5 +63,13 @@ describe("combo resolution order", () => {
   it("bare combo name still resolves to the combo path", async () => {
     const info = await getModelInfo("gpt-5.6-terra");
     expect(info).toEqual({ provider: null, model: "gpt-5.6-terra" });
+  });
+
+  it("node prefix tkhb routes to the node, never the tokenharbor registry entry", async () => {
+    // Regression: registry id `tkhb` hijacked the live tkhb node prefix
+    // (RESERVED skipped node matching → "missing credentials" on papi).
+    const info = await getModelInfo("tkhb/deepseek-v4.1-flash");
+    expect(info.provider).toBe("openai-compatible-chat-tkhbnode");
+    expect(info.model).toBe("deepseek-v4.1-flash");
   });
 });

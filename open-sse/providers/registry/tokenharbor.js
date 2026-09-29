@@ -1,9 +1,9 @@
 export default {
-  id: "tkhb",
+  id: "tokenharbor",
   priority: 120,
-  alias: "tkhb",
-  aliases: ["tokenharbor"],
-  uiAlias: "tkhb",
+  alias: "tokenharbor",
+  aliases: ["th", "thh"],
+  uiAlias: "tokenharbor",
   display: {
     name: "TokenHarbor",
     icon: "anchor",

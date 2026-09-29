@@ -1,8 +1,8 @@
 export default {
-  id: "bai",
-  alias: "bai",
+  id: "bai-api",
+  alias: "bai-api",
   aliases: ["b.ai"],
-  uiAlias: "bai",
+  uiAlias: "bai-api",
   display: {
     name: "B.AI",
     icon: "hub",

@@ -4,12 +4,12 @@ import REGISTRY from "../../open-sse/providers/registry/index.js";
 import { PROVIDERS, PROVIDER_MODELS } from "../../open-sse/providers/index.js";
 
 const EXPECTED = [
-  { id: "agentr", alias: "agentr", urlFrag: "agentrouter.org/v1" },
-  { id: "bai", alias: "bai", urlFrag: "api.b.ai/v1" },
-  { id: "tkhb", alias: "tkhb", urlFrag: "tokenharbor.ai/v1" },
+  { id: "agentrouter", alias: "agentrouter", urlFrag: "agentrouter.org/v1" },
+  { id: "bai-api", alias: "bai-api", urlFrag: "api.b.ai/v1" },
+  { id: "tokenharbor", alias: "tokenharbor", urlFrag: "tokenharbor.ai/v1" },
 ];
 
-describe("new providers registry wiring (agentr/bai/tkhb)", () => {
+describe("new providers registry wiring (agentrouter/bai-api/tokenharbor)", () => {
   it("resolves all three ids in the registry index", () => {
     for (const { id } of EXPECTED) {
       expect(REGISTRY.find((e) => e.id === id), `missing registry id ${id}`).toBeDefined();
