@@ -147,6 +147,14 @@ export function checkFallbackError(status, errorText, backoffLevel = 0) {
  * @param {string} errorText - Error message text
  * @returns {boolean} true when the failure says "this model can't serve it"
  */
+/**
+ * Lock TTL for a model-scoped failure on one account (unentitled slug, retired
+ * model, plan-gated model). Short: entitlements change slowly, but a false
+ * positive must not sideline a healthy account for long. Matches the 5min
+ * sticky-fallback convention. Cleared early on success (clearAccountError).
+ */
+export const MODEL_SCOPED_LOCK_MS = 5 * 60 * 1000;
+
 export function isModelScopedError(status, errorText) {
   // Only 4xx: a 5xx is a server fault and already falls back everywhere.
   if (!(status >= 400 && status < 500)) return false;
