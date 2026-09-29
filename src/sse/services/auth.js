@@ -1,6 +1,6 @@
 import { getProviderConnections, validateApiKey, updateProviderConnection, getSettings, getProxyPools } from "@/lib/localDb";
 import { resolveConnectionProxyConfig, pickProxyPoolId } from "@/lib/network/connectionProxy";
-import { formatRetryAfter, checkFallbackError, isClientFault, isModelLockActive, buildModelLockUpdate, getEarliestModelLockUntil } from "open-sse/services/accountFallback.js";
+import { formatRetryAfter, checkFallbackError, isClientFault, isModelScopedError, MODEL_SCOPED_LOCK_MS, isModelLockActive, buildModelLockUpdate, getEarliestModelLockUntil } from "open-sse/services/accountFallback.js";
 import { MAX_RATE_LIMIT_COOLDOWN_MS } from "open-sse/config/errorConfig.js";
 import { resolveProviderId, getProviderAlias, FREE_PROVIDERS } from "@/shared/constants/providers.js";
 import { getDisabledByProvider } from "@/lib/disabledModelsDb";
@@ -320,6 +320,23 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
   // Client-fault (bad request) — switching accounts cannot help, and locking a
   // healthy account would be wrong. Do NOT fall back; return the real 4xx.
   // (A combo may still advance to a different model, which CAN help.)
+  // EXCEPTION first: a model-scoped 4xx (model unsupported on THIS account)
+  // is per-account, not per-request — a sibling account on another plan may
+  // serve it. Lock the model on this account and rotate (P-SKIP).
+  if (!resetsAtMs && model && isModelScopedError(status, errorText)) {
+    const reason = typeof errorText === "string" ? errorText.slice(0, 100) : "Provider error";
+    const lockUpdate = buildModelLockUpdate(model, MODEL_SCOPED_LOCK_MS);
+    await updateProviderConnection(connectionId, {
+      ...lockUpdate,
+      testStatus: "unavailable",
+      lastError: reason,
+      errorCode: status,
+      lastErrorAt: new Date().toISOString(),
+    });
+    const lockKey = Object.keys(lockUpdate)[0];
+    log.warn("AUTH", `model-scoped ${status} on ${connectionId.slice(0, 8)} — locked ${lockKey}, rotating account`);
+    return { shouldFallback: true, cooldownMs: MODEL_SCOPED_LOCK_MS };
+  }
   if (isClientFault(status, errorText) && !resetsAtMs) {
     return { shouldFallback: false, cooldownMs: 0, clientFault: true };
   }
