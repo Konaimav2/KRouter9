@@ -85,3 +85,55 @@ export function dedupeModels(models) {
   }
   return Array.from(map.values());
 }
+
+// Filter picker groups by free-text query (W08). Matches model name,
+// requestModel, and provider name case-insensitively; drops groups left empty.
+// Pure (no state) so the menu stays a trivial render of its output.
+export function filterModelGroups(groups, query) {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return Array.isArray(groups) ? groups : [];
+  const out = [];
+  for (const group of groups || []) {
+    if (!group || !Array.isArray(group.models)) continue;
+    if (String(group.providerName || "").toLowerCase().includes(q)) {
+      out.push(group);
+      continue;
+    }
+    const models = group.models.filter(
+      (m) =>
+        String(m?.name || "").toLowerCase().includes(q) ||
+        String(m?.requestModel || "").toLowerCase().includes(q) ||
+        String(m?.id || "").toLowerCase().includes(q)
+    );
+    if (models.length > 0) out.push({ ...group, models });
+  }
+  return out;
+}
+
+// Combos group for the playground picker. Combos live outside connections, so the
+// connection-scoped picker sources (static catalogs, per-connection live fetch) can
+// never surface them — this builds the group from the combos list instead.
+// requestModel stays the BARE combo name: the server resolves combos before provider
+// routing (handleChat combo path). Returns null when empty (caller filters it out).
+export function buildComboGroup(combos) {
+  const providerName = "Combos";
+  const models = (Array.isArray(combos) ? combos : [])
+    .filter((c) => c && typeof c.name === "string" && c.name.trim() !== "")
+    .map((c) => ({
+      id: c.name,
+      requestModel: c.name,
+      name: c.name,
+      providerId: "combo",
+      providerName,
+      source: "combo",
+      ...(c.kind ? { kind: c.kind } : {}),
+    }));
+  if (models.length === 0) return null;
+  return {
+    providerId: "combo",
+    providerName,
+    providerType: "combo",
+    connections: [],
+    models,
+  };
+}

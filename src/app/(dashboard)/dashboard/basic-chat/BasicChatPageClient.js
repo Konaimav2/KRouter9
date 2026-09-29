@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge, Button } from "@/shared/components";
 import { getModelsByProviderId } from "@/shared/constants/models";
+import { getThinkingLevels } from "open-sse/providers/thinkingLevels.js";
 import { isAnthropicCompatibleProvider, isOpenAICompatibleProvider } from "@/shared/constants/providers";
 import {
   getProviderGroupLabel,
@@ -10,6 +11,8 @@ import {
   normalizeStaticModel,
   normalizeLiveModel,
   dedupeModels,
+  buildComboGroup,
+  filterModelGroups,
 } from "@/shared/utils/playgroundModels.js";
 
 
@@ -85,6 +88,8 @@ function buildUserContent(message) {
   for (const attachment of attachments) {
     if (attachment?.dataUrl) {
       content.push({ type: "image_url", image_url: { url: attachment.dataUrl } });
+    } else if (attachment?.kind === "text" && typeof attachment?.text === "string" && attachment.text.trim() !== "") {
+      content.push({ type: "text", text: `File: ${attachment.name}\n\`\`\`\n${attachment.text.slice(0, 60000)}\n\`\`\`` });
     }
   }
 
@@ -158,8 +163,12 @@ export default function BasicChatPageClient() {
   const [streamingText, setStreamingText] = useState("");
   const [isHydrated, setIsHydrated] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const [modelSearch, setModelSearch] = useState("");
+  const [thinkingLevel, setThinkingLevel] = useState("auto");
   const [historyOpen, setHistoryOpen] = useState(false);
   const fileInputRef = useRef(null);
+  const textFileInputRef = useRef(null);
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const abortRef = useRef(null);
   const initializedRef = useRef(false);
   const modelMenuRef = useRef(null);
@@ -280,6 +289,20 @@ export default function BasicChatPageClient() {
           .filter((group) => group.models.length > 0)
           .sort((a, b) => String(a.providerName).localeCompare(String(b.providerName)));
 
+        // Combos live outside connections, so the connection-scoped sources above
+        // can never surface them — prepend as their own group (fail-open: a combos
+        // fetch failure only hides the group, never the providers).
+        try {
+          const combosRes = await fetch("/api/combos", { cache: "no-store" });
+          const combosData = await combosRes.json().catch(() => ({}));
+          const comboGroup = combosRes.ok
+            ? buildComboGroup(combosData.combos || combosData)
+            : null;
+          if (comboGroup) normalized.unshift(comboGroup);
+        } catch {
+          // combos group omitted; providers still listed.
+        }
+
         if (!cancelled) {
           setProviderGroups(normalized);
           if (normalized.length === 0) {
@@ -330,6 +353,11 @@ export default function BasicChatPageClient() {
     return map;
   }, [providerGroups]);
 
+  const visibleGroups = useMemo(
+    () => filterModelGroups(providerGroups, modelSearch),
+    [providerGroups, modelSearch]
+  );
+
   const activeProviderGroup = useMemo(() => {
     return providerGroups.find((group) => group.providerId === activeProviderId) || providerGroups[0] || null;
   }, [providerGroups, activeProviderId]);
@@ -344,6 +372,20 @@ export default function BasicChatPageClient() {
   }, [activeModelId, modelIndex, activeProviderGroup, sessions, activeSessionId]);
 
   const currentSession = useMemo(() => sessions.find((session) => session.id === activeSessionId) || null, [sessions, activeSessionId]);
+
+  // Reasoning variants for the active model (W11). Levels come from the shared
+  // thinking-level table; "auto" sends nothing (server default applies).
+  const activeThinkingLevels = useMemo(() => {
+    const rm = activeModel?.requestModel || activeModel?.id || "";
+    const slash = rm.indexOf("/");
+    const prefix = slash > 0 ? rm.slice(0, slash) : "";
+    const bare = slash > 0 ? rm.slice(slash + 1) : rm;
+    if (!bare) return null;
+    const fromPrefix = prefix ? getThinkingLevels(prefix, bare) : null;
+    if (fromPrefix) return fromPrefix;
+    const pid = activeModel?.providerId || "";
+    return pid ? getThinkingLevels(pid, activeModel?.id || bare) : null;
+  }, [activeModel]);
   const currentMessages = currentSession?.messages || [];
   const sessionItems = useMemo(() => [...sessions].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()), [sessions]);
   const canSend = !isSending && !!activeModel && (draft.trim().length > 0 || attachments.length > 0);
@@ -371,14 +413,25 @@ export default function BasicChatPageClient() {
     if (!savedModel) return;
 
     if (sessions.length > 0) {
-      const session = sessions.find((item) => item.id === activeSessionId) || sessions[0];
-      const sessionModel = session?.modelId && modelIndex.has(session.modelId)
-        ? modelIndex.get(session.modelId)
-        : savedModel;
+      // Land on a fresh composer, not the latest session (W09): history stays
+      // in the list (History menu), but relog/navigation starts a new chat.
+      const session = {
+        id: createId(),
+        title: "New chat",
+        providerId: savedProvider.providerId,
+        providerName: savedProvider.providerName,
+        modelId: savedModel.id,
+        modelName: savedModel.name,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        messages: [],
+      };
       initializedRef.current = true;
+      // Drop stored empty sessions (abandoned composers) so history stays meaningful.
+      setSessions((prev) => [session, ...prev.filter((s) => (s.messages || []).length > 0)]);
       setActiveSessionId(session.id);
-      setActiveProviderId(sessionModel?.providerId || savedProvider.providerId);
-      setActiveModelId(sessionModel?.id || savedModel.id);
+      setActiveProviderId(savedProvider.providerId);
+      setActiveModelId(savedModel.id);
       return;
     }
 
@@ -443,11 +496,12 @@ export default function BasicChatPageClient() {
     setHistoryOpen(false);
   };
 
-  const handleDeleteCurrentChat = () => {
-    if (!activeSessionId) return;
-    const nextSessions = sessions.filter((session) => session.id !== activeSessionId);
-    const fallback = nextSessions[0] || null;
+  const removeSessionById = (sessionId) => {
+    if (!sessionId) return;
+    const nextSessions = sessions.filter((session) => session.id !== sessionId);
     setSessions(nextSessions);
+    if (activeSessionId !== sessionId) return;
+    const fallback = nextSessions[0] || null;
     if (fallback) {
       setActiveSessionId(fallback.id);
       setActiveProviderId(fallback.providerId);
@@ -457,6 +511,10 @@ export default function BasicChatPageClient() {
       setActiveProviderId("");
       setActiveModelId("");
     }
+  };
+
+  const handleDeleteCurrentChat = () => {
+    removeSessionById(activeSessionId);
   };
 
   const handleSelectProvider = (providerId) => {
@@ -515,6 +573,8 @@ export default function BasicChatPageClient() {
     setActiveProviderId(model.providerId);
     setActiveModelId(model.id);
     setModelMenuOpen(false);
+    setModelSearch("");
+    setThinkingLevel("auto");
   };
 
   const handleAttachFiles = async (event) => {
@@ -541,6 +601,37 @@ export default function BasicChatPageClient() {
 
   const removeAttachment = (attachmentId) => {
     setAttachments((prev) => prev.filter((attachment) => attachment.id !== attachmentId));
+  };
+
+  const MAX_TEXT_BYTES = 256 * 1024;
+
+  const readFileAsText = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("read failed"));
+    reader.readAsText(file);
+  });
+
+  const handleAttachTextFiles = async (event) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+    if (files.length === 0) return;
+    const converted = [];
+    for (const file of files) {
+      if (file.size > MAX_TEXT_BYTES) continue;
+      try {
+        converted.push({
+          id: createId(),
+          name: file.name,
+          type: file.type || "text/plain",
+          kind: "text",
+          text: await readFileAsText(file),
+        });
+      } catch {
+        // unreadable file skipped, like unsupported types below.
+      }
+    }
+    if (converted.length > 0) setAttachments((prev) => [...prev, ...converted]);
   };
 
   const handleStop = () => {
@@ -582,6 +673,7 @@ export default function BasicChatPageClient() {
         name: attachment.name,
         type: attachment.type,
         dataUrl: attachment.dataUrl,
+        ...(attachment.kind === "text" ? { kind: "text", text: attachment.text } : {}),
       })),
       createdAt: new Date().toISOString(),
     };
@@ -633,6 +725,7 @@ export default function BasicChatPageClient() {
           model: model.requestModel || model.id,
           messages: requestMessages,
           stream: true,
+          ...(thinkingLevel !== "auto" ? { reasoning_effort: thinkingLevel } : {}),
         }),
         signal: abortRef.current.signal,
       });
@@ -760,9 +853,20 @@ export default function BasicChatPageClient() {
                 <div className="border-b border-white/10 px-4 py-3">
                   <p className="text-xs uppercase tracking-[0.22em] text-white/45">Models</p>
                   <p className="text-sm text-white/75">Only from connected providers</p>
+                  <input
+                    type="text"
+                    value={modelSearch}
+                    onChange={(e) => setModelSearch(e.target.value)}
+                    placeholder="Search models..."
+                    aria-label="Search models"
+                    className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white placeholder:text-white/35 focus:border-blue-400/40 focus:outline-none"
+                  />
                 </div>
                 <div className="max-h-[60vh] overflow-y-auto p-2 custom-scrollbar">
-                  {providerGroups.map((group) => (
+                  {visibleGroups.length === 0 ? (
+                    <p className="px-3 py-4 text-sm text-white/55">No models match “{modelSearch.trim()}”.</p>
+                  ) : null}
+                  {visibleGroups.map((group) => (
                     <div key={group.providerId} className="mb-2 rounded-[16px] border border-white/10 bg-black/20 p-2">
                       <div className="flex items-center justify-between px-2 py-2">
                         <p className="text-sm font-semibold text-white">{group.providerName}</p>
@@ -799,6 +903,21 @@ export default function BasicChatPageClient() {
             ) : null}
           </div>
 
+          {activeThinkingLevels ? (
+            <select
+              value={thinkingLevel}
+              onChange={(e) => setThinkingLevel(e.target.value)}
+              aria-label="Reasoning effort"
+              title="Reasoning effort"
+              className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-white/80 transition hover:bg-white/8 focus:border-blue-400/40 focus:outline-none"
+            >
+              <option value="auto">Auto</option>
+              {activeThinkingLevels.map((level) => (
+                <option key={level} value={level}>{level}</option>
+              ))}
+            </select>
+          ) : null}
+
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -831,7 +950,7 @@ export default function BasicChatPageClient() {
                     key={session.id}
                     type="button"
                     onClick={() => handleSelectSession(session.id)}
-                    className={`w-full rounded-[16px] border px-3 py-3 text-left transition ${isActive ? "border-blue-400/40 bg-blue-500/15" : "border-white/10 bg-white/5 hover:bg-white/8"}`}
+                    className={`w-full group rounded-[16px] border px-3 py-3 text-left transition ${isActive ? "border-blue-400/40 bg-blue-500/15" : "border-white/10 bg-white/5 hover:bg-white/8"}`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
@@ -839,6 +958,15 @@ export default function BasicChatPageClient() {
                         <p className="mt-1 truncate text-xs text-white/50">{textValue(latestMessage?.content) || "Empty chat"}</p>
                       </div>
                       <span className="text-[10px] text-white/40 shrink-0">{formatRelativeTime(session.updatedAt)}</span>
+                      <button
+                        type="button"
+                        aria-label={`Delete ${session.title || "chat"}`}
+                        title="Delete chat"
+                        onClick={(event) => { event.stopPropagation(); removeSessionById(session.id); }}
+                        className="shrink-0 rounded-full p-1 text-white/40 opacity-0 transition group-hover:opacity-100 hover:bg-white/10 hover:text-white focus:opacity-100"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">delete</span>
+                      </button>
                     </div>
                   </button>
                 );
@@ -891,9 +1019,16 @@ export default function BasicChatPageClient() {
                       {message.attachments?.length ? (
                         <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3 mt-2">
                           {message.attachments.map((attachment) => (
+                            attachment?.dataUrl ? (
                             <a key={attachment.id} href={attachment.dataUrl} target="_blank" rel="noreferrer" className="overflow-hidden rounded-[18px] border border-white/10 bg-black/20">
                               <img src={attachment.dataUrl} alt={attachment.name} className="h-28 w-full object-cover" loading="lazy" decoding="async" />
                             </a>
+                            ) : (
+                            <span key={attachment.id} title={attachment.name} className="flex items-center gap-2 overflow-hidden rounded-[18px] border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/70">
+                              <span className="material-symbols-outlined text-[16px]">description</span>
+                              <span className="truncate">{attachment.name}</span>
+                            </span>
+                            )
                           ))}
                         </div>
                       ) : null}
@@ -949,10 +1084,23 @@ export default function BasicChatPageClient() {
 
                 <div className="mt-2 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <button type="button" onClick={() => fileInputRef.current?.click()} disabled={!activeModel || loadingData} className="p-2 text-white/50 hover:text-white transition rounded-full hover:bg-white/5">
-                      <span className="material-symbols-outlined text-[20px]">attach_file</span>
-                    </button>
+                    <div className="relative">
+                      <button type="button" onClick={() => setAttachMenuOpen((v) => !v)} disabled={!activeModel || loadingData} aria-label="Attach" className="p-2 text-white/50 hover:text-white transition rounded-full hover:bg-white/5">
+                        <span className="material-symbols-outlined text-[20px]">add</span>
+                      </button>
+                      {attachMenuOpen ? (
+                        <div className="absolute bottom-[calc(100%+8px)] left-0 z-30 w-44 overflow-hidden rounded-2xl border border-white/10 bg-[#262626] shadow-2xl shadow-black/50">
+                          <button type="button" onClick={() => { setAttachMenuOpen(false); fileInputRef.current?.click(); }} className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white/80 hover:bg-white/5">
+                            <span className="material-symbols-outlined text-[18px]">image</span> Images
+                          </button>
+                          <button type="button" title="Plain text, Markdown, JSON, CSV, logs (max 256KB each)" onClick={() => { setAttachMenuOpen(false); textFileInputRef.current?.click(); }} className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white/80 hover:bg-white/5">
+                            <span className="material-symbols-outlined text-[18px]">description</span> Text files
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
                     <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleAttachFiles} />
+                    <input ref={textFileInputRef} type="file" accept=".txt,.md,.json,.csv,.log,.yaml,.yml,.xml,text/plain" multiple className="hidden" onChange={handleAttachTextFiles} />
                     <span className="text-xs font-medium text-white/30 truncate max-w-[120px]">{activeModel ? activeModel.name : "No model"}</span>
                   </div>
 
