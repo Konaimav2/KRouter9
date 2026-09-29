@@ -133,3 +133,27 @@ export function saveUsageStats({ provider, model, tokens, connectionId, apiKey, 
     endpoint: endpoint || null
   }).catch(() => {});
 }
+
+/**
+ * Persist a FAILED request so error turns appear in usage/request logs with
+ * their response code (W03). saveUsageStats skips zero-token bodies, which is
+ * exactly what failures carry — this bypasses that gate with an explicit
+ * numeric status. Fail-open: never throws.
+ */
+export function saveRequestError({ provider, model, status, connectionId, apiKey, endpoint }) {
+  if (!provider || !model) return;
+  try {
+    saveRequestUsage({
+      provider,
+      model,
+      tokens: { prompt_tokens: 0, completion_tokens: 0 },
+      timestamp: new Date().toISOString(),
+      connectionId: connectionId || undefined,
+      apiKey: apiKey || undefined,
+      endpoint: endpoint || null,
+      status: Number.isFinite(Number(status)) ? Number(status) : String(status || "error"),
+    }).catch(() => {});
+  } catch {
+    // usage must never break the request path.
+  }
+}

@@ -218,6 +218,10 @@ export default function ManageKeyModal({ apiKey, onClose, onSaved, onRotated }) 
             Cost spent: <span className="text-text-primary">${(Number(apiKey?.usageCost) || 0).toFixed(6)}</span>
             {" · "}
             Tokens used: <span className="text-text-primary">{(Number(apiKey?.usageTokens) || 0).toLocaleString()}</span>
+            {" · "}
+            <a href="/dashboard/usage?table=apiKey" target="_blank" rel="noreferrer" className="text-primary hover:underline">
+              Per-key breakdown
+            </a>
           </p>
         </div>
         <div className="grid grid-cols-2 gap-3">

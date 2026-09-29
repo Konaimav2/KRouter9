@@ -29,6 +29,16 @@ export function getConnectionLabel(connection) {
     || null;
 }
 
+// Censor an account email for display (W12): keep first char + domain so rows
+// stay distinguishable without leaking the address. Non-emails pass through.
+export function maskEmail(value) {
+  const s = typeof value === "string" ? value.trim() : "";
+  if (!s) return "";
+  const at = s.indexOf("@");
+  if (at <= 0 || at === s.length - 1) return s;
+  return `${s[0]}***@${s.slice(at + 1)}`;
+}
+
 export function getConnectionQuotaRemaining(connection, quotaData) {
   const quota = quotaData[connection.id]?.quotas?.[0];
   if (!quota) return Number.POSITIVE_INFINITY;
