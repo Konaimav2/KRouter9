@@ -1,7 +1,26 @@
 import { NextResponse } from "next/server";
 import { FILTERS } from "./filters.js";
+import { hasValidDashboardSession } from "@/lib/proxyRevealGuard.js";
+import { getProviderConnections } from "@/lib/localDb";
 
 export const dynamic = "force-dynamic";
+
+// Resolve a server-side API key for key-gated catalogs without ever exposing it:
+// dashboard-authed callers may pass `provider` (registry id); the first active
+// apikey connection supplies the upstream Authorization header. No key material
+// appears in URLs, logs, or responses. Fail-open: anything missing → [].
+async function resolveCatalogApiKey(request, provider) {
+  try {
+    if (!provider || !(await hasValidDashboardSession(request))) return null;
+    const conns = await getProviderConnections({ provider, isActive: true });
+    const hit = (Array.isArray(conns) ? conns : []).find(
+      (c) => typeof c?.apiKey === "string" && c.apiKey.trim() !== ""
+    );
+    return hit ? hit.apiKey : null;
+  } catch {
+    return null;
+  }
+}
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
@@ -17,8 +36,21 @@ export async function GET(request) {
     return NextResponse.json({ error: "Unknown filter type" }, { status: 400 });
   }
 
+  // Optional keyed catalogs (e.g. /v1/models behind an API key): `provider`
+  // triggers a dashboard-authed server-side key lookup. Unauthed callers asking
+  // for a keyed provider get [] (fail-open), never the key, never an error.
+  const provider = searchParams.get("provider");
+  let headers;
+  if (provider) {
+    const apiKey = await resolveCatalogApiKey(request, provider);
+    if (!apiKey) {
+      return NextResponse.json({ data: [] });
+    }
+    headers = { Authorization: `Bearer ${apiKey}` };
+  }
+
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, headers ? { headers } : undefined);
     if (!res.ok) {
       return NextResponse.json({ data: [] });
     }

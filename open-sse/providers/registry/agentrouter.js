@@ -24,11 +24,11 @@ export default {
     baseUrl: "https://agentrouter.org/v1/chat/completions",
     format: "openai",
     validateUrl: "https://agentrouter.org/v1/models",
-    modelsFetcher: { url: "https://agentrouter.org/v1/models", type: "openai" },
+    modelsFetcher: { url: "https://agentrouter.org/v1/models", type: "agentrouter-all" },
   },
   // No ids hardcoded: the catalogue is large and rotates, so the live endpoint
   // is the source of truth and any id is accepted via passthroughModels.
-  modelsFetcher: { url: "https://agentrouter.org/v1/models", type: "openai" },
+  modelsFetcher: { url: "https://agentrouter.org/v1/models", type: "agentrouter-all" },
   // Catalog requires a key; live list loads per connection, other ids pass through.
   models: [],
   passthroughModels: true,

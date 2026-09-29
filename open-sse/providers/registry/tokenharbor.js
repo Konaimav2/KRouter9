@@ -34,7 +34,7 @@ export default {
     },
   },
   // Live catalogue is fetched via modelsFetcher; other ids still accepted via passthroughModels.
-  modelsFetcher: { url: "https://tokenharbor.ai/v1/models", type: "openai" },
+  modelsFetcher: { url: "https://tokenharbor.ai/v1/models", type: "tokenharbor-free" },
   // Catalog requires a key; live list loads per connection, other ids pass through.
   models: [],
   passthroughModels: true,

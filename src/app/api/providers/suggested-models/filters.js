@@ -32,4 +32,36 @@ export const FILTERS = {
       .filter((m) => (m.tier === "free" || m.id?.endsWith(":free")) && m.supports_chat === true && (!m.media_type || m.media_type === "chat" || m.media_type === "text"))
       .map((m) => ({ id: m.id, name: m.name || m.id, contextLength: m.context_length }))
       .sort((a, b) => String(a.id).localeCompare(String(b.id))),
+
+  // Upstream catalog shapes vary (OpenAI pricing, :free suffix, isFree flag) —
+  // accept any free signal rather than assuming one schema.
+  "tokenharbor-free": (models) =>
+    (Array.isArray(models) ? models : [])
+      .filter(
+        (m) =>
+          m.isFree === true ||
+          String(m.id || "").endsWith(":free") ||
+          (m.pricing && String(m.pricing.prompt ?? "") === "0" && String(m.pricing.completion ?? "") === "0")
+      )
+      .map((m) => ({ id: m.id, name: m.name || m.id, contextLength: m.context_length }))
+      .sort((a, b) => String(a.id).localeCompare(String(b.id))),
+
+  // B.AI catalog: keep zero-cost models (string or numeric pricing).
+  "bai-free": (models) =>
+    (Array.isArray(models) ? models : [])
+      .filter(
+        (m) =>
+          m &&
+          (m.isFree === true ||
+            (m.pricing && Number(m.pricing.prompt) === 0 && Number(m.pricing.completion) === 0))
+      )
+      .map((m) => ({ id: m.id, name: m.name || m.id, contextLength: m.context_length }))
+      .sort((a, b) => String(a.id).localeCompare(String(b.id))),
+
+  // AgentRouter has no free tier split — expose the whole catalog.
+  "agentrouter-all": (models) =>
+    (Array.isArray(models) ? models : [])
+      .filter((m) => m && typeof m.id === "string" && m.id.trim() !== "")
+      .map((m) => ({ id: m.id, name: m.name || m.id, contextLength: m.context_length }))
+      .sort((a, b) => String(a.id).localeCompare(String(b.id))),
 };
