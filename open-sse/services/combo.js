@@ -311,9 +311,11 @@ export async function partitionComboMembers(models, visited, resolveInfo) {
  * @param {string} [options.comboName] - Name of the combo (for round-robin tracking)
  * @param {string} [options.comboStrategy] - Strategy: "fallback" or "round-robin"
  * @param {number|string} [options.comboStickyLimit=1] - Requests per combo model before switching
+ * @param {number} [options.comboFallbackDelayMs=0] - Pause before trying the next
+ *   member after a failure (paces fallback storms; 0 = immediate).
  * @returns {Promise<Response>}
  */
-export async function handleComboChat({ body, models, handleSingleModel, log, comboName, comboStrategy, comboStickyLimit = 1, autoSwitch = true }) {
+export async function handleComboChat({ body, models, handleSingleModel, log, comboName, comboStrategy, comboStickyLimit = 1, comboFallbackDelayMs = 0, autoSwitch = true }) {
   // Apply rotation strategy if enabled
   let rotatedModels = getRotatedModels(models, comboName, comboStrategy, comboStickyLimit);
 
@@ -412,6 +414,10 @@ export async function handleComboChat({ body, models, handleSingleModel, log, co
       const cleanErr = String(lastError).replace(/[\r\n\x00-\x1f\x7f]+/g, " ").slice(0, 160);
       triedModels.push(`${modelStr} [${result.status}: ${cleanErr}]`);
       log.warn("COMBO", `Model ${modelStr} failed, switching to next model in combo${comboName ? ` "${comboName}"` : ""}`, { status: result.status, tried: triedModels.length });
+      // Pacing beat so fallback storms don't hammer upstream back-to-back.
+      if (comboFallbackDelayMs > 0 && i < rotatedModels.length - 1) {
+        await new Promise(r => setTimeout(r, comboFallbackDelayMs));
+      }
     } catch (error) {
       // Catch unexpected exceptions to ensure fallback continues.
       // Throw-path models must still appear in the terminal tried-chain.
@@ -420,6 +426,9 @@ export async function handleComboChat({ body, models, handleSingleModel, log, co
       const cleanThrow = String(lastError).replace(/[\r\n\x00-\x1f\x7f]+/g, " ").slice(0, 160);
       triedModels.push(`${modelStr} [throw: ${cleanThrow}]`);
       log.warn("COMBO", `Model ${modelStr} threw error, trying next`, { error: lastError });
+      if (comboFallbackDelayMs > 0 && i < rotatedModels.length - 1) {
+        await new Promise(r => setTimeout(r, comboFallbackDelayMs));
+      }
     }
   }
 

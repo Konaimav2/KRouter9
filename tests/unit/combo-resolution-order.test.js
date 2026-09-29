@@ -20,7 +20,10 @@ vi.mock("@/lib/localDb", () => ({
   getModelAliases: vi.fn(async () => ({})),
   getProviderNodes: vi.fn(async ({ type } = {}) =>
     type === "openai-compatible"
-      ? [{ id: "openai-compatible-chat-tkhbnode", prefix: "tkhb", type }]
+      ? [
+          { id: "openai-compatible-chat-tkhbnode", prefix: "tkhb", type },
+          { id: "openai-compatible-chat-ccnode", prefix: "cca", type },
+        ]
       : []
   ),
   getComboByName: vi.fn(async (name) =>
@@ -65,11 +68,18 @@ describe("combo resolution order", () => {
     expect(info).toEqual({ provider: null, model: "gpt-5.6-terra" });
   });
 
-  it("node prefix tkhb routes to the node, never the tokenharbor registry entry", async () => {
-    // Regression: registry id `tkhb` hijacked the live tkhb node prefix
-    // (RESERVED skipped node matching → "missing credentials" on papi).
+  it("retired node prefixes still route to nodes (no registry collision)", async () => {
+    // `cca` has no registry id/alias, so the node match applies as before.
+    const info = await getModelInfo("cca/some-model");
+    expect(info.provider).toBe("openai-compatible-chat-ccnode");
+    expect(info.model).toBe("some-model");
+  });
+
+  it("restored slug alias tkhb routes to the built-in (nodes retired)", async () => {
+    // tkhb is a registry alias post-migration: RESERVED skips node matching by
+    // design, so the ref lands on the built-in with migrated credentials.
     const info = await getModelInfo("tkhb/deepseek-v4.1-flash");
-    expect(info.provider).toBe("openai-compatible-chat-tkhbnode");
+    expect(info.provider).toBe("tokenharbor");
     expect(info.model).toBe("deepseek-v4.1-flash");
   });
 });

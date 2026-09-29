@@ -284,6 +284,7 @@ export async function handleChat(request, clientRawRequest = null, options = {})
     }
 
     const comboStickyLimit = settings.comboStickyRoundRobinLimit;
+    const comboFallbackDelayMs = settings.comboFallbackDelayMs ?? 500;
     const droppedSuffix = selfMembers.length > 0 ? `, dropped ${selfMembers.length} self-referencing` : "";
     log.info("CHAT", `Combo "${modelStr}" with ${safeModels.length} of ${augmentedModels.length} models${droppedSuffix} (strategy: ${comboStrategy}, sticky: ${comboStickyLimit})`);
     return handleComboChat({
@@ -296,7 +297,8 @@ export async function handleChat(request, clientRawRequest = null, options = {})
       log,
       comboName: modelStr,
       comboStrategy,
-      comboStickyLimit
+      comboStickyLimit,
+      comboFallbackDelayMs
     });
   }
 
@@ -412,6 +414,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       }
 
       const comboStickyLimit = chatSettings.comboStickyRoundRobinLimit;
+      const comboFallbackDelayMs = chatSettings.comboFallbackDelayMs ?? 500;
       const droppedSuffix = selfMembers.length > 0 ? `, dropped ${selfMembers.length} cyclic` : "";
       log.info("CHAT", `Combo "${modelStr}" with ${safeModels.length} of ${augmentedModels.length} models${droppedSuffix} (strategy: ${comboStrategy}, sticky: ${comboStickyLimit})`);
       return handleComboChat({
@@ -424,7 +427,8 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
         log,
         comboName: modelStr,
         comboStrategy,
-        comboStickyLimit
+        comboStickyLimit,
+        comboFallbackDelayMs
       });
     }
     log.warn("CHAT", "Invalid model format", { model: modelStr });
