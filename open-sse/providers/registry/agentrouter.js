@@ -1,8 +1,8 @@
 export default {
-  id: "agentr",
-  alias: "agentr",
-  aliases: ["agentrouter"],
-  uiAlias: "agentr",
+  id: "agentrouter",
+  alias: "agentrouter",
+  aliases: ["agent-router"],
+  uiAlias: "agentrouter",
   display: {
     name: "AgentRouter",
     icon: "hub",

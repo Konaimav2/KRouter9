@@ -123,9 +123,9 @@ import p119 from "./selfhosted-embedding.js";
 import p120 from "./fish-audio.js";
 import p121 from "./alitp-intl.js";
 import p122 from "./xquik.js";
-import p124 from "./agentr.js";
-import p125 from "./bai.js";
-import p126 from "./tkhb.js";
+import p124 from "./agentrouter.js";
+import p125 from "./bai-api.js";
+import p126 from "./tokenharbor.js";
 
 export default [
   p0,
