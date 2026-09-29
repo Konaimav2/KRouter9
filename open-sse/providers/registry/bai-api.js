@@ -1,7 +1,9 @@
 export default {
   id: "bai-api",
   alias: "bai-api",
-  aliases: ["b.ai"],
+  // `bai` = retired custom-node prefix (migrated 2026-09-29); kept as alias.
+  // Do NOT create a custom node with this prefix.
+  aliases: ["b.ai", "bai"],
   uiAlias: "bai-api",
   display: {
     name: "B.AI",
