@@ -212,7 +212,11 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [fetching, setFetching] = useState(false);
-  const [tableView, setTableView] = useState("model");
+  const [tableView, setTableView] = useState(
+    ["model", "account", "apiKey", "endpoint"].includes(searchParams.get("table"))
+      ? searchParams.get("table")
+      : "model"
+  );
   const [viewMode, setViewMode] = useState("costs");
   const [providers, setProviders] = useState([]);
   const [periodLocal, setPeriodLocal] = useState("today");
@@ -483,7 +487,7 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
       )}
 
       {/* Token / Cost chart - sync period */}
-      {loading ? spinner : <UsageChart period={period} />}
+      {loading ? spinner : <UsageChart period={period} viewMode={viewMode} onViewModeChange={setViewMode} />}
 
       {/* Table with dropdown selector */}
       <div className="flex flex-col gap-3">

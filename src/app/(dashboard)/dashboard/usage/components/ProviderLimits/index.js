@@ -37,6 +37,7 @@ import {
   ACCOUNT_PAGE_SIZE_MAX,
   ACCOUNT_FILTER_OPTIONS,
   QUOTA_SORT_OPTIONS,
+  maskEmail,
 } from "./utils";
 import Card from "@/shared/components/Card";
 import { ConfirmModal, EditConnectionModal } from "@/shared/components";
@@ -142,6 +143,9 @@ export default function ProviderLimits() {
   const [refreshingAll, setRefreshingAll] = useState(false);
   const [countdown, setCountdown] = useState(60);
   const [connectionsLoading, setConnectionsLoading] = useState(true);
+  // Account emails censored by default (W12); eye toggle reveals them.
+  const [showEmails, setShowEmails] = useState(false);
+  const displayAccountText = (text) => (showEmails ? text : maskEmail(text));
   const [deletingId, setDeletingId] = useState(null);
   const [togglingId, setTogglingId] = useState(null);
   const [resettingLimitId, setResettingLimitId] = useState(null);
@@ -949,6 +953,18 @@ export default function ProviderLimits() {
               </option>
             ))}
           </select>
+          <button
+            type="button"
+            onClick={() => setShowEmails((v) => !v)}
+            title={showEmails ? "Hide account emails" : "Show account emails"}
+            aria-label={showEmails ? "Hide account emails" : "Show account emails"}
+            aria-pressed={showEmails}
+            className="h-8 rounded-lg border border-black/10 bg-black/[0.02] px-2 text-xs text-text-primary outline-none transition-colors hover:bg-black/5 dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/10"
+          >
+            <span className="material-symbols-outlined text-[18px] align-middle">
+              {showEmails ? "visibility" : "visibility_off"}
+            </span>
+          </button>
 
           {providerFilter === "codex" && (
             <select
@@ -1100,12 +1116,12 @@ export default function ProviderLimits() {
                       </h3>
                       {getConnectionLabel(conn) ? (
                         <p className="text-xs text-text-muted truncate">
-                          {getConnectionLabel(conn)}
+                          {displayAccountText(getConnectionLabel(conn))}
                         </p>
                       ) : null}
                       {getConnectionSecondaryLabel(conn) ? (
                         <p className="text-[11px] text-text-muted/80 truncate">
-                          {getConnectionSecondaryLabel(conn)}
+                          {displayAccountText(getConnectionSecondaryLabel(conn))}
                         </p>
                       ) : null}
                       {conn.provider === "kiro" && (

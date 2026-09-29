@@ -22,10 +22,19 @@ const fmtTokens = (n) => {
 
 const fmtCost = (n) => `$${(n || 0).toFixed(4)}`;
 
-export default function UsageChart({ period = "7d" }) {
+export default function UsageChart({ period = "7d", viewMode: controlled, onViewModeChange }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState("tokens");
+  // Single shared Tokens/Costs state with the table (W13): two identically-styled
+  // toggles disagreeing is exactly how "Tokens selected, costs shown" happens.
+  // Controlled when the parent passes viewMode; standalone otherwise.
+  const [internal, setInternal] = useState("tokens");
+  const viewMode = controlled ?? internal;
+  const chartMode = viewMode === "costs" ? "cost" : "tokens";
+  const setViewMode = (v) => {
+    if (onViewModeChange) onViewModeChange(v === "cost" ? "costs" : "tokens");
+    else setInternal(v);
+  };
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -53,13 +62,13 @@ export default function UsageChart({ period = "7d" }) {
       <div className="grid w-full grid-cols-2 items-center gap-1 rounded-lg border border-border bg-bg-subtle p-1 sm:w-auto sm:self-start">
         <button
           onClick={() => setViewMode("tokens")}
-          className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${viewMode === "tokens" ? "bg-primary text-white shadow-sm" : "text-text-muted hover:text-text hover:bg-bg-hover"}`}
+          className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${chartMode === "tokens" ? "bg-primary text-white shadow-sm" : "text-text-muted hover:text-text hover:bg-bg-hover"}`}
         >
           Tokens
         </button>
         <button
           onClick={() => setViewMode("cost")}
-          className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${viewMode === "cost" ? "bg-primary text-white shadow-sm" : "text-text-muted hover:text-text hover:bg-bg-hover"}`}
+          className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${chartMode === "cost" ? "bg-primary text-white shadow-sm" : "text-text-muted hover:text-text hover:bg-bg-hover"}`}
         >
           Cost
         </button>
@@ -94,7 +103,7 @@ export default function UsageChart({ period = "7d" }) {
               tick={{ fontSize: 10, fill: "currentColor", fillOpacity: 0.5 }}
               tickLine={false}
               axisLine={false}
-              tickFormatter={viewMode === "tokens" ? fmtTokens : fmtCost}
+              tickFormatter={chartMode === "tokens" ? fmtTokens : fmtCost}
               width={50}
             />
             <Tooltip
@@ -108,7 +117,7 @@ export default function UsageChart({ period = "7d" }) {
                 name === "tokens" ? [fmtTokens(value), "Tokens"] : [fmtCost(value), "Cost"]
               }
             />
-            {viewMode === "tokens" ? (
+            {chartMode === "tokens" ? (
               <Area
                 type="monotone"
                 dataKey="tokens"

@@ -16,6 +16,7 @@ import { DEFAULT_HEADROOM_URL } from "@/lib/headroom/detect";
 import { getTransform as getPxpipeTransform } from "@/lib/pxpipe/loader.js";
 import { appendPxpipeEvent } from "@/lib/pxpipe/events.js";
 import { errorResponse, unavailableResponse } from "open-sse/utils/error.js";
+import { saveRequestError } from "open-sse/handlers/chatCore/requestDetail.js";
 import { checkBodyLimit, MAX_BODY_BYTES } from "@/lib/bodyLimit.js";
 import { getApiKeyByKey } from "@/lib/localDb";
 import { checkRateLimit, checkTpmLimit } from "@/lib/rateLimit.js";
@@ -456,13 +457,16 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
         const errorMsg = lastError || credentials.lastError || "Unavailable";
         const status = HTTP_STATUS.SERVICE_UNAVAILABLE;
         log.warn("CHAT", `[${provider}/${model}] ${errorMsg} (${credentials.retryAfterHuman})`);
+        saveRequestError({ provider, model, status, endpoint: clientRawRequest?.endpoint });
         return unavailableResponse(status, `[${provider}/${model}] ${errorMsg}`, credentials.retryAfter, credentials.retryAfterHuman);
       }
       if (excludeConnectionIds.size === 0) {
         log.warn("AUTH", `No active credentials for provider: ${provider}`);
+        saveRequestError({ provider, model, status: HTTP_STATUS.NOT_FOUND, endpoint: clientRawRequest?.endpoint });
         return errorResponse(HTTP_STATUS.NOT_FOUND, `No active credentials for provider: ${provider}`);
       }
       log.warn("CHAT", "No more accounts available", { provider });
+      saveRequestError({ provider, model, status: lastStatus || HTTP_STATUS.SERVICE_UNAVAILABLE, endpoint: clientRawRequest?.endpoint });
       return errorResponse(lastStatus || HTTP_STATUS.SERVICE_UNAVAILABLE, lastError || "All accounts unavailable");
     }
 
@@ -556,6 +560,11 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       continue;
     }
 
+    saveRequestError({
+      provider, model, status: result.status,
+      connectionId: credentials.connectionId,
+      endpoint: clientRawRequest?.endpoint,
+    });
     return result.response;
   }
 }
