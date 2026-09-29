@@ -56,4 +56,10 @@ describe("markAccountUnavailable — model-scoped 4xx rotates accounts", () => {
     expect(res.shouldFallback).toBe(false);
     expect(mocks.updateProviderConnection).not.toHaveBeenCalled();
   });
+
+  it("does not lock on scoped phrasing that names no model (request-controlled 400)", async () => {
+    const res = await markAccountUnavailable("c1", 400, "tool web_search is not supported when using streaming", "codex", "gpt-5.6-sol");
+    expect(res.shouldFallback).toBe(false);
+    expect(mocks.updateProviderConnection).not.toHaveBeenCalled();
+  });
 });

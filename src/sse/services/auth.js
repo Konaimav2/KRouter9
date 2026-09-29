@@ -323,7 +323,7 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
   // EXCEPTION first: a model-scoped 4xx (model unsupported on THIS account)
   // is per-account, not per-request — a sibling account on another plan may
   // serve it. Lock the model on this account and rotate (P-SKIP).
-  if (!resetsAtMs && model && isModelScopedError(status, errorText)) {
+  if (!resetsAtMs && model && isModelScopedError(status, errorText, model)) {
     const reason = typeof errorText === "string" ? errorText.slice(0, 100) : "Provider error";
     const lockUpdate = buildModelLockUpdate(model, MODEL_SCOPED_LOCK_MS);
     await updateProviderConnection(connectionId, {

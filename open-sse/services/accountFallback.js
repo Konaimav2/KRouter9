@@ -155,7 +155,7 @@ export function checkFallbackError(status, errorText, backoffLevel = 0) {
  */
 export const MODEL_SCOPED_LOCK_MS = 5 * 60 * 1000;
 
-export function isModelScopedError(status, errorText) {
+export function isModelScopedError(status, errorText, modelId = null) {
   // Only 4xx: a 5xx is a server fault and already falls back everywhere.
   if (!(status >= 400 && status < 500)) return false;
 
@@ -169,7 +169,18 @@ export function isModelScopedError(status, errorText) {
     : "";
   if (!lower) return false;
 
-  return MODEL_SCOPED_ERROR_TEXTS.some((text) => lower.includes(text));
+  const hit = MODEL_SCOPED_ERROR_TEXTS.some((text) => lower.includes(text));
+  if (!hit) return false;
+
+  // Optional anchor: when the caller names the model, require its tail in the
+  // text. Prevents request-controlled 400s (e.g. a tool/param validation error
+  // that happens to contain a scoped phrase) from locking a valid model.
+  // No anchor (combo path) keeps legacy phrase-only behavior.
+  if (modelId) {
+    const tail = String(modelId).includes("/") ? String(modelId).split("/").pop() : String(modelId);
+    if (!tail || !lower.includes(tail.toLowerCase())) return false;
+  }
+  return true;
 }
 
 /**
