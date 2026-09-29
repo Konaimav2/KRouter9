@@ -76,4 +76,46 @@ describe("combo fallback order (C2c)", () => {
     expect(tried).toEqual(["cx/retired-model", "cca/gpt-5.6-terra"]);
     expect(res.ok).toBe(true);
   });
+
+  it("waits comboFallbackDelayMs before advancing (pacing fallback storm)", async () => {
+    resetComboRotation("c2c-delay");
+    const tried = [];
+    const scoped404 = () =>
+      new Response(JSON.stringify({ error: { message: "model not found: retired-model" } }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      });
+    const t0 = Date.now();
+    const res = await handleComboChat({
+      body: { messages: [] },
+      models: ["cx/retired-model", "cca/gpt-5.6-terra"],
+      handleSingleModel: async (b, m) => {
+        tried.push(m);
+        if (m === "cx/retired-model") return scoped404();
+        return ok(m);
+      },
+      log,
+      comboName: "c2c-delay",
+      comboStrategy: "fallback",
+      comboFallbackDelayMs: 150,
+    });
+    expect(tried).toEqual(["cx/retired-model", "cca/gpt-5.6-terra"]);
+    expect(res.ok).toBe(true);
+    // 404 model-scoped carries no cooldown wait — only comboFallbackDelayMs paces this.
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(100);
+  });
+
+  it("no delay by default (delayMs 0 preserves existing behavior)", async () => {
+    resetComboRotation("c2c-nodelay");
+    const t0 = Date.now();
+    await handleComboChat({
+      body: { messages: [] },
+      models: ["cx/retired-model", "cca/gpt-5.6-terra"],
+      handleSingleModel: async (b, m) => (m === "cx/retired-model" ? err503() : ok(m)),
+      log,
+      comboName: "c2c-nodelay",
+      comboStrategy: "fallback",
+    });
+    expect(Date.now() - t0).toBeLessThan(5000);
+  });
 });
