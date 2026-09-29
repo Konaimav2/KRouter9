@@ -1,7 +1,9 @@
 export default {
   id: "agentrouter",
   alias: "agentrouter",
-  aliases: ["agent-router"],
+  // `agentr` = retired custom-node prefix (migrated 2026-09-29); kept as alias.
+  // Do NOT create a custom node with this prefix.
+  aliases: ["agent-router", "agentr"],
   uiAlias: "agentrouter",
   display: {
     name: "AgentRouter",

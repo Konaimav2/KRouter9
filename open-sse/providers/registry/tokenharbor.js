@@ -2,7 +2,11 @@ export default {
   id: "tokenharbor",
   priority: 120,
   alias: "tokenharbor",
-  aliases: ["th", "thh"],
+  // `tkhb` = retired custom-node prefix (migrated 2026-09-29): kept as alias so
+  // existing `tkhb/<model>` refs (combos, playground, saved defaults) route here.
+  // Do NOT create a custom node with this prefix — registry wins and the node
+  // would be silently unreachable.
+  aliases: ["th", "thh", "tkhb"],
   uiAlias: "tokenharbor",
   display: {
     name: "TokenHarbor",
