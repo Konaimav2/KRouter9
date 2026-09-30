@@ -728,7 +728,7 @@ export default function ProxyPoolsPage() {
                       {pool.boundConnectionCount || 0} bound
                     </Badge>
                   </div>
-                  <p className="text-xs text-text-muted truncate mt-1" title={pool.hasProxyAuth ? "Credentials hidden — edit the pool to replace the URL" : undefined}>{pool.proxyUrlMasked || pool.proxyUrl || ""}{pool.hasProxyAuth ? " · auth hidden" : ""}</p>
+                  <p className="text-xs text-text-muted truncate mt-1" title={pool.hasProxyAuth ? "Credentials hidden — edit the pool to replace the URL" : undefined}>{pool.proxyUrlMasked || ""}{pool.hasProxyAuth ? " · auth hidden" : ""}</p>
                   {pool.noProxy ? (
                     <p className="text-xs text-text-muted truncate">No proxy: {pool.noProxy}</p>
                   ) : null}
