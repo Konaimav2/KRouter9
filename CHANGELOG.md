@@ -1,3 +1,22 @@
+# v2.0.0 (2026-10-01) — 1.1.1 series + playground/analytics/UI overhaul + own cache
+
+## Fixes
+- Combo resolution order + resolution-aware pre-filter (provider members kept)
+- Account rotation on model-scoped 4xx with per-model locks + id anchoring
+- Registry↔node id collisions resolved (tokenharbor/bai-api/agentrouter + slug aliases)
+- Providers-page errorClass crash; proxy no-auth query/fragment masking
+- Mid-stream SSE failures recorded as error (#4332); failed requests logged w/ codes (#4340 follow-through)
+- Disabled-model toggle honored; model-scoped 4xx combo fall-through
+
+## Features
+- Playground: Combos group, picker search, thinking variants, +upload menu, fresh landing, per-chat delete
+- Analytics: unified Tokens/Costs state, quota email censor, per-key deep link, RPM/TPM locks
+- Providers: agentrouter/bai-api/tokenharbor wiring, key-aware suggested models, connection test fallback, icons
+- Combos: expandable chips, max-member context limits, configurable fallback delay
+- UI: newapi-derived blue tokens, Public Sans, docs quickstart/copy buttons
+- W14 own response cache (exact-match, identity-bound, default OFF)
+- /v1/models: no blanket bulk-import; codex conservative catalogs
+
 # v1.1.1 (2026-09-28) — combo routing order, opencode free-tier cloak, 4xx fall-through, disabled-toggle, 3 providers
 
 > Shipped to papi 2026-09-28 (GHCR `:1.1.1`, digest `6e450b1a6ea9`; previous container kept as
