@@ -6,7 +6,12 @@
 /**
  * Mask a proxy URL for browser display/API responses.
  * - `http://user:pass@host:8080` -> `http://***@host:8080`
- * - no userinfo -> returned as-is (host:port is not secret)
+ * - query string always redacted (`?token=...` -> `?***`) — relay URLs carry
+ *   secrets outside userinfo (W16); a query is never needed to identify a pool.
+ * - fragment always dropped.
+ * - path is kept (routing info for relays); a full-path secret is
+ *   indistinguishable from routing and stays a documented limitation.
+ * - no userinfo/query/fragment -> returned as-is (host:port is not secret)
  * - unparseable/empty -> "***" / ""
  */
 export function maskProxyUrl(url) {
@@ -18,12 +23,22 @@ export function maskProxyUrl(url) {
     // be socks5:// or bare host:port).
     const m = s.match(/^([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)?(.*)$/);
     const scheme = m[1] || "";
-    const rest = m[2] || "";
+    let rest = m[2] || "";
+    // Drop fragment: never identifying, sometimes secret.
+    const hash = rest.indexOf("#");
+    if (hash !== -1) rest = rest.slice(0, hash);
+    // Redact query: relay tokens/keys live here (?token=, ?api_key=).
+    const q = rest.indexOf("?");
+    let suffix = "";
+    if (q !== -1) {
+      suffix = "?***";
+      rest = rest.slice(0, q);
+    }
     const at = rest.lastIndexOf("@");
-    if (at === -1) return s;
+    if (at === -1) return `${scheme}${rest}${suffix}`;
     const hostport = rest.slice(at + 1);
     if (!hostport) return "***";
-    return `${scheme}***@${hostport}`;
+    return `${scheme}***@${hostport}${suffix}`;
   } catch {
     return "***";
   }

@@ -296,6 +296,7 @@ const STRATEGY_OPTIONS = [
 
 function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onEdit, onDelete, strategy = {}, onSetStrategy }) {
   const [showJudgeSelect, setShowJudgeSelect] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const current = strategy.fallbackStrategy || "fallback";
   const judge = strategy.judgeModel || "";
   const isFusion = current === "fusion";
@@ -313,7 +314,7 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onEdi
               {combo.models.length === 0 ? (
                 <span className="text-xs text-text-muted italic">No models</span>
               ) : (
-                combo.models.slice(0, 3).map((model, index) => (
+                (expanded ? combo.models : combo.models.slice(0, 3)).map((model, index) => (
                   <code key={index} className="inline-flex items-center gap-1 rounded bg-black/5 px-1.5 py-0.5 font-mono text-xs text-text-muted dark:bg-white/5">
                     <span>{model}</span>
                     <CapacityBadges caps={getCaps?.(model)} />
@@ -321,7 +322,14 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onEdi
                 ))
               )}
               {combo.models.length > 3 && (
-                <span className="text-[10px] text-text-muted">+{combo.models.length - 3} more</span>
+                <button
+                  type="button"
+                  onClick={() => setExpanded((v) => !v)}
+                  aria-expanded={expanded}
+                  className="text-[10px] text-text-muted hover:text-primary hover:underline"
+                >
+                  {expanded ? "show less" : `+${combo.models.length - 3} more`}
+                </button>
               )}
             </div>
             {/* Fusion: judge picker (Auto = first model) */}
@@ -444,6 +452,7 @@ function CapacityAdapterSection({ capacityAdapter, onChange, activeProviders, ge
 
 function CapacityAdapterCap({ cap, entry, onChange, activeProviders, getCaps }) {
   const [showModelSelect, setShowModelSelect] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const { enabled, roundRobin, models } = entry;
 
   const patch = (p) => onChange({ ...entry, ...p });
@@ -488,7 +497,7 @@ function CapacityAdapterCap({ cap, entry, onChange, activeProviders, getCaps }) 
               {models.length === 0 ? (
                 <span className="text-xs text-text-muted italic">No models</span>
               ) : (
-                models.slice(0, 3).map((model, index) => (
+                (expanded ? models : models.slice(0, 3)).map((model, index) => (
                   <code
                     key={`${model}-${index}`}
                     className="group/chip inline-flex items-center gap-1 rounded bg-black/5 px-1.5 py-0.5 font-mono text-xs text-text-muted dark:bg-white/5"
@@ -508,7 +517,14 @@ function CapacityAdapterCap({ cap, entry, onChange, activeProviders, getCaps }) 
                 ))
               )}
               {models.length > 3 && (
-                <span className="text-[10px] text-text-muted">+{models.length - 3} more</span>
+                <button
+                  type="button"
+                  onClick={() => setExpanded((v) => !v)}
+                  aria-expanded={expanded}
+                  className="text-[10px] text-text-muted hover:text-primary hover:underline"
+                >
+                  {expanded ? "show less" : `+${models.length - 3} more`}
+                </button>
               )}
             </div>
           </div>
