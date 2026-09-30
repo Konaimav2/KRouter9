@@ -165,6 +165,13 @@ Everything below was ported from source and tested against a running instance. F
 - 📌 **Session affinity** — pin a conversation to one account so multi-turn context stays put
 - 🏆 **Model intelligence** — OpenRouter rankings sync, search 150 ranked models
 - 🔀 **Slug-qualified combos** — `kiro/my-combo` and `my-combo` both resolve; combo ids never collide with providers
+- 🌐 **Built-in aggregator providers** — TokenHarbor, B.AI, AgentRouter registries with
+  suggested free models, key-aware catalog fetch, and connection test support
+- 🧭 **Resolution-order routing** — `provider/model` refs beat same-name combos; registry ids
+  never shadow live node prefixes (namespace-collision safe)
+- 🛡️ **Opencode free-tier cloak** — exact-case decoy tools + forced streaming, no more 403 FreeTierError
+- 🔁 **Model-scoped fallback** — unentitled/retired models advance combos AND rotate accounts (per-model locks); genuine request faults still stop fast
+- 🚫 **Disabled-model toggle honored at request time** — dashboard switches route, fail-open
 
 ### Donor Rounds (2026-09-07/08)
 
