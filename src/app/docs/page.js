@@ -92,7 +92,7 @@ export default function DocsPage() {
             <h2 className="font-medium">Quickstart</h2>
             <CopyButton
               label="Copy curl"
-              text={() => `curl ${typeof window !== "undefined" ? window.location.origin : ""}/v1/chat/completions -H "Content-Type: application/json" -H "Authorization: Bearer $KROUTER9_KEY" -d '{"model":"gpt-5.6-sol","messages":[{"role":"user","content":"Hello"}]}'`}
+              text={`curl $BASE/v1/chat/completions -H "Content-Type: application/json" -H "Authorization: Bearer $KROUTER9_KEY" -d '{"model":"gpt-5.6-sol","messages":[{"role":"user","content":"Hello"}]}'`}
             />
           </div>
           <pre className="overflow-x-auto rounded bg-black/20 p-3 text-xs dark:bg-black/40">
@@ -153,7 +153,7 @@ export default function DocsPage() {
                     <span className="text-xs text-text-muted sm:text-right">{e.desc}</span>
                     <CopyButton
                       label="Copy URL"
-                      text={() => `${typeof window !== "undefined" ? window.location.origin : ""}${e.path}`}
+                      path={e.path}
                     />
                   </span>
                 </div>

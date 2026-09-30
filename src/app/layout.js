@@ -1,4 +1,7 @@
-import { Inter } from "next/font/google";
+import "@fontsource/public-sans/400.css";
+import "@fontsource/public-sans/500.css";
+import "@fontsource/public-sans/600.css";
+import "@fontsource/public-sans/700.css";
 import { GoogleAnalytics } from "@next/third-parties/google";
 import "material-symbols/outlined.css";
 import "./globals.css";
@@ -10,11 +13,6 @@ import { RuntimeI18nProvider } from "@/i18n/RuntimeI18nProvider";
 
 // Hook console immediately at module load time (server-side only, runs once)
 initConsoleLogCapture();
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-});
 
 export const metadata = {
   title: "KRouter9 - AI Infrastructure Management",
@@ -46,7 +44,7 @@ export default function RootLayout({ children }) {
           }}
         />
       </head>
-      <body className={`${inter.variable} font-sans antialiased`}>
+      <body className="font-sans antialiased">
         <ThemeProvider>
           <RuntimeI18nProvider>
             {children}

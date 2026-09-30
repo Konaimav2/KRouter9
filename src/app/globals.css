@@ -8,21 +8,22 @@
 .fonts-loaded .material-symbols-outlined { opacity: 1; transition: opacity .12s ease-out; }
 
 /* ============================================================
-   9Router palette — adopted from 9remote_private/web
-   Brand orange (dark) / soft coral (light), neutral warm bases
+   KRouter9 ops-console palette (2.0.0) — newapi-derived semantic tokens.
+   Blue primary (oklch ~hue 245), neutral bases. Values only; token names
+   unchanged so all 50+ consumers follow without edits.
    ============================================================ */
 :root {
-  /* Brand scale (light) - centered on #E56A4A */
-  --color-brand-50: #fdf1ed;
-  --color-brand-100: #fadccf;
-  --color-brand-200: #f4b59c;
-  --color-brand-300: #ee8d6a;
-  --color-brand-400: #ea7855;
-  --color-brand-500: #E56A4A;
-  --color-brand-600: #cc5236;
-  --color-brand-700: #a64027;
-  --color-brand-800: #7a2f1d;
-  --color-brand-900: #4d1e12;
+  /* Brand scale (light) - blue primary */
+  --color-brand-50: #EEF3FF;
+  --color-brand-100: #DCE7FD;
+  --color-brand-200: #C0D3FC;
+  --color-brand-300: #9AB4FA;
+  --color-brand-400: #6B8FF7;
+  --color-brand-500: #3D6BE8;
+  --color-brand-600: #2E56C8;
+  --color-brand-700: #2745A1;
+  --color-brand-800: #263D7E;
+  --color-brand-900: #232F57;
 
   /* Primary (legacy alias for backward compat with existing components) */
   --color-primary: var(--color-brand-500);
@@ -58,32 +59,32 @@
 
   /* Shadows */
   --shadow-soft: 0 1px 2px 0 rgba(0,0,0,0.04);
-  --shadow-warm: 0 2px 12px -2px rgba(229, 106, 74, 0.18);
+  --shadow-warm: 0 2px 12px -2px rgba(61, 107, 232, 0.18);
   --shadow-elevated: 0 12px 28px -4px rgba(60, 50, 45, 0.06);
   --shadow-elev:
     inset 0 1px 0 0 rgba(255,255,255,0.8),
     0 1px 2px rgba(15,23,42,0.04),
     0 12px 36px -8px rgba(15,23,42,0.10);
-  --shadow-focus: 0 0 0 3px rgba(229,106,74,0.18);
+  --shadow-focus: 0 0 0 3px rgba(61, 107, 232,0.18);
 
   color-scheme: light;
 }
 
 .dark {
-  /* Brand scale (dark) - centered on #E56A4A, same as light for consistency */
-  --color-brand-50: #fdf1ed;
-  --color-brand-100: #fadccf;
-  --color-brand-200: #f4b59c;
-  --color-brand-300: #ee8d6a;
-  --color-brand-400: #ea7855;
-  --color-brand-500: #E56A4A;
-  --color-brand-600: #cc5236;
-  --color-brand-700: #a64027;
-  --color-brand-800: #7a2f1d;
-  --color-brand-900: #4d1e12;
+  /* Brand scale (dark) - brightened blue for contrast on charcoal */
+  --color-brand-50: #232F57;
+  --color-brand-100: #263D7E;
+  --color-brand-200: #2745A1;
+  --color-brand-300: #2E56C8;
+  --color-brand-400: #3D6BE8;
+  --color-brand-500: #6B8FF7;
+  --color-brand-600: #9AB4FA;
+  --color-brand-700: #C0D3FC;
+  --color-brand-800: #DCE7FD;
+  --color-brand-900: #EEF3FF;
 
-  --color-primary: #E56A4A;
-  --color-primary-hover: #cc5236;
+  --color-primary: #6B8FF7;
+  --color-primary-hover: #9AB4FA;
 
   /* Surfaces (dark - Claude-like neutral warm) */
   --color-bg: #1a1a1a;
@@ -107,13 +108,13 @@
   --color-info: #60a5fa;
 
   --shadow-soft: 0 1px 2px 0 rgba(0,0,0,0.3);
-  --shadow-warm: 0 2px 12px -2px rgba(229, 106, 74, 0.25);
+  --shadow-warm: 0 2px 12px -2px rgba(61, 107, 232, 0.25);
   --shadow-elevated: 0 12px 28px -4px rgba(0, 0, 0, 0.45);
   --shadow-elev:
     inset 0 1px 0 0 rgba(255,255,255,0.06),
     0 1px 2px rgba(0,0,0,0.4),
     0 16px 48px -8px rgba(0,0,0,0.55);
-  --shadow-focus: 0 0 0 3px rgba(229, 106, 74, 0.18);
+  --shadow-focus: 0 0 0 3px rgba(61, 107, 232, 0.18);
 
   color-scheme: dark;
 }
@@ -195,8 +196,8 @@ select {
   --shadow-elev: var(--shadow-elev);
   --shadow-focus: var(--shadow-focus);
 
-  /* Font - Inter primary, Apple system fallback */
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', system-ui, sans-serif;
+  /* Font - Public Sans primary, system fallback (local files, no runtime fetch) */
+  --font-sans: 'Public Sans', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', system-ui, sans-serif;
 }
 
 /* Base */
@@ -210,11 +211,11 @@ body {
 
 /* Selection - brand-tinted */
 ::selection {
-  background-color: rgba(229, 106, 74, 0.25);
+  background-color: rgba(61, 107, 232, 0.25);
   color: var(--color-primary);
 }
 .dark ::selection {
-  background-color: rgba(229, 106, 74, 0.3);
+  background-color: rgba(61, 107, 232, 0.3);
   color: var(--color-brand-300);
 }
 
@@ -251,19 +252,19 @@ input:-webkit-autofill + * { color: inherit; }
 /* Thin horizontal scrollbar - brand colored */
 .scroll-thin-x {
   scrollbar-width: thin;
-  scrollbar-color: rgba(229, 106, 74, 0.55) transparent;
+  scrollbar-color: rgba(61, 107, 232, 0.55) transparent;
 }
 .dark .scroll-thin-x {
-  scrollbar-color: rgba(229, 106, 74, 0.55) transparent;
+  scrollbar-color: rgba(61, 107, 232, 0.55) transparent;
 }
 .scroll-thin-x::-webkit-scrollbar { height: 3px; }
 .scroll-thin-x::-webkit-scrollbar-track { background: transparent; }
 .scroll-thin-x::-webkit-scrollbar-thumb {
-  background: rgba(229, 106, 74, 0.55);
+  background: rgba(61, 107, 232, 0.55);
   border-radius: 3px;
 }
 .dark .scroll-thin-x::-webkit-scrollbar-thumb {
-  background: rgba(229, 106, 74, 0.55);
+  background: rgba(61, 107, 232, 0.55);
 }
 
 /* Global thin mac-like scrollbars (overrides clunky Windows/Linux default) */
@@ -397,12 +398,12 @@ button:disabled,
 
 @keyframes border-glow {
   0%, 100% {
-    box-shadow: 0 0 5px rgba(229, 106, 74, 0.3), 0 0 10px rgba(229, 106, 74, 0.2);
-    border-color: rgba(229, 106, 74, 0.5);
+    box-shadow: 0 0 5px rgba(61, 107, 232, 0.3), 0 0 10px rgba(61, 107, 232, 0.2);
+    border-color: rgba(61, 107, 232, 0.5);
   }
   50% {
-    box-shadow: 0 0 10px rgba(229, 106, 74, 0.5), 0 0 20px rgba(229, 106, 74, 0.3);
-    border-color: rgba(229, 106, 74, 0.8);
+    box-shadow: 0 0 10px rgba(61, 107, 232, 0.5), 0 0 20px rgba(61, 107, 232, 0.3);
+    border-color: rgba(61, 107, 232, 0.8);
   }
 }
 .animate-border-glow { animation: border-glow 2s ease-in-out infinite; }
@@ -435,8 +436,8 @@ button:disabled,
   100% { transform: translateX(220%) skewX(-20deg); }
 }
 @keyframes ctaGlowPulse {
-  0%, 100% { box-shadow: 0 8px 24px -8px rgba(229, 106, 74, 0.45), 0 0 0 0 rgba(229, 106, 74, 0.5); }
-  50% { box-shadow: 0 12px 32px -8px rgba(229, 106, 74, 0.6), 0 0 0 8px rgba(229, 106, 74, 0); }
+  0%, 100% { box-shadow: 0 8px 24px -8px rgba(61, 107, 232, 0.45), 0 0 0 0 rgba(61, 107, 232, 0.5); }
+  50% { box-shadow: 0 12px 32px -8px rgba(61, 107, 232, 0.6), 0 0 0 8px rgba(61, 107, 232, 0); }
 }
 .btn-cta {
   position: relative;
@@ -462,13 +463,13 @@ button:disabled,
 .dot-grid-bg {
   background-color: var(--color-bg);
   background-image:
-    radial-gradient(circle at 15% 20%, rgba(229, 106, 74, 0.10) 0%, transparent 40%),
-    radial-gradient(circle at 85% 80%, rgba(229, 106, 74, 0.06) 0%, transparent 40%);
+    radial-gradient(circle at 15% 20%, rgba(61, 107, 232, 0.10) 0%, transparent 40%),
+    radial-gradient(circle at 85% 80%, rgba(61, 107, 232, 0.06) 0%, transparent 40%);
 }
 .dark .dot-grid-bg {
   background-image:
-    radial-gradient(circle at 15% 20%, rgba(229, 106, 74, 0.18) 0%, transparent 40%),
-    radial-gradient(circle at 85% 80%, rgba(229, 106, 74, 0.10) 0%, transparent 40%);
+    radial-gradient(circle at 15% 20%, rgba(61, 107, 232, 0.18) 0%, transparent 40%),
+    radial-gradient(circle at 85% 80%, rgba(61, 107, 232, 0.10) 0%, transparent 40%);
 }
 
 /* Landing-style faint grid overlay (use absolute pos inside relative parent) */

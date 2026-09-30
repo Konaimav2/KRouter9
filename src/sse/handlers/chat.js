@@ -17,6 +17,16 @@ import { getTransform as getPxpipeTransform } from "@/lib/pxpipe/loader.js";
 import { appendPxpipeEvent } from "@/lib/pxpipe/events.js";
 import { errorResponse, unavailableResponse } from "open-sse/utils/error.js";
 import { saveRequestError } from "open-sse/handlers/chatCore/requestDetail.js";
+import {
+  buildCacheKey,
+  isCacheableRequest,
+  isCacheEntryLive,
+  DEFAULT_RESPONSE_CACHE_TTL_MS,
+} from "open-sse/services/responseCache.js";
+import {
+  getResponseCacheEntry,
+  setResponseCacheEntry,
+} from "@/lib/db/repos/responseCacheRepo.js";
 import { checkBodyLimit, MAX_BODY_BYTES } from "@/lib/bodyLimit.js";
 import { getApiKeyByKey } from "@/lib/localDb";
 import { checkRateLimit, checkTpmLimit } from "@/lib/rateLimit.js";
@@ -438,6 +448,42 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
 
   const { provider, model } = modelInfo;
 
+  // Own response cache (W14): exact-match, non-streaming only, opt-in via
+  // settings.responseCacheEnabled. Identity is bound into the key; failures
+  // never populate; hits still record zero-token usage rows.
+  let cacheKey = null;
+  let cacheTtlMs = 0;
+  try {
+    const cacheSettings = await getCachedSettings();
+    if (cacheSettings?.responseCacheEnabled === true && body?.stream !== true) {
+      const cacheable = isCacheableRequest({ body });
+      if (cacheable.ok) {
+        cacheTtlMs = Number(cacheSettings.responseCacheTtlMs) > 0
+          ? Math.floor(Number(cacheSettings.responseCacheTtlMs))
+          : DEFAULT_RESPONSE_CACHE_TTL_MS;
+        cacheKey = await buildCacheKey({ provider, model, body, apiKeyId: apiKey || null });
+        const hit = await getResponseCacheEntry(cacheKey);
+        if (isCacheEntryLive(hit)) {
+          try {
+            const { saveRequestUsage } = await import("@/lib/usageDb.js");
+            await saveRequestUsage({
+              provider, model,
+              tokens: { prompt_tokens: 0, completion_tokens: 0 },
+              timestamp: new Date().toISOString(),
+              endpoint: clientRawRequest?.endpoint || null,
+            }).catch(() => {});
+          } catch {}
+          return new Response(hit.bodyText, {
+            status: hit.status || 200,
+            headers: { "Content-Type": hit.contentType || "application/json" },
+          });
+        }
+      }
+    }
+  } catch {
+    cacheKey = null;
+  }
+
   // Routing shown in the unified "▶" line (client model → provider/model)
 
   // Extract userAgent from request
@@ -532,7 +578,26 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       }
     });
 
-    if (result.success) return result.response;
+    if (result.success) {
+      // Populate the own-cache on success (non-streaming JSON only, bounded size).
+      if (cacheKey && cacheTtlMs > 0) {
+        try {
+          const contentType = result.response?.headers?.get?.("content-type") || "";
+          if (result.response && result.response.ok && contentType.includes("application/json")) {
+            const text = await result.response.clone().text();
+            if (text && text.length <= 512 * 1024) {
+              await setResponseCacheEntry(cacheKey, {
+                expiresAt: Date.now() + cacheTtlMs,
+                status: result.response.status || 200,
+                bodyText: text,
+                contentType: "application/json",
+              });
+            }
+          }
+        } catch {}
+      }
+      return result.response;
+    }
 
     // Antigravity 409/429: refresh live quota to get exact resetAt before locking
     let quotaResetMs = null;
