@@ -2,8 +2,6 @@ import { PROVIDER_MODELS, PROVIDER_ID_TO_ALIAS, getModelKind } from "@/shared/co
 import {
   AI_PROVIDERS,
   getProviderAlias,
-  isAnthropicCompatibleProvider,
-  isOpenAICompatibleProvider,
 } from "@/shared/constants/providers";
 import { getProviderConnections, getCombos, getCustomModels, getModelAliases } from "@/lib/localDb";
 import { getDisabledModels } from "@/lib/disabledModelsDb";
@@ -131,15 +129,6 @@ const LIVE_MODEL_RESOLVERS = {
   },
 };
 
-const parseOpenAIStyleModels = (data) => {
-  if (Array.isArray(data)) return data;
-  return data?.data || data?.models || data?.results || [];
-};
-
-// Header sent by fetchCompatibleModelIds to detect cross-instance /models fetches
-// and break recursive loops between krouter9 instances connected to each other.
-const INTERNAL_MODELS_FETCH_HEADER = "x-9r-internal-models-fetch";
-
 // LLM kind sentinel — combos/models with no explicit kind default to LLM
 const LLM_KIND = "llm";
 
@@ -170,63 +159,6 @@ function inferKindFromUnknownModelId(modelId) {
   return LLM_KIND;
 }
 
-async function fetchCompatibleModelIds(connection) {
-  if (!connection?.apiKey) return [];
-
-  const baseUrl = typeof connection?.providerSpecificData?.baseUrl === "string"
-    ? connection.providerSpecificData.baseUrl.trim().replace(/\/$/, "")
-    : "";
-
-  if (!baseUrl) return [];
-
-  let url = `${baseUrl}/models`;
-  const headers = {
-    "Content-Type": "application/json",
-  };
-
-  if (isOpenAICompatibleProvider(connection.provider)) {
-    headers.Authorization = `Bearer ${connection.apiKey}`;
-  } else if (isAnthropicCompatibleProvider(connection.provider)) {
-    if (url.endsWith("/messages/models")) {
-      url = url.slice(0, -9);
-    } else if (url.endsWith("/messages")) {
-      url = `${url.slice(0, -9)}/models`;
-    }
-    headers["x-api-key"] = connection.apiKey;
-    headers["anthropic-version"] = "2023-06-01";
-    headers.Authorization = `Bearer ${connection.apiKey}`;
-  } else {
-    return [];
-  }
-
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-    const response = await fetch(url, {
-      method: "GET",
-      headers: { ...headers, [INTERNAL_MODELS_FETCH_HEADER]: "1" },
-      cache: "no-store",
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-
-    if (!response.ok) return [];
-
-    const data = await response.json();
-    const rawModels = parseOpenAIStyleModels(data);
-
-    return Array.from(
-      new Set(
-        rawModels
-          .map((model) => model?.id || model?.name || model?.model)
-          .filter((modelId) => typeof modelId === "string" && modelId.trim() !== "")
-      )
-    );
-  } catch {
-    return [];
-  }
-}
-
 // Provider matches kindFilter when its serviceKinds intersect the requested kinds.
 // LLM is the default kind for providers missing serviceKinds.
 function providerMatchesKinds(providerId, kindFilter) {
@@ -248,11 +180,7 @@ function comboMatchesKinds(combo, kindFilter) {
  * Build OpenAI-format models list filtered by service kinds.
  * @param {string[]} kindFilter - List of service kinds to include (e.g. ["llm"], ["webSearch","webFetch"]).
  */
-export async function buildModelsList(kindFilter, options = {}) {
-  // When this header is present, the /v1/models request came from another
-  // krouter9 instance's fetchCompatibleModelIds — skip dynamic fetch to break
-  // cross-instance recursive loops.
-  const skipDynamicFetch = options.skipDynamicFetch === true;
+export async function buildModelsList(kindFilter) {
   let connections = [];
   try {
     connections = await getProviderConnections();
@@ -313,6 +241,25 @@ export async function buildModelsList(kindFilter, options = {}) {
     if (combo.kind === "webSearch" || combo.kind === "webFetch") {
       entry.kind = combo.kind;
     }
+    // W29: advertise the widest member window so agentic clients don't clamp
+    // the combo to a default 200k. Unknown members resolve to default caps;
+    // the max over known members still wins when any member is known.
+    if (Array.isArray(combo.models) && combo.models.length > 0) {
+      let bestCtx = 0;
+      let bestOut = 0;
+      for (const m of combo.models) {
+        const s = String(m || "");
+        const slash = s.indexOf("/");
+        const caps = getCapabilitiesForModel(
+          slash > 0 ? s.slice(0, slash) : "",
+          slash > 0 ? s.slice(slash + 1) : s
+        ) || {};
+        if (Number.isFinite(caps.contextWindow) && caps.contextWindow > bestCtx) bestCtx = caps.contextWindow;
+        if (Number.isFinite(caps.maxOutput) && caps.maxOutput > bestOut) bestOut = caps.maxOutput;
+      }
+      if (bestCtx > 0) entry.context_length = bestCtx;
+      if (bestOut > 0) entry.max_completion_tokens = bestOut;
+    }
     models.push(entry);
   }
 
@@ -365,8 +312,6 @@ export async function buildModelsList(kindFilter, options = {}) {
       const enabledModels = conn?.providerSpecificData?.enabledModels;
       const hasExplicitEnabledModels =
         Array.isArray(enabledModels) && enabledModels.length > 0;
-      const isCompatibleProvider =
-        isOpenAICompatibleProvider(providerId) || isAnthropicCompatibleProvider(providerId);
 
       // Build kind lookup for static models so we can filter even when only IDs are exposed
       const staticModelKindById = new Map(
@@ -385,9 +330,11 @@ export async function buildModelsList(kindFilter, options = {}) {
           )
         : providerModels.map((model) => model.id);
 
-      if (isCompatibleProvider && rawModelIds.length === 0 && !skipDynamicFetch) {
-        rawModelIds = await fetchCompatibleModelIds(conn);
-      }
+      // M slim-down: no blanket upstream catalog fetch. A compatible provider with
+      // no static models and no explicit enabledModels contributes nothing here —
+      // the dashboard's per-connection model picker is the source of truth, and
+      // bulk-importing foreign catalogs is what bloated the list. Config-driven
+      // live resolvers below (kiro/qoder/...) still apply.
 
       // Config-driven live catalog override (e.g. Kiro returns dynamic
       // -thinking/-agentic variants per account). On failure, fall back to
@@ -585,9 +532,7 @@ export async function OPTIONS() {
  */
 export async function GET(request) {
   try {
-    // Detect cross-instance recursive /models fetch (another krouter9 fetching our /models)
-    const skipDynamicFetch = request?.headers?.get(INTERNAL_MODELS_FETCH_HEADER) === "1";
-    const data = await buildModelsList([LLM_KIND], { skipDynamicFetch });
+    const data = await buildModelsList([LLM_KIND]);
     return Response.json({ object: "list", data }, {
       headers: { "Access-Control-Allow-Origin": "*" },
     });
