@@ -351,3 +351,24 @@ export function invalidateQoderCatalog(credentials) {
 export function clearQoderCatalog() {
   catalogCache.clear();
 }
+
+/**
+ * Every model key the chat endpoint accepts for this credential: the IDE-visible
+ * models first, then catalog entries flagged hidden. Ported from upstream (#4292 era).
+ */
+export function routableQoderModels(catalog) {
+  if (!catalog) return [];
+  const out = [];
+  const seen = new Set();
+  for (const m of catalog.models || []) {
+    if (!m?.id || seen.has(m.id)) continue;
+    seen.add(m.id);
+    out.push({ id: m.id, name: m.name || m.id, hidden: false });
+  }
+  for (const [key, cfg] of catalog.rawConfigs || []) {
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ id: key, name: cfg?.display_name || key, hidden: true });
+  }
+  return out;
+}
