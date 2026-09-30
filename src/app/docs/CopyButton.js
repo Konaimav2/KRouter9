@@ -2,10 +2,16 @@
 
 import { useState } from "react";
 
-export default function CopyButton({ text, label = "Copy" }) {
+// Copy-to-clipboard button for static content. All props must be static
+// strings (server components cannot pass functions to client components).
+// `path` resolves against the current origin in the browser; in `text`, the
+// literal token $BASE is replaced with the origin at click time.
+export default function CopyButton({ text, path, label = "Copy" }) {
   const [copied, setCopied] = useState(false);
   const onCopy = async () => {
-    const value = typeof text === "function" ? text() : text;
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const raw = path ? `${origin}${path}` : (text || "");
+    const value = raw.split("$BASE").join(origin);
     try {
       await navigator.clipboard.writeText(value);
     } catch {
