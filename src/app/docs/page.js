@@ -1,4 +1,5 @@
 import Link from "next/link";
+import CopyButton from "./CopyButton";
 
 export const metadata = {
   title: "API Reference — KRouter9",
@@ -87,6 +88,28 @@ export default function DocsPage() {
         </header>
 
         <section className="mb-8 rounded-lg border border-border bg-surface-2 p-4">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h2 className="font-medium">Quickstart</h2>
+            <CopyButton
+              label="Copy curl"
+              text={() => `curl ${typeof window !== "undefined" ? window.location.origin : ""}/v1/chat/completions -H "Content-Type: application/json" -H "Authorization: Bearer $KROUTER9_KEY" -d '{"model":"gpt-5.6-sol","messages":[{"role":"user","content":"Hello"}]}'`}
+            />
+          </div>
+          <pre className="overflow-x-auto rounded bg-black/20 p-3 text-xs dark:bg-black/40">
+{`curl $BASE/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer $KROUTER9_KEY" \\
+  -d '{"model":"gpt-5.6-sol","messages":[{"role":"user","content":"Hello"}]}'`}
+          </pre>
+          <p className="mt-2 text-sm text-text-muted">
+            <code className="rounded bg-black/10 px-1 dark:bg-white/10">$BASE</code> is the gateway
+            origin shown in your browser address bar; <code className="rounded bg-black/10 px-1 dark:bg-white/10">$KROUTER9_KEY</code> is
+            an API key from Endpoint &amp; Key. Add <code className="rounded bg-black/10 px-1 dark:bg-white/10">&quot;stream&quot;: true</code> for
+            server-sent events.
+          </p>
+        </section>
+
+        <section className="mb-8 rounded-lg border border-border bg-surface-2 p-4">
           <h2 className="mb-2 font-medium">Authentication</h2>
           <ul className="list-disc space-y-1 pl-5 text-sm text-text-muted">
             <li>
@@ -126,7 +149,13 @@ export default function DocsPage() {
                     {e.method}
                   </span>
                   <code className="text-sm text-text-primary">{e.path}</code>
-                  <span className="text-xs text-text-muted sm:ml-auto sm:text-right">{e.desc}</span>
+                  <span className="flex items-center gap-2 sm:ml-auto">
+                    <span className="text-xs text-text-muted sm:text-right">{e.desc}</span>
+                    <CopyButton
+                      label="Copy URL"
+                      text={() => `${typeof window !== "undefined" ? window.location.origin : ""}${e.path}`}
+                    />
+                  </span>
                 </div>
               ))}
             </div>
