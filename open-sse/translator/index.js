@@ -2,6 +2,7 @@ import { FORMATS } from "./formats.js";
 import { ensureToolCallIds, fixMissingToolResponses } from "./concerns/toolCall.js";
 import { prepareClaudeRequest } from "./formats/claude.js";
 import { cloakClaudeTools, decloakStreamChunk } from "../utils/claudeCloaking.js";
+import { restoreToolNames } from "../utils/opencodeFingerprint.js";
 import { compressToolNames, decloakOpenAIChunk } from "../utils/toolCompressor.js";
 import { filterToOpenAIFormat } from "./formats/openai.js";
 import { normalizeThinkingConfig } from "../services/provider.js";
@@ -175,9 +176,9 @@ export function translateResponse(targetFormat, sourceFormat, chunk, state) {
   // be decloaked here or the client sees an unknown ("_ide"-suffixed) tool.
   if (sourceFormat === targetFormat) {
     if (sourceFormat === FORMATS.OPENAI || sourceFormat === FORMATS.OPENAI_RESPONSES) {
-      return [decloakOpenAIChunk(chunk, state?.toolNameMap)];
+      return [restoreToolNames(decloakOpenAIChunk(chunk, state?.toolNameMap), state?.toolNameMap)];
     }
-    return [decloakStreamChunk(chunk, state?.toolNameMap)];
+    return [restoreToolNames(decloakStreamChunk(chunk, state?.toolNameMap), state?.toolNameMap)];
   }
 
   let results = [chunk];
@@ -190,7 +191,8 @@ export function translateResponse(targetFormat, sourceFormat, chunk, state) {
   const directFn = responseRegistry.get(`${targetFormat}:${sourceFormat}`);
   if (directFn) {
     const converted = directFn(chunk, state);
-    return converted ? (Array.isArray(converted) ? converted : [converted]) : [];
+    const directResults = converted ? (Array.isArray(converted) ? converted : [converted]) : [];
+    return restoreToolNames(directResults, state?.toolNameMap);
   }
 
   // Step 1: target -> openai (if target is not openai)
@@ -226,7 +228,7 @@ export function translateResponse(targetFormat, sourceFormat, chunk, state) {
     results._openaiIntermediate = openaiResults;
   }
 
-  return results;
+  return restoreToolNames(results, state?.toolNameMap);
 }
 
 // Check if translation needed
