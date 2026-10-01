@@ -269,21 +269,9 @@ export default function BasicChatPageClient() {
             // Stamp the provider label on every model so no per-key name leaks
             // through normalize* helpers (U1).
             for (const model of models) model.providerName = group.providerName;
-            // Keep connected groups even when model discovery fails, with a
-            // typeable placeholder — like ModelSelectModal — instead of vanishing.
-            if (models.length === 0 && group.connections.length > 0) {
-              const conn = group.connections[0];
-              const prefix = requestPrefixFor(conn);
-              models.push({
-                id: `${prefix}/model-id`,
-                requestModel: `${prefix}/model-id`,
-                name: `${prefix}/model-id`,
-                providerId: group.providerId,
-                providerName: group.providerName,
-                source: "placeholder",
-                isPlaceholder: true,
-              });
-            }
+            // No fabricated placeholder ids: fake `<prefix>/model-id` entries leak
+            // into selection and error paths. Empty groups are filtered below with
+            // a proper empty-state message instead.
             return { ...group, models };
           })
           .filter((group) => group.models.length > 0)
