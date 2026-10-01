@@ -6,15 +6,19 @@ import { HTTP_STATUS } from "../config/runtimeConfig.js";
 import { resolveSessionId, toNumericSessionId } from "../utils/sessionManager.js";
 import { proxyAwareFetch } from "../utils/proxyFetch.js";
 import { cleanJSONSchemaForAntigravity } from "../translator/formats/gemini.js";
+import { compressSingleToolName } from "../utils/toolCompressor.js";
 import { DEFAULT_THINKING_AG_SIGNATURE } from "../config/defaultThinkingSignature.js";
 import { getGeminiThoughtSignatureSync } from "../services/thoughtSignatureStore.js";
 
-// Sanitize function name: Gemini requires [a-zA-Z_][a-zA-Z0-9_.:\-]{0,63}
-function sanitizeFunctionName(name) {
+// Sanitize function name: Gemini requires [a-zA-Z_][a-zA-Z0-9_.:\-]{0,63}.
+// Collision-safe via deterministic hash suffix (tree-standard
+// compressSingleToolName): plain truncation let two tools sharing a 64-char
+// prefix collapse into one, silently dropping the second (VansRouter #148).
+export function sanitizeFunctionName(name) {
   if (!name) return "_unknown";
   let s = name.replace(/[^a-zA-Z0-9_.:\-]/g, "_");
   if (!/^[a-zA-Z_]/.test(s)) s = "_" + s;
-  return s.substring(0, 64);
+  return compressSingleToolName(s);
 }
 
 const MAX_RETRY_AFTER_MS = 10000;
