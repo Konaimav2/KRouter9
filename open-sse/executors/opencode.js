@@ -7,78 +7,15 @@ import { clampThinkingLevel, isKnownThinkingLevel } from "../translator/concerns
 import { injectReasoningContent } from "../utils/reasoningContentInjector.js";
 import { resolveSessionId } from "../utils/sessionManager.js";
 import { isMuseSparkModel } from "../providers/models/helpers.js";
+import { applyFingerprintTools } from "../utils/opencodeFingerprint.js";
 import { ANTHROPIC_API_VERSION } from "../providers/shared.js";
 
 const OPENCODE_UA = "opencode/1.18.31";
 
-// OpenCode free tier requires both 'bash' and 'read' in tools payload.
-// Injected as cloaked decoy tools so external CLI tools (e.g. Claude Code's Bash/Read)
-// take precedence while satisfying upstream verification.
-// Port of upstream PR #4146 head 7b56f179 (exact-case decoy matching;
-// unconditional cloak on the Responses free-tier path). The quartet approach
-// (upstream 822aa958) is reference-only and NOT ported.
-export const OPENCODE_DECOY_CHAT_TOOLS = [
-  {
-    type: "function",
-    function: {
-      name: "bash",
-      description: "This tool is currently unavailable and must not be used.",
-      parameters: { type: "object", properties: {} },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "read",
-      description: "This tool is currently unavailable and must not be used.",
-      parameters: { type: "object", properties: {} },
-    },
-  },
-];
-
-export const OPENCODE_DECOY_RESPONSES_TOOLS = [
-  {
-    type: "function",
-    name: "bash",
-    description: "This tool is currently unavailable and must not be used.",
-    parameters: { type: "object", properties: {} },
-  },
-  {
-    type: "function",
-    name: "read",
-    description: "This tool is currently unavailable and must not be used.",
-    parameters: { type: "object", properties: {} },
-  },
-];
-
-// Exact-case matching: custom PascalCase tools (Bash, Read) must NOT prevent
-// injection of the lowercase decoys the free tier requires.
-export function cloakOpencodeTools(body, isResponses) {
-  if (!body || typeof body !== "object") return;
-  if (isResponses) {
-    const hasTools = Array.isArray(body.tools) && body.tools.length > 0;
-    if (!hasTools) body.tools = [];
-    const exactNames = new Set(body.tools.map((t) => t?.name || t?.function?.name || ""));
-    for (const tool of OPENCODE_DECOY_RESPONSES_TOOLS) {
-      if (!exactNames.has(tool.name)) body.tools.push({ ...tool });
-    }
-    // Default tool_choice only when the caller sent none (7b56f179).
-    if (!hasTools && !body.tool_choice) body.tool_choice = "auto";
-  } else {
-    const hasTools = Array.isArray(body.tools) && body.tools.length > 0;
-    if (!hasTools) {
-      body.tools = OPENCODE_DECOY_CHAT_TOOLS.map((t) => ({ ...t, function: { ...t.function } }));
-      if (!body.tool_choice) body.tool_choice = "none";
-    } else {
-      const exactNames = new Set(body.tools.map((t) => t?.function?.name || t?.name || ""));
-      for (const tool of OPENCODE_DECOY_CHAT_TOOLS) {
-        if (!exactNames.has(tool.function.name)) {
-          body.tools.push({ ...tool, function: { ...tool.function } });
-        }
-      }
-    }
-  }
-}
+// Free-tier fingerprint: upstream requires the lowercase file-search quartet
+// (bash/glob/grep/read) on both endpoints — 0-3 → 403 (upstream #4188,
+// merged as 822aa958). Implemented in the shared fingerprint module (case
+// canonicalization + rename restoration); this executor only wires it in.
 const MAX_SESSION_LENGTH = 256;
 const SESSION_HEADER = "x-opencode-session";
 const SESSION_FIELD = "_opencodeSession";
@@ -403,11 +340,11 @@ export class OpenCodeExecutor extends BaseExecutor {
       delete body.max_tokens;
       delete body.max_completion_tokens;
       normalizeOpencodeReasoning(model, body);
-      // Free-tier fingerprint decoys are required even when an agent client
-      // already supplied tools; skipping cloak here triggers 403 FreeTierError.
-      cloakOpencodeTools(body, true);
+      // Free-tier fingerprint quartet required even when an agent client
+      // already supplied tools; skipping here triggers 403 FreeTierError.
+      applyFingerprintTools(body, true);
     } else if (body && typeof body === "object") {
-      cloakOpencodeTools(body, false);
+      applyFingerprintTools(body, false);
     }
     return injectReasoningContent({ provider: this.provider, model, body });
   }
