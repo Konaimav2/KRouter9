@@ -1,6 +1,7 @@
 import { PROVIDER_MODELS, PROVIDER_ID_TO_ALIAS, getModelKind } from "@/shared/constants/models";
 import {
   AI_PROVIDERS,
+  ALIAS_TO_ID,
   getProviderAlias,
 } from "@/shared/constants/providers";
 import { getProviderConnections, getCombos, getCustomModels, getModelAliases } from "@/lib/localDb";
@@ -202,6 +203,59 @@ function comboMatchesKinds(combo, kindFilter) {
   return kindFilter.includes(kind);
 }
 
+// Combo seats use UI aliases; capability tables are keyed by provider id.
+const ALIAS_TO_PROVIDER_ID = {
+  ...Object.fromEntries(
+    Object.entries(PROVIDER_ID_TO_ALIAS).map(([id, alias]) => [alias, id])
+  ),
+  ...ALIAS_TO_ID,
+};
+
+function comboSeatCapabilities(seat) {
+  const slash = seat.indexOf("/");
+  if (slash <= 0) return null;
+  const alias = seat.slice(0, slash);
+  return getCapabilitiesForModel(ALIAS_TO_PROVIDER_ID[alias] || alias, seat.slice(slash + 1));
+}
+
+// Nested combo names are valid seats — expand them cycle-guarded so the published
+// window is the true MINIMUM across the whole chain (upstream #89ffac5a).
+function comboSeatLimits(combo, combosByName, visiting = new Set()) {
+  const name = typeof combo?.name === "string" ? combo.name : null;
+  if (name) {
+    if (visiting.has(name)) return { contextWindow: undefined, maxOutput: undefined };
+    visiting.add(name);
+  }
+
+  let contextWindow = Infinity;
+  let maxOutput = Infinity;
+  try {
+    for (const seat of Array.isArray(combo?.models) ? combo.models : []) {
+      if (typeof seat !== "string") continue;
+      const slash = seat.indexOf("/");
+      if (slash <= 0) {
+        const nested = combosByName.get(seat);
+        if (nested) {
+          const nestedLimits = comboSeatLimits(nested, combosByName, visiting);
+          if (Number.isFinite(nestedLimits.contextWindow)) contextWindow = Math.min(contextWindow, nestedLimits.contextWindow);
+          if (Number.isFinite(nestedLimits.maxOutput)) maxOutput = Math.min(maxOutput, nestedLimits.maxOutput);
+          continue;
+        }
+      }
+      const caps = comboSeatCapabilities(seat) || getCapabilitiesForModel(null, seat);
+      if (Number.isFinite(caps?.contextWindow)) contextWindow = Math.min(contextWindow, caps.contextWindow);
+      if (Number.isFinite(caps?.maxOutput)) maxOutput = Math.min(maxOutput, caps.maxOutput);
+    }
+  } finally {
+    if (name) visiting.delete(name);
+  }
+
+  return {
+    contextWindow: Number.isFinite(contextWindow) ? contextWindow : undefined,
+    maxOutput: Number.isFinite(maxOutput) ? maxOutput : undefined,
+  };
+}
+
 /**
  * Build OpenAI-format models list filtered by service kinds.
  * @param {string[]} kindFilter - List of service kinds to include (e.g. ["llm"], ["webSearch","webFetch"]).
@@ -257,6 +311,9 @@ export async function buildModelsList(kindFilter) {
   }
 
   const models = [];
+  const combosByName = new Map(
+    combos.filter((c) => typeof c?.name === "string").map((c) => [c.name, c])
+  );
 
   // Combos first (filtered by kind). Web combos expose `kind` so AI knows search vs fetch.
   // Combos use their bare names only. Clients that slug-qualify model ids
@@ -271,25 +328,14 @@ export async function buildModelsList(kindFilter) {
     };
     if (combo.kind === "webSearch" || combo.kind === "webFetch") {
       entry.kind = combo.kind;
-    }
-    // W29: advertise the widest member window so agentic clients don't clamp
-    // the combo to a default 200k. Unknown members resolve to default caps;
-    // the max over known members still wins when any member is known.
-    if (Array.isArray(combo.models) && combo.models.length > 0) {
-      let bestCtx = 0;
-      let bestOut = 0;
-      for (const m of combo.models) {
-        const s = String(m || "");
-        const slash = s.indexOf("/");
-        const caps = getCapabilitiesForModel(
-          slash > 0 ? s.slice(0, slash) : "",
-          slash > 0 ? s.slice(slash + 1) : s
-        ) || {};
-        if (Number.isFinite(caps.contextWindow) && caps.contextWindow > bestCtx) bestCtx = caps.contextWindow;
-        if (Number.isFinite(caps.maxOutput) && caps.maxOutput > bestOut) bestOut = caps.maxOutput;
-      }
-      if (bestCtx > 0) entry.context_length = bestCtx;
-      if (bestOut > 0) entry.max_completion_tokens = bestOut;
+    } else {
+      // W29: advertise member limits so agentic clients don't clamp the combo to a
+      // default 200k. The only window a combo can promise is its smallest member
+      // (nested combos expanded cycle-guarded) — max() would strand fallback on a
+      // small member. Ported from upstream #89ffac5a.
+      const { contextWindow, maxOutput } = comboSeatLimits(combo, combosByName);
+      if (Number.isFinite(contextWindow)) entry.context_length = contextWindow;
+      if (Number.isFinite(maxOutput)) entry.max_completion_tokens = maxOutput;
     }
     models.push(entry);
   }

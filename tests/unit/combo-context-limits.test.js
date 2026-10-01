@@ -15,12 +15,24 @@ vi.mock("@/lib/disabledModelsDb", () => ({
 
 const { buildModelsList } = await import("@/app/api/v1/models/route.js");
 
-describe("combo entries carry max-member context limits (W29)", () => {
-  it("emits context_length on combos", async () => {
+describe("combo entries carry member context limits (W29)", () => {
+  it("emits the MINIMUM member window (fallback-safe), alias-resolved", async () => {
     const list = await buildModelsList(["llm"]);
     const combo = list.find((m) => m.id === "mix-combo");
     expect(combo).toBeDefined();
-    expect(Number.isFinite(combo.context_length)).toBe(true);
-    expect(combo.context_length).toBeGreaterThan(0);
+    // ag/claude-opus-4-8 advertises 1M; unknown member floors at default 200k.
+    // The combo may only promise the smallest (upstream #89ffac5a).
+    expect(combo.context_length).toBe(200000);
+  });
+
+  it("expands nested combos cycle-guarded", async () => {
+    const { getCombos } = await import("@/lib/localDb");
+    getCombos.mockResolvedValueOnce([
+      { name: "outer", models: ["mix-combo"] },
+      { name: "mix-combo", models: ["ag/claude-opus-4-8", "cx/unknown-model-xyz"] },
+    ]);
+    const list = await buildModelsList(["llm"]);
+    const outer = list.find((m) => m.id === "outer");
+    expect(outer?.context_length).toBe(200000);
   });
 });
