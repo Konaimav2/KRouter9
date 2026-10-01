@@ -68,6 +68,16 @@ export const ERROR_RULES = [
   { text: "capacity",                 backoff: true },
   { text: "overloaded",               backoff: true },
 
+  // Account-dead signals: Antigravity / Gemini-Code-Assist eligibility failures
+  // need human intervention (re-auth, age/selfie verification), so a generic-403
+  // 2-minute retry just hammers a dead credential. Lock out for 12h instead;
+  // recovery comes from the human fixing eligibility, not from waiting.
+  // Diagnostic reference: fulldiagnose/antigravity-fixer (external desktop tool,
+  // NOT vendored — wrong runtime + handles Google passwords; only the
+  // error-text mapping is adopted here). See docs/ANTIGRAVITY-ELIGIBILITY.md.
+  { text: "not eligible",            cooldownMs: 12 * 60 * 60 * 1000 },
+  { text: "validation_required",     cooldownMs: 12 * 60 * 60 * 1000 },
+
   // --- Status-based rules (fallback when text doesn't match) ---
   { status: 401, cooldownMs: COOLDOWN.long },
   { status: 402, cooldownMs: COOLDOWN.long },
