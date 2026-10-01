@@ -189,7 +189,16 @@ Respond ONLY with the JSON object, no other text.`);
 
   // Thinking is normalized centrally by applyThinking (thinkingUnified.js) after translation.
 
-  // Attach toolNameMap to result for response translation
+  // Attach toolNameMap to result for response translation.
+  // Merge any incoming map (compressToolNames short->original, set by
+  // translateRequest before conversion) instead of overwriting it — otherwise
+  // responses restore to the compressed hash name rather than the
+  // client-original (VansRouter b56edf67, Issue #148).
+  if (body._toolNameMap?.size) {
+    for (const [k, v] of body._toolNameMap) {
+      toolNameMap.set(k, v);
+    }
+  }
   if (toolNameMap.size > 0) {
     result._toolNameMap = toolNameMap;
   }

@@ -281,13 +281,20 @@ function openaiToGeminiBase(model, body, stream, signature = DEFAULT_THINKING_AG
 
   result.contents = normalizeGeminiContents(result.contents);
 
-  // Expose toolNameMap (sanitizedName -> originalName) for response decloaking
+  // Expose toolNameMap for response decloaking, keyed by the exact name sent
+  // upstream with the CLIENT-original as value. Compose with any incoming map
+  // (compressToolNames short->original): the converter received the compressed
+  // name, so without composition responses would restore to the intermediate
+  // hash name instead of what the client sent (VansRouter b56edf67, #148).
+  // When nothing was re-sanitized, pass the incoming map through untouched.
   if (toolNameMap.size > 0) {
     const reverseMap = new Map();
     for (const [orig, sanitized] of toolNameMap.entries()) {
-      reverseMap.set(sanitized, orig);
+      reverseMap.set(sanitized, body._toolNameMap?.get(orig) || orig);
     }
     result._toolNameMap = reverseMap;
+  } else if (body._toolNameMap?.size) {
+    result._toolNameMap = new Map(body._toolNameMap);
   }
 
   return result;
@@ -499,12 +506,16 @@ function wrapInCloudCodeEnvelopeForClaude(model, claudeRequest, credentials = nu
 
   envelope.request.contents = normalizeGeminiContents(envelope.request.contents);
 
+  // Same composition as openaiToGeminiBase: keys are the names actually sent
+  // upstream, values are client-originals (via claudeRequest._toolNameMap).
   if (toolNameMap.size > 0) {
     const reverseMap = new Map();
     for (const [orig, sanitized] of toolNameMap.entries()) {
-      reverseMap.set(sanitized, orig);
+      reverseMap.set(sanitized, claudeRequest._toolNameMap?.get(orig) || orig);
     }
     envelope._toolNameMap = reverseMap;
+  } else if (claudeRequest._toolNameMap?.size) {
+    envelope._toolNameMap = new Map(claudeRequest._toolNameMap);
   }
 
   return envelope;
