@@ -1,3 +1,18 @@
+# v2.1.0 (2026-10-02) — smarter combo limits, long tool names, eligibility handling
+
+## Fixes
+- Combo entries in `/v1/models` now advertise the smallest member context window
+  (nested combos included), so agentic clients no longer overshoot a small member's limits
+- Tool names longer than 64 characters no longer break requests or come back renamed:
+  responses restore the exact names your client sent, on OpenAI, Claude, and Gemini paths
+- Antigravity no longer silently drops tools whose names share a long prefix
+- Capacity-adapter fallback model updated to `oc/mimo-v2.6-flash-free` (v2.5 retired upstream)
+
+## Features
+- Accounts rejected for Antigravity / Gemini Code Assist eligibility are parked for
+  12 hours instead of retried every 2 minutes; other accounts keep serving. See
+  `docs/ANTIGRAVITY-ELIGIBILITY.md` for how to fix the underlying account
+
 # v2.0.0 (2026-10-01) — 1.1.1 series + playground/analytics/UI overhaul + own cache
 
 ## Fixes
@@ -18,10 +33,6 @@
 - /v1/models: no blanket bulk-import; codex conservative catalogs
 
 # v1.1.1 (2026-09-28) — combo routing order, opencode free-tier cloak, 4xx fall-through, disabled-toggle, 3 providers
-
-> Shipped to papi 2026-09-28 (GHCR `:1.1.1`, digest `6e450b1a6ea9`; previous container kept as
-> `krouter9-1.1.0-rollback`). Note: first image build preceded the version bump, so
-> `/api/version` initially reported `1.1.0`; rebuilt with the bumped tree — reports `1.1.1`.
 
 ## Fixes
 - **Combo skips members sharing its name (papi-proven)**: `getModelInfo` resolved
