@@ -20,7 +20,7 @@
 - Account rotation on model-scoped 4xx with per-model locks + id anchoring
 - Registry↔node id collisions resolved (tokenharbor/bai-api/agentrouter + slug aliases)
 - Providers-page errorClass crash; proxy no-auth query/fragment masking
-- Mid-stream SSE failures recorded as error (#4332); failed requests logged w/ codes (#4340 follow-through)
+- Mid-stream SSE failures recorded as error; failed requests logged with status codes
 - Disabled-model toggle honored; model-scoped 4xx combo fall-through
 
 ## Features
@@ -35,68 +35,54 @@
 # v1.1.1 (2026-09-28) — combo routing order, opencode free-tier cloak, 4xx fall-through, disabled-toggle, 3 providers
 
 ## Fixes
-- **Combo skips members sharing its name (papi-proven)**: `getModelInfo` resolved
-  `<provider>/<comboName>` to the combo before provider resolution, so the P0a
-  pre-filter dropped 5/7 members of `gpt-5.6-terra` (all traffic fell through to one
-  model). Known-provider heads (registry ids/aliases, node prefixes) now route to the
-  provider; unknown heads keep slug-qualify behavior. Combo log reports `N of M models`.
-- **Opencode free-tier 403 (selective port of upstream #4146/#4155)**: exact-case
-  `bash`/`read` decoy cloak unconditional on Responses + Chat paths, `tool_choice`
-  default-only-when-absent, `forceStream` declaration. Live-probed `PROBE_OK`, no 403.
-- **Combo 4xx fall-through (port of upstream #4340)**: model-scoped 4xx (unentitled slug,
-  retired model) advances the combo with `cooldownMs: 0`; account-scoped 401/402/403/429
-  unchanged. Terminal errors name every tried model.
-- **Disabled-model toggle honored at request time (port of upstream #4318)**:
-  fail-open, alias+id keys. Sticky fallback (1d) behaviorally intact (6/6).
-- **Build**: fixed stray `);` in dashboard providers page (pre-existing 1a damage).
+- **Combo no longer skips members that share its name**: `provider/comboName`
+  references now resolve to the provider instead of recursing into the combo,
+  so every member is actually tried in order
+- **Opencode free-tier 403 gone on CLI-shaped traffic**: the gateway now sends the
+  expected client fingerprint (exact-case tool cloaking on both endpoints), so
+  free-tier requests are no longer rejected as unidentified clients
+- **Combo advances past unusable members**: model-scoped 4xx errors (unentitled model,
+  retired slug) move to the next member instead of failing the whole combo; terminal
+  errors name every model that was tried
+- **Disabled-model toggle honored at request time**: dashboard toggles take effect
+  immediately; account sticky-fallback behavior unchanged
+- **Build**: fixed a stray syntax error in the dashboard providers page
 
 ## Features
-- **Three providers wired**: AgentRouter (`agentr`), B.AI (`bai`), TokenHarbor (`tkhb`,
-  id kept for papi `tkhb/` route compat); registry index regen (122 entries) + tests.
+- **Three providers wired**: AgentRouter, B.AI, and TokenHarbor, with key-aware
+  suggested models, connection testing, and icons
 
-# v1.1.0 (2026-09-21) — combo hot-loop + provider-level UA + incomplete fix
+# v1.1.0 (2026-09-21) — combo hot-loop fix + provider-level user agent + stop-reason fix
 
 ## Fixes
-- **Combo hot-loop (P0a, live on papi)**: self-referencing members
-  (`cx/…`, `ohh/…`, `cca/…`, `grip/…`) are pre-filtered with a log line instead
-  of recursing; top-level `comboName` ReferenceError fixed; visited-chain 503
-  with attempt-log throttle (3 + 1 mute notice). Cyclic combo now fails fast
-  (~30ms) instead of wedging the gateway.
-- **User-Agent is provider-level only (U1/U2)**: per-key UA fields deleted from
-  Add-Key/Edit-Connection modals (the Add-Key modal had a live ReferenceError —
-  it crashed on render); the 12 ex-per-key presets merged into the node-level
-  list; API strips per-key UA on write for node-owned providers; startup
-  migration 002 clears orphans. Built-in providers keep per-connection UA (no
-  node entity exists for them).
-- **Migration version rebase**: registry versions re-based to 4/5 above
-  historically-stamped schemaVersions, plus a loud warning if stored version
-  ever exceeds the registry again (the old numbering silently skipped
-  migrations on old DBs — caught live on papi).
-- **Responses `incomplete` mislabeled as stop**: upstream `response.incomplete`
-  (e.g. output tokens burned on reasoning, zero content) now translates to
-  `finish_reason: "length"` with usage instead of a dead empty `stop` turn —
-  the "run ends on tool task" killer. Tool-calls-already-emitted still reports
-  `tool_calls`.
-- **Disabled accounts stick (U9)**: re-add/re-login can only deactivate, never
-  reactivate; re-enable only via explicit toggle. Bulk provider disable asks
-  for confirmation with the affected count.
+- **Combo hot-loop fixed**: self-referencing members are filtered before routing
+  instead of recursing; cyclic combos now fail fast (~30ms) instead of wedging
+  the gateway
+- **User-Agent is provider-level only**: per-key UA fields removed from the
+  Add-Key/Edit-Connection dialogs (the Add-Key dialog crashed on render); the 12
+  presets merged into the connection-level list; a startup migration clears orphans
+- **Database migrations run reliably again**: registry versions re-based above
+  historically-stamped schema versions, plus a loud warning if a stored version
+  ever exceeds the registry again
+- **Responses `incomplete` no longer mislabeled as stop**: providers that burn output
+  tokens on reasoning with zero content now translate to `finish_reason: "length"`
+  with usage, instead of a dead empty `stop` turn that ended runs on tool tasks
+- **Disabled accounts stay disabled**: re-adding or re-logging in can only
+  deactivate, never reactivate; re-enable only via the explicit toggle. Bulk
+  provider disable asks for confirmation with the affected count
 
 ## Features
-- **Playground picker per-provider**: group headers show the provider/node name
-  + key count, never key names; request routing unchanged (provider prefixes).
-- **Docs button (U7)**: header menu gains Docs next to Change Log, serving the
-  local `/docs` API reference.
-- **AgentRouter UA verified (U6)**: echo-probe proves the configured UA
-  (`opencode/1.18.30`) leaves the gateway byte-identical — no code change
-  needed.
-- **Repo docs**: root `AGENTS.md` (routing, no-stall discipline, planning
-  protocol, pre-ship gate), `DESIGN.md` (operations-console world, teal band),
-  `TARGET.md` (P0 → 1.0.1 → 1.1.0 with U1–U21/OC1 mapping).
+- **Playground picker per-provider**: group headers show the provider name + key
+  count, never key names; request routing unchanged
+- **Docs button**: header menu gains Docs next to Change Log, serving the local
+  `/docs` API reference
+- **AgentRouter UA verified**: echo-probe proves the configured UA leaves the
+  gateway byte-identical — no code change needed
+- **Repo docs**: root `AGENTS.md`, `DESIGN.md`, `TARGET.md`
 
 ## Tests
-- New: `ua-migration-002` (+ v3-stamped replay), `isactive-sticky` (7),
-  `openai-responses-incomplete` (captured live shape), group-label tests.
-  Touched-area suites 51/51 green; responses path 50/50 green.
+- New suites for UA migration, account stickiness, Responses incomplete shape, and
+  group labels; touched-area suites green
 
 # v1.0.0 (2026-09-20) — first complete release
 
