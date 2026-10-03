@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, Fragment } from "react";
 import PropTypes from "prop-types";
 import Card from "@/shared/components/Card";
-import Badge from "@/shared/components/Badge";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronRight } from "lucide-react";
 
 const fmt = (n) => new Intl.NumberFormat().format(n || 0);
 const fmtCost = (n) => `$${(n || 0).toFixed(2)}`;
@@ -18,8 +18,10 @@ function fmtTime(iso) {
 }
 
 function SortIcon({ field, currentSort, currentOrder }) {
-  if (currentSort !== field) return <span className="ml-1 opacity-20">↕</span>;
-  return <span className="ml-1">{currentOrder === "asc" ? "↑" : "↓"}</span>;
+  if (currentSort !== field) return <ArrowUpDown aria-hidden="true" className="ml-1 inline opacity-30" size={14} />;
+  return currentOrder === "asc"
+    ? <ArrowUp aria-hidden="true" className="ml-1 inline" size={14} />
+    : <ArrowDown aria-hidden="true" className="ml-1 inline" size={14} />;
 }
 
 SortIcon.propTypes = {
@@ -112,6 +114,8 @@ export default function UsageTable({
   useEffect(() => {
     try {
       const saved = localStorage.getItem(storageKey);
+      // Restore the user-controlled expansion state after hydration.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (saved) setExpanded(new Set(JSON.parse(saved)));
     } catch (e) {
       console.error(`Failed to load ${storageKey}:`, e);
@@ -195,9 +199,7 @@ export default function UsageTable({
                 >
                   <td className="px-6 py-3">
                     <div className="flex items-center gap-2">
-                      <span className={`material-symbols-outlined text-[18px] text-text-muted transition-transform ${expanded.has(group.groupKey) ? "rotate-90" : ""}`}>
-                        chevron_right
-                      </span>
+                      <ChevronRight aria-hidden="true" size={18} className={`text-text-muted transition-transform ${expanded.has(group.groupKey) ? "rotate-90" : ""}`} />
                       <span className={`font-medium transition-colors ${group.summary.pending > 0 ? "text-primary" : ""}`}>
                         {group.groupKey}
                       </span>

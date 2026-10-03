@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import Icon from "@/shared/components/Icon";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge, Button } from "@/shared/components";
 import { getModelsByProviderId } from "@/shared/constants/models";
 import { getThinkingLevels } from "open-sse/providers/thinkingLevels.js";
@@ -166,13 +167,45 @@ export default function BasicChatPageClient() {
   const [modelSearch, setModelSearch] = useState("");
   const [thinkingLevel, setThinkingLevel] = useState("auto");
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [renamingSessionId, setRenamingSessionId] = useState("");
+  const [renameDraft, setRenameDraft] = useState("");
+  const [deleteSessionId, setDeleteSessionId] = useState("");
   const fileInputRef = useRef(null);
   const textFileInputRef = useRef(null);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const abortRef = useRef(null);
   const initializedRef = useRef(false);
   const modelMenuRef = useRef(null);
+  const modelDialogRef = useRef(null);
+  const modelTriggerRef = useRef(null);
   const historyMenuRef = useRef(null);
+  const historyTriggerRef = useRef(null);
+  const renameDialogRef = useRef(null);
+  const renameTriggerRef = useRef(null);
+  const deleteDialogRef = useRef(null);
+  const deleteTriggerRef = useRef(null);
+
+  const restoreFocus = useCallback((ref) => {
+    globalThis.requestAnimationFrame?.(() => ref.current?.focus());
+  }, []);
+  const closeModelMenu = useCallback(() => {
+    setModelMenuOpen(false);
+    setModelSearch("");
+    restoreFocus(modelTriggerRef);
+  }, [restoreFocus]);
+  const closeHistory = useCallback(() => {
+    setHistoryOpen(false);
+    restoreFocus(historyTriggerRef);
+  }, [restoreFocus]);
+  const closeRename = useCallback(() => {
+    setRenamingSessionId("");
+    setRenameDraft("");
+    restoreFocus(renameTriggerRef);
+  }, [restoreFocus]);
+  const closeDelete = useCallback(() => {
+    setDeleteSessionId("");
+    restoreFocus(deleteTriggerRef);
+  }, [restoreFocus]);
 
   useEffect(() => {
     setIsHydrated(true);
@@ -315,17 +348,78 @@ export default function BasicChatPageClient() {
 
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (modelMenuRef.current && !modelMenuRef.current.contains(event.target)) {
-        setModelMenuOpen(false);
-      }
-      if (historyMenuRef.current && !historyMenuRef.current.contains(event.target)) {
-        setHistoryOpen(false);
-      }
+      if (renamingSessionId || deleteSessionId) return;
+      if (modelMenuOpen && modelMenuRef.current && !modelMenuRef.current.contains(event.target)) closeModelMenu();
+      if (historyOpen && historyMenuRef.current && !historyMenuRef.current.contains(event.target)) closeHistory();
+      if (attachMenuOpen && !event.target.closest("[data-attach-menu]")) setAttachMenuOpen(false);
     };
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [attachMenuOpen, closeHistory, closeModelMenu, deleteSessionId, historyOpen, modelMenuOpen, renamingSessionId]);
+
+  useEffect(() => {
+    const activeOverlay = deleteSessionId
+      ? { ref: deleteDialogRef, close: closeDelete }
+      : renamingSessionId
+        ? { ref: renameDialogRef, close: closeRename }
+        : modelMenuOpen
+          ? { ref: modelDialogRef, close: closeModelMenu }
+          : historyOpen
+            ? { ref: historyMenuRef, close: closeHistory }
+            : null;
+    if (!activeOverlay) return undefined;
+    const container = activeOverlay.ref.current;
+    if (!container) return undefined;
+
+    const focusableSelector = [
+      "button:not([disabled])",
+      "input:not([disabled])",
+      "select:not([disabled])",
+      "textarea:not([disabled])",
+      "[href]",
+      "[tabindex]:not([tabindex='-1'])",
+    ].join(",");
+    const focusables = () => Array.from(container.querySelectorAll(focusableSelector))
+      .filter((element) => element.getClientRects().length > 0);
+    const focusFrame = globalThis.requestAnimationFrame?.(() => {
+      if (!container.contains(document.activeElement)) {
+        (container.querySelector("[data-autofocus]") || focusables()[0])?.focus();
+      }
+    });
+    const handleOverlayKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        activeOverlay.close();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const elements = focusables();
+      if (elements.length === 0) {
+        event.preventDefault();
+        return;
+      }
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      if (!container.contains(document.activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleOverlayKeyDown, true);
+    return () => {
+      if (focusFrame != null) globalThis.cancelAnimationFrame?.(focusFrame);
+      document.removeEventListener("keydown", handleOverlayKeyDown, true);
+    };
+  }, [closeDelete, closeHistory, closeModelMenu, closeRename, deleteSessionId, historyOpen, modelMenuOpen, renamingSessionId]);
 
   const modelIndex = useMemo(() => {
     const map = new Map();
@@ -481,7 +575,7 @@ export default function BasicChatPageClient() {
     setActiveSessionId(sessionId);
     setActiveProviderId(session.providerId || activeProviderId);
     setActiveModelId(session.modelId || activeModelId);
-    setHistoryOpen(false);
+    closeHistory();
   };
 
   const removeSessionById = (sessionId) => {
@@ -501,8 +595,22 @@ export default function BasicChatPageClient() {
     }
   };
 
-  const handleDeleteCurrentChat = () => {
-    removeSessionById(activeSessionId);
+  const handleDeleteCurrentChat = (trigger = document.activeElement) => {
+    if (!activeSessionId) return;
+    deleteTriggerRef.current = trigger;
+    setDeleteSessionId(activeSessionId);
+  };
+
+  const beginRenameSession = (session, trigger = document.activeElement) => {
+    renameTriggerRef.current = trigger;
+    setRenamingSessionId(session.id);
+    setRenameDraft(session.title || "New chat");
+  };
+
+  const commitRenameSession = (sessionId) => {
+    const title = makeSessionTitle(renameDraft);
+    updateSession(sessionId, (session) => ({ ...session, title, updatedAt: new Date().toISOString() }));
+    closeRename();
   };
 
   const handleSelectProvider = (providerId) => {
@@ -529,7 +637,7 @@ export default function BasicChatPageClient() {
 
     setActiveProviderId(group.providerId);
     setActiveModelId(nextModel.id);
-    setModelMenuOpen(false);
+    closeModelMenu();
   };
 
   const handleSelectModel = (modelId) => {
@@ -560,8 +668,7 @@ export default function BasicChatPageClient() {
 
     setActiveProviderId(model.providerId);
     setActiveModelId(model.id);
-    setModelMenuOpen(false);
-    setModelSearch("");
+    closeModelMenu();
     setThinkingLevel("auto");
   };
 
@@ -818,155 +925,42 @@ export default function BasicChatPageClient() {
   const modelSubLabel = activeModel ? activeModel.requestModel : "Choose from connected providers";
 
   return (
-    <div className="relative flex-1 flex flex-col h-full min-h-0 min-w-0 bg-[#212121] text-white overflow-hidden">
-      <div className="relative mx-auto flex flex-1 h-full min-h-0 w-full max-w-4xl flex-col">
-        <div className="flex shrink-0 items-center justify-between gap-3 px-4 py-3 lg:px-6">
-          <div ref={modelMenuRef} className="relative">
-            <button
-              type="button"
-              onClick={() => setModelMenuOpen((value) => !value)}
-              className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-left transition hover:bg-white/8"
-            >
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-white">{modelLabel}</span>
-                  <span className="material-symbols-outlined text-[18px] text-white/70">expand_more</span>
-                </div>
-                <p className="truncate text-xs text-white/55">{modelSubLabel}</p>
-              </div>
-            </button>
-
-            {modelMenuOpen ? (
-              <div className="absolute left-0 top-[calc(100%+10px)] z-30 w-[min(520px,calc(100vw-2rem))] overflow-hidden rounded-[20px] border border-white/10 bg-[#262626] shadow-2xl shadow-black/50">
-                <div className="border-b border-white/10 px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.22em] text-white/45">Models</p>
-                  <p className="text-sm text-white/75">Only from connected providers</p>
-                  <input
-                    type="text"
-                    value={modelSearch}
-                    onChange={(e) => setModelSearch(e.target.value)}
-                    placeholder="Search models..."
-                    aria-label="Search models"
-                    className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white placeholder:text-white/35 focus:border-blue-400/40 focus:outline-none"
-                  />
-                </div>
-                <div className="max-h-[60vh] overflow-y-auto p-2 custom-scrollbar">
-                  {visibleGroups.length === 0 ? (
-                    <p className="px-3 py-4 text-sm text-white/55">No models match “{modelSearch.trim()}”.</p>
-                  ) : null}
-                  {visibleGroups.map((group) => (
-                    <div key={group.providerId} className="mb-2 rounded-[16px] border border-white/10 bg-black/20 p-2">
-                      <div className="flex items-center justify-between px-2 py-2">
-                        <p className="text-sm font-semibold text-white">{group.providerName}</p>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] text-white/45">{group.connections.length} key{group.connections.length === 1 ? "" : "s"}</span>
-                          <Badge size="sm" variant="default">{group.models.length}</Badge>
-                        </div>
-                      </div>
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        {group.models.map((model) => {
-                          const isActive = model.id === activeModelId;
-                          return (
-                            <button
-                              key={model.id}
-                              type="button"
-                              onClick={() => handleSelectModel(model.id)}
-                              className={`rounded-[14px] border px-3 py-3 text-left transition ${isActive ? "border-blue-400/40 bg-blue-500/15" : "border-white/10 bg-white/5 hover:bg-white/8"}`}
-                            >
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <p className="truncate text-sm font-medium text-white">{model.name}</p>
-                                  <p className="truncate text-[11px] text-white/45">{model.requestModel}</p>
-                                </div>
-                                {isActive ? <span className="material-symbols-outlined text-[18px] text-blue-300">check_circle</span> : null}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--color-canvas)] text-[var(--color-text)]">
+      <div className="relative mx-auto flex h-full min-h-0 w-full max-w-[var(--layout-content-max)] flex-1 flex-col lg:grid lg:grid-cols-[240px_minmax(0,1fr)]">
+        <aside className="hidden min-h-0 border-r border-[var(--ledger-rule)] bg-[var(--color-surface)] lg:flex lg:flex-col lg:row-span-2">
+          <div className="border-b border-[var(--ledger-rule)] p-3"><Button fullWidth icon="add" onClick={handleNewChat} disabled={!activeModel}>New chat</Button></div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-2 custom-scrollbar">
+            <p className="px-2 py-2 text-[10px] font-semibold uppercase tracking-[.12em] text-[var(--color-text-subtle)]">Sessions</p>
+            {sessionItems.map((session, index) => {
+              const isActive = session.id === activeSessionId;
+              return <div key={session.id} className={`signal-row group mb-1 flex min-h-14 items-center gap-2 rounded-[var(--radius-sm)] px-3 ${isActive ? "bg-[var(--signal-row-bg-selected)] before:bg-[var(--signal-row-rail-active)]" : ""}`}>
+                <button type="button" onClick={() => handleSelectSession(session.id)} className="min-w-0 flex-1 text-left"><span className="data-text mr-2 text-[10px] text-[var(--color-text-subtle)]">{String(index + 1).padStart(2, "0")}</span><span className="truncate text-sm font-medium">{session.title}</span><span className="mt-0.5 block truncate text-[11px] text-[var(--color-text-muted)]">{session.providerName} · {session.modelName}</span></button>
+                <button type="button" onClick={(event) => beginRenameSession(session, event.currentTarget)} aria-label={`Rename ${session.title}`} className="grid size-8 place-items-center text-[var(--color-text-muted)]"><Icon name="edit" className="text-[16px]" /></button>
+                <button type="button" onClick={(event) => { deleteTriggerRef.current = event.currentTarget; setDeleteSessionId(session.id); }} aria-label={`Delete ${session.title}`} className="grid size-8 place-items-center text-[var(--color-danger)]"><Icon name="delete" className="text-[16px]" /></button>
+              </div>;
+            })}
           </div>
+        </aside>
 
-          {activeThinkingLevels ? (
-            <select
-              value={thinkingLevel}
-              onChange={(e) => setThinkingLevel(e.target.value)}
-              aria-label="Reasoning effort"
-              title="Reasoning effort"
-              className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-white/80 transition hover:bg-white/8 focus:border-blue-400/40 focus:outline-none"
-            >
-              <option value="auto">Auto</option>
-              {activeThinkingLevels.map((level) => (
-                <option key={level} value={level}>{level}</option>
-              ))}
-            </select>
-          ) : null}
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setHistoryOpen((value) => !value)}
-              className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/80 transition hover:bg-white/8"
-            >
-              History
-            </button>
-            <Button variant="ghost" size="sm" icon="delete" onClick={handleDeleteCurrentChat} disabled={!activeSessionId || sessions.length === 0}>
-              Clear
-            </Button>
-          </div>
-        </div>
-
-        {historyOpen ? (
-          <div ref={historyMenuRef} className="absolute right-4 top-[72px] z-20 w-[min(360px,calc(100vw-2rem))] rounded-[20px] border border-white/10 bg-[#262626] p-2 shadow-2xl shadow-black/50 lg:right-6">
-            <div className="px-3 py-2">
-              <p className="text-xs uppercase tracking-[0.22em] text-white/45">Recent chats</p>
+        <div className="relative flex min-h-0 flex-col lg:col-start-2 lg:row-span-2">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--ledger-rule)] bg-[var(--color-surface)] px-4 py-3">
+            <div ref={modelMenuRef} className="relative min-w-0">
+              <button ref={modelTriggerRef} type="button" aria-haspopup="dialog" aria-expanded={modelMenuOpen} onClick={() => { if (modelMenuOpen) closeModelMenu(); else setModelMenuOpen(true); }} className="flex min-h-11 max-w-[min(62vw,32rem)] items-center gap-3 rounded-[var(--radius-sm)] border border-[var(--button-border)] bg-[var(--button-secondary-bg)] px-3 text-left">
+                <Icon name="route" className="text-[18px] text-[var(--color-primary)]" /><span className="min-w-0"><span className="block truncate text-sm font-semibold">{modelLabel}</span><span className="data-text block truncate text-[10px] text-[var(--color-text-muted)]">{modelSubLabel}</span></span><Icon name="expand_more" className="text-[18px]" />
+              </button>
+              {modelMenuOpen ? <div ref={modelDialogRef} role="dialog" aria-modal="true" aria-label="Choose a model" className="absolute left-0 top-[calc(100%+8px)] z-[var(--z-menu)] w-[min(540px,calc(100vw-2rem))] overflow-hidden rounded-[var(--dialog-radius)] border border-[var(--dialog-border)] bg-[var(--dialog-bg)] shadow-[var(--shadow-float)]">
+                <div className="border-b border-[var(--ledger-rule)] p-3"><label className="sr-only" htmlFor="playground-model-search">Search models</label><input id="playground-model-search" autoFocus value={modelSearch} onChange={(e) => setModelSearch(e.target.value)} placeholder="Search models" className="h-10 w-full rounded-[var(--input-radius)] border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm outline-none focus:border-[var(--input-border-focus)]" /></div>
+                <div className="max-h-[60vh] overflow-y-auto p-2 custom-scrollbar">{visibleGroups.length === 0 ? <p className="p-4 text-sm text-[var(--color-text-muted)]">No models match this search.</p> : visibleGroups.map((group) => <section key={group.providerId} className="mb-2 border border-[var(--ledger-border)]"><header className="flex items-center justify-between bg-[var(--ledger-caption-bg)] px-3 py-2"><h3 className="text-sm font-semibold">{group.providerName}</h3><span className="data-text text-[10px] text-[var(--color-text-muted)]">{group.models.length} models</span></header>{group.models.map((model, index) => <button key={model.id} type="button" onClick={() => handleSelectModel(model.id)} className={`signal-row flex w-full items-center gap-3 px-3 py-2 text-left ${model.id === activeModelId ? "bg-[var(--signal-row-bg-selected)] before:bg-[var(--signal-row-rail-active)]" : ""}`}><span className="data-text w-6 text-[10px] text-[var(--color-text-subtle)]">{String(index + 1).padStart(2, "0")}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm">{model.name}</span><span className="data-text block truncate text-[10px] text-[var(--color-text-muted)]">{model.requestModel}</span></span>{model.id === activeModelId ? <Icon name="check_circle" className="text-[18px] text-[var(--color-primary)]" /> : null}</button>)}</section>)}</div>
+              </div> : null}
             </div>
-            <div className="max-h-[48vh] space-y-2 overflow-y-auto p-1 custom-scrollbar">
-              {sessionItems.length === 0 ? (
-                <div className="rounded-[16px] border border-dashed border-white/10 bg-white/5 p-4 text-sm text-white/55">
-                  No conversations yet.
-                </div>
-              ) : sessionItems.map((session) => {
-                const isActive = session.id === activeSessionId;
-                const latestMessage = [...(session.messages || [])].reverse().find((message) => message.role === "user") || session.messages?.[0];
-                return (
-                  <button
-                    key={session.id}
-                    type="button"
-                    onClick={() => handleSelectSession(session.id)}
-                    className={`w-full group rounded-[16px] border px-3 py-3 text-left transition ${isActive ? "border-blue-400/40 bg-blue-500/15" : "border-white/10 bg-white/5 hover:bg-white/8"}`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-white">{session.title}</p>
-                        <p className="mt-1 truncate text-xs text-white/50">{textValue(latestMessage?.content) || "Empty chat"}</p>
-                      </div>
-                      <span className="text-[10px] text-white/40 shrink-0">{formatRelativeTime(session.updatedAt)}</span>
-                      <button
-                        type="button"
-                        aria-label={`Delete ${session.title || "chat"}`}
-                        title="Delete chat"
-                        onClick={(event) => { event.stopPropagation(); removeSessionById(session.id); }}
-                        className="shrink-0 rounded-full p-1 text-white/40 opacity-0 transition group-hover:opacity-100 hover:bg-white/10 hover:text-white focus:opacity-100"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">delete</span>
-                      </button>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+            <div className="flex items-center gap-2">{activeThinkingLevels ? <select value={thinkingLevel} onChange={(e) => setThinkingLevel(e.target.value)} aria-label="Thinking level" className="h-11 rounded-[var(--input-radius)] border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm"><option value="auto">Thinking: Auto</option>{activeThinkingLevels.map((level) => <option key={level} value={level}>{level}</option>)}</select> : null}<button ref={historyTriggerRef} type="button" onClick={() => setHistoryOpen(true)} className="grid size-11 place-items-center rounded-[var(--radius-sm)] border border-[var(--button-border)] lg:hidden" aria-label="Open session history"><Icon name="history" /></button><Button variant="secondary" size="sm" icon="add" onClick={handleNewChat} className="hidden sm:flex lg:hidden">New</Button></div>
           </div>
-        ) : null}
 
+          {historyOpen ? <div className="fixed inset-0 z-[var(--z-drawer)] lg:hidden"><button type="button" aria-label="Close history" onClick={closeHistory} className="absolute inset-0 bg-[var(--color-overlay)]" /><div ref={historyMenuRef} role="dialog" aria-modal="true" aria-label="Session history" className="absolute inset-y-0 left-0 flex w-[min(88vw,320px)] flex-col border-r border-[var(--dialog-border)] bg-[var(--dialog-bg)] shadow-[var(--shadow-float)]"><div className="flex min-h-16 items-center justify-between border-b border-[var(--ledger-rule)] px-4"><h2 className="font-semibold">Sessions</h2><button type="button" aria-label="Close history" onClick={closeHistory} className="grid size-11 place-items-center"><Icon name="close" /></button></div><div className="p-3"><Button fullWidth icon="add" onClick={() => { handleNewChat(); closeHistory(); }}>New chat</Button></div><div className="flex-1 overflow-y-auto p-2">{sessionItems.map((session) => <div key={session.id} className="signal-row flex items-center gap-2 px-3 py-3"><button type="button" onClick={() => handleSelectSession(session.id)} className="min-w-0 flex-1 text-left"><span className="block truncate text-sm font-medium">{session.title}</span><span className="data-text text-[10px] text-[var(--color-text-muted)]">{formatRelativeTime(session.updatedAt)} · {session.modelName}</span></button><button type="button" onClick={(event) => beginRenameSession(session, event.currentTarget)} aria-label={`Rename ${session.title}`} className="grid size-11 place-items-center"><Icon name="edit" className="text-[18px]" /></button><button type="button" onClick={(event) => { deleteTriggerRef.current = event.currentTarget; setDeleteSessionId(session.id); }} aria-label={`Delete ${session.title}`} className="grid size-11 place-items-center text-[var(--color-danger)]"><Icon name="delete" className="text-[18px]" /></button></div>)}</div></div></div> : null}
         {loadError ? (
           <div className="mt-4 rounded-[18px] border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-rose-100">
             <div className="flex items-start gap-3">
-              <span className="material-symbols-outlined text-[20px]">error</span>
+              <Icon name="error" className="text-[20px]" />
               <p className="text-sm leading-6">{loadError}</p>
             </div>
           </div>
@@ -977,13 +971,13 @@ export default function BasicChatPageClient() {
             {currentMessages.length === 0 ? (
               <div className="flex min-h-[50vh] items-center justify-center px-4 text-center">
                 <div className="max-w-xl space-y-4">
-                  <div className="mx-auto flex size-16 items-center justify-center rounded-[20px] border border-white/10 bg-white/5 text-white/80">
-                    <span className="material-symbols-outlined text-[30px]">chat</span>
+                  <div className="mx-auto flex size-12 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-raised)] text-[var(--color-primary)]">
+                    <Icon name="chat" className="text-[30px]" />
                   </div>
                   <div className="space-y-2">
-                    <h2 className="text-2xl font-semibold text-white">Start a conversation</h2>
-                    <p className="text-sm leading-6 text-white/60">
-                      Simple chat interface to interact with any AI model from connected providers. Select a model and start chatting!
+                    <h2 className="text-2xl font-semibold text-[var(--color-text)]">Route a prompt</h2>
+                    <p className="text-sm leading-6 text-[var(--color-text-muted)]">
+                      Choose a connected model, attach supported input, then inspect response timing and token metrics.
                     </p>
                   </div>
                 </div>
@@ -999,7 +993,7 @@ export default function BasicChatPageClient() {
 
                 return (
                   <div key={message.id} className={`flex w-full ${isUser ? "justify-end" : "justify-start"} mb-6`}>
-                    <div className={`max-w-[min(88%,42rem)] ${isUser ? "rounded-3xl bg-[#2f2f2f] px-5 py-3.5 text-white" : "text-white/90"}`}>
+                    <div className={`max-w-[min(88%,42rem)] ${isUser ? "rounded-3xl bg-[var(--color-surface-strong)] px-5 py-3.5 text-[var(--color-text)]" : "text-[var(--color-text-muted)]"}`}>
                       <div className="mb-1 flex items-center justify-between gap-3">
                         <span className="text-xs font-semibold">{isUser ? "You" : activeModel?.name || "Assistant"}</span>
                       </div>
@@ -1008,12 +1002,12 @@ export default function BasicChatPageClient() {
                         <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3 mt-2">
                           {message.attachments.map((attachment) => (
                             attachment?.dataUrl ? (
-                            <a key={attachment.id} href={attachment.dataUrl} target="_blank" rel="noreferrer" className="overflow-hidden rounded-[18px] border border-white/10 bg-black/20">
+                            <a key={attachment.id} href={attachment.dataUrl} target="_blank" rel="noreferrer" className="overflow-hidden rounded-[18px] border border-[var(--color-border)] bg-[var(--color-code-bg)]">
                               <img src={attachment.dataUrl} alt={attachment.name} className="h-28 w-full object-cover" loading="lazy" decoding="async" />
                             </a>
                             ) : (
-                            <span key={attachment.id} title={attachment.name} className="flex items-center gap-2 overflow-hidden rounded-[18px] border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/70">
-                              <span className="material-symbols-outlined text-[16px]">description</span>
+                            <span key={attachment.id} title={attachment.name} className="flex items-center gap-2 overflow-hidden rounded-[18px] border border-[var(--color-border)] bg-[var(--color-code-bg)] px-3 py-2 text-xs text-[var(--color-text-muted)]">
+                              <Icon name="description" className="text-[16px]" />
                               <span className="truncate">{attachment.name}</span>
                             </span>
                             )
@@ -1026,7 +1020,7 @@ export default function BasicChatPageClient() {
                         {isAssistant && isStreaming && !streamingText ? <span className="inline-block animate-pulse">▋</span> : null}
                       </div>
                       {isAssistant && message.status === "done" && message.metrics ? (
-                        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-white/40">
+                        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--color-text-muted)]">
                           {message.metrics.ttftMs != null ? <span>TTFT {message.metrics.ttftMs}ms</span> : null}
                           <span>Total {message.metrics.totalMs}ms</span>
                           {message.metrics.usage ? (
@@ -1049,10 +1043,10 @@ export default function BasicChatPageClient() {
             {attachments.length > 0 ? (
               <div className="mx-auto mb-3 flex w-full max-w-3xl flex-wrap gap-2 px-4">
                 {attachments.map((attachment) => (
-                  <div key={attachment.id} className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2">
-                    <span className="text-xs text-white/80 max-w-[12rem] truncate">{attachment.name}</span>
-                    <button type="button" onClick={() => removeAttachment(attachment.id)} className="text-white/55 hover:text-white" aria-label="Remove attachment">
-                      <span className="material-symbols-outlined text-[18px]">close</span>
+                  <div key={attachment.id} className="flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-raised)] px-3 py-2">
+                    <span className="text-xs text-[var(--color-text-muted)] max-w-[12rem] truncate">{attachment.name}</span>
+                    <button type="button" onClick={() => removeAttachment(attachment.id)} className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]" aria-label="Remove attachment">
+                      <Icon name="close" className="text-[18px]" />
                     </button>
                   </div>
                 ))}
@@ -1060,46 +1054,46 @@ export default function BasicChatPageClient() {
             ) : null}
 
             <div className="mx-auto w-full max-w-3xl px-4 pb-2">
-              <div className="rounded-[26px] bg-[#2f2f2f] px-3 pt-3 pb-2 shadow-[0_0_15px_rgba(0,0,0,0.10)] ring-1 ring-white/5">
+              <div className="rounded-[26px] bg-[var(--color-surface-strong)] px-3 pt-3 pb-2 border border-[var(--color-border)]">
                 <textarea
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder="Message AI"
                   rows={1}
-                  className="w-full resize-none bg-transparent px-2 text-[15px] leading-6 text-white outline-none placeholder:text-white/40 custom-scrollbar max-h-[25vh] overflow-y-auto"
+                  className="w-full resize-none bg-transparent px-2 text-[15px] leading-6 text-[var(--color-text)] outline-none placeholder:text-[var(--color-text-muted)] custom-scrollbar max-h-[25vh] overflow-y-auto"
                 />
 
                 <div className="mt-2 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <div className="relative">
-                      <button type="button" onClick={() => setAttachMenuOpen((v) => !v)} disabled={!activeModel || loadingData} aria-label="Attach" className="p-2 text-white/50 hover:text-white transition rounded-full hover:bg-white/5">
-                        <span className="material-symbols-outlined text-[20px]">add</span>
+                      <button type="button" onClick={() => setAttachMenuOpen((v) => !v)} disabled={!activeModel || loadingData} aria-label="Attach" className="p-2 text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition rounded-full hover:bg-[var(--color-surface-raised)]">
+                        <Icon name="add" className="text-[20px]" />
                       </button>
                       {attachMenuOpen ? (
-                        <div className="absolute bottom-[calc(100%+8px)] left-0 z-30 w-44 overflow-hidden rounded-2xl border border-white/10 bg-[#262626] shadow-2xl shadow-black/50">
-                          <button type="button" onClick={() => { setAttachMenuOpen(false); fileInputRef.current?.click(); }} className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white/80 hover:bg-white/5">
-                            <span className="material-symbols-outlined text-[18px]">image</span> Images
+                        <div className="absolute bottom-[calc(100%+8px)] left-0 z-30 w-44 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-raised)] shadow-2xl shadow-black/50">
+                          <button type="button" onClick={() => { setAttachMenuOpen(false); fileInputRef.current?.click(); }} className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-surface-raised)]">
+                            <Icon name="image" className="text-[18px]" /> Images
                           </button>
-                          <button type="button" title="Plain text, Markdown, JSON, CSV, logs (max 256KB each)" onClick={() => { setAttachMenuOpen(false); textFileInputRef.current?.click(); }} className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white/80 hover:bg-white/5">
-                            <span className="material-symbols-outlined text-[18px]">description</span> Text files
+                          <button type="button" title="Plain text, Markdown, JSON, CSV, logs (max 256KB each)" onClick={() => { setAttachMenuOpen(false); textFileInputRef.current?.click(); }} className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-surface-raised)]">
+                            <Icon name="description" className="text-[18px]" /> Text files
                           </button>
                         </div>
                       ) : null}
                     </div>
                     <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleAttachFiles} />
                     <input ref={textFileInputRef} type="file" accept=".txt,.md,.json,.csv,.log,.yaml,.yml,.xml,text/plain" multiple className="hidden" onChange={handleAttachTextFiles} />
-                    <span className="text-xs font-medium text-white/30 truncate max-w-[120px]">{activeModel ? activeModel.name : "No model"}</span>
+                    <span className="text-xs font-medium text-[var(--color-text-muted)] truncate max-w-[120px]">{activeModel ? activeModel.name : "No model"}</span>
                   </div>
 
                   <div className="flex items-center gap-2">
                     {isSending ? (
-                      <button type="button" onClick={handleStop} className="p-2 text-white bg-white/10 hover:bg-white/20 transition rounded-full h-8 w-8 flex items-center justify-center">
-                        <span className="material-symbols-outlined text-[16px]">stop</span>
+                      <button type="button" onClick={handleStop} aria-label="Stop generating" className="grid h-11 w-11 place-items-center rounded-[var(--radius-sm)] bg-[var(--color-danger-wash)] text-[var(--color-danger)] hover:bg-white/20 transition rounded-full ">
+                        <Icon name="stop" className="text-[16px]" />
                       </button>
                     ) : null}
-                    <button onClick={sendMessage} disabled={!canSend} className={`h-8 w-8 rounded-full flex items-center justify-center transition ${canSend ? 'bg-white text-black hover:opacity-90' : 'bg-white/10 text-white/30 cursor-not-allowed'}`}>
-                      <span className="material-symbols-outlined text-[16px]">arrow_upward</span>
+                    <button onClick={sendMessage} disabled={!canSend} className={`h-8 w-8 rounded-full flex items-center justify-center transition ${canSend ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)] hover:bg-[var(--color-primary-hover)]' : 'bg-[var(--color-surface-raised)] text-[var(--color-text-disabled)] cursor-not-allowed'}`}>
+                      <Icon name="arrow_upward" className="text-[16px]" />
                     </button>
                   </div>
                 </div>
@@ -1107,10 +1101,12 @@ export default function BasicChatPageClient() {
             </div>
           </div>
 
-          <p className="mx-auto mt-2 max-w-3xl px-4 pb-4 text-center text-[11px] text-white/30">
-            Model list is filtered from connected providers.
-          </p>
+          <p className="mx-auto mt-2 max-w-3xl px-4 pb-4 text-center text-[11px] text-[var(--color-text-subtle)]">Models are loaded from connected providers.</p>
         </div>
+
+        {renamingSessionId ? <div className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center p-4"><button type="button" aria-label="Cancel rename" className="absolute inset-0 bg-[var(--color-overlay)]" onClick={closeRename} /><form ref={renameDialogRef} role="dialog" aria-modal="true" aria-labelledby="rename-session-label" className="relative w-full max-w-sm rounded-[var(--dialog-radius)] border border-[var(--dialog-border)] bg-[var(--dialog-bg)] p-5 shadow-[var(--shadow-float)]" onSubmit={(event) => { event.preventDefault(); commitRenameSession(renamingSessionId); }}><label id="rename-session-label" htmlFor="rename-session" className="mb-2 block text-sm font-medium">Session name</label><input id="rename-session" autoFocus value={renameDraft} onChange={(e) => setRenameDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") closeRename(); }} className="h-11 w-full rounded-[var(--input-radius)] border border-[var(--input-border)] bg-[var(--input-bg)] px-3" /><div className="mt-4 flex justify-end gap-2"><Button type="button" variant="secondary" onClick={closeRename}>Cancel</Button><Button type="submit">Rename</Button></div></form></div> : null}
+        {deleteSessionId ? <div className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center p-4"><button type="button" aria-label="Cancel deletion" className="absolute inset-0 bg-[var(--color-overlay)]" onClick={closeDelete} /><div ref={deleteDialogRef} role="dialog" aria-modal="true" aria-labelledby="delete-chat-title" className="relative w-full max-w-sm rounded-[var(--dialog-radius)] border border-[var(--dialog-border)] bg-[var(--dialog-bg)] p-5 shadow-[var(--shadow-float)]"><h2 id="delete-chat-title" className="font-semibold">Delete this session?</h2><p className="mt-2 text-sm text-[var(--color-text-muted)]">Messages in this session will be removed from local history.</p><div className="mt-4 flex justify-end gap-2"><Button data-autofocus variant="secondary" onClick={closeDelete}>Cancel</Button><Button variant="danger" onClick={() => { removeSessionById(deleteSessionId); closeDelete(); }}>Delete</Button></div></div></div> : null}
+      </div>
       </div>
     </div>
   );

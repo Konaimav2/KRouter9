@@ -36,10 +36,10 @@ export default function Toggle({
         disabled={disabled}
         onClick={handleClick}
         className={cn(
-          "relative inline-flex shrink-0 cursor-pointer rounded-full",
+          "relative inline-flex shrink-0 cursor-pointer rounded-full border border-[var(--color-border-strong)]",
           "transition-colors duration-200 ease-in-out",
-          "focus:outline-none focus:ring-2 focus:ring-brand-500/30",
-          checked ? "bg-brand-500" : "bg-surface-3",
+          "focus:outline-none focus-visible:shadow-[var(--focus-ring)]",
+          checked ? "bg-[var(--color-primary)]" : "bg-[var(--color-surface-strong)]",
           sizes[size].track,
           disabled && "cursor-not-allowed"
         )}

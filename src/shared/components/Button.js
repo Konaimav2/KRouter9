@@ -1,56 +1,6 @@
 "use client";
-
+import Icon from "./Icon";
 import { cn } from "@/shared/utils/cn";
-
-const variants = {
-  primary: "bg-brand-500 hover:bg-brand-600 text-white shadow-sm disabled:bg-surface-3 disabled:text-text-muted",
-  secondary: "bg-surface-2 hover:bg-surface-3 text-text-main border border-border disabled:opacity-50",
-  outline: "border border-border text-text-main hover:bg-surface-2 hover:border-brand-500/40",
-  ghost: "text-text-muted hover:bg-surface-2 hover:text-text-main",
-  danger: "bg-red-500 hover:bg-red-600 text-white shadow-sm disabled:bg-surface-3 disabled:text-text-muted",
-  success: "bg-green-600 hover:bg-green-700 text-white shadow-sm disabled:bg-surface-3 disabled:text-text-muted",
-};
-
-const sizes = {
-  sm: "h-7 px-3 text-xs rounded-[8px]",
-  md: "h-9 px-4 text-sm rounded-[10px]",
-  lg: "h-11 px-6 text-sm rounded-[10px]",
-};
-
-export default function Button({
-  children,
-  variant = "primary",
-  size = "md",
-  icon,
-  iconRight,
-  disabled = false,
-  loading = false,
-  fullWidth = false,
-  className,
-  ...props
-}) {
-  return (
-    <button
-      className={cn(
-        "inline-flex items-center justify-center gap-2 font-semibold transition-all duration-150 ease-out cursor-pointer",
-        "active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100",
-        variants[variant],
-        sizes[size],
-        fullWidth && "w-full",
-        className
-      )}
-      disabled={disabled || loading}
-      {...props}
-    >
-      {loading ? (
-        <span className="material-symbols-outlined animate-spin text-[18px]">progress_activity</span>
-      ) : icon ? (
-        <span className="material-symbols-outlined text-[18px]">{icon}</span>
-      ) : null}
-      {children}
-      {iconRight && !loading && (
-        <span className="material-symbols-outlined text-[18px]">{iconRight}</span>
-      )}
-    </button>
-  );
-}
+const variants={primary:"bg-[var(--button-primary-bg)] text-[var(--button-primary-fg)] hover:bg-[var(--button-primary-bg-hover)] active:bg-[var(--button-primary-bg-active)]",secondary:"border border-[var(--button-border)] bg-[var(--button-secondary-bg)] text-[var(--button-secondary-fg)] hover:bg-[var(--button-secondary-bg-hover)]",outline:"border border-[var(--button-border)] bg-transparent text-[var(--color-text)] hover:bg-[var(--color-surface-hover)]",ghost:"text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)]",danger:"bg-[var(--color-danger)] text-white hover:brightness-90",success:"bg-[var(--color-success)] text-[var(--p-carbon-950)] hover:brightness-95"};
+const sizes={sm:"min-h-8 px-3 text-xs",md:"min-h-10 px-4 text-sm",lg:"min-h-12 px-5 text-sm"};
+export default function Button({children,variant="primary",size="md",icon,iconRight,disabled=false,loading=false,fullWidth=false,className,...props}){return <button className={cn("inline-flex items-center justify-center gap-[var(--button-gap)] rounded-[var(--button-radius)] font-semibold transition-colors duration-[var(--duration-fast)] disabled:cursor-not-allowed disabled:opacity-[.62]",variants[variant],sizes[size],fullWidth&&"w-full",className)} disabled={disabled||loading} {...props}>{loading?<><Icon name="progress_activity" className="animate-spin text-[18px]" /><span className="sr-only">Loading</span></>:icon?<Icon name={icon} />:null}{children}{iconRight&&!loading?<Icon name={iconRight} />:null}</button>}
