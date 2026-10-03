@@ -3,6 +3,7 @@ import { getProviderConnections } from "@/lib/localDb";
 import { backfillCodexEmails } from "@/lib/oauth/providers";
 import { USAGE_APIKEY_PROVIDERS, USAGE_SUPPORTED_PROVIDERS } from "@/shared/constants/providers";
 import { maskProxyUrl, hasProxyAuth } from "@/lib/proxyMask.js";
+import { isQuotaSort, sortConnectionsByQuota } from "./quotaSort.js";
 
 const SAFE_FIELDS = [
   "id", "provider", "authType", "name", "email", "displayName",
@@ -105,7 +106,11 @@ export async function GET(request) {
       return true;
     });
 
-    const sortedConnections = sortConnections(accountFilteredConnections, sort);
+    // F12-API: quota sorts run against the COMPLETE filtered set (fetch quota
+    // for every eligible row), THEN paginate. Non-quota sorts are unchanged.
+    const sortedConnections = isQuotaSort(sort)
+      ? await sortConnectionsByQuota(accountFilteredConnections, sort)
+      : sortConnections(accountFilteredConnections, sort);
     const total = sortedConnections.length;
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
     const currentPage = Math.min(page, totalPages);
