@@ -19,7 +19,7 @@ export default function SegmentedControl({
   return (
     <div
       className={cn(
-        "inline-flex items-center overflow-x-auto rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-strong)] p-0.5",
+        "inline-flex items-center overflow-x-auto rounded-[var(--radius-xs)] border border-[var(--color-border)] bg-[var(--color-surface-strong)]",
         className
       )}
     >
@@ -30,7 +30,7 @@ export default function SegmentedControl({
           aria-pressed={value === option.value}
           onClick={() => onChange(option.value)}
           className={cn(
-            "shrink-0 rounded-[var(--radius-xs)] px-4 font-medium transition-colors",
+            "inline-flex shrink-0 items-center justify-center border-l border-[var(--color-border)] px-4 font-medium transition-colors first:border-l-0",
             sizes[size],
             value === option.value
               ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]"
