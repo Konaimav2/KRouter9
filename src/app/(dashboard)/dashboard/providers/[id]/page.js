@@ -75,6 +75,26 @@ export default function ProviderDetailPage() {
   const [suggestedModels, setSuggestedModels] = useState([]);
   const [liveModels, setLiveModels] = useState([]);
   const [kiloFreeModels, setKiloFreeModels] = useState([]);
+  // F04: drop combo-shadowed curated rows so the provider page renders the
+  // same phantom-free source /v1/models and the picker use. Load combos
+  // alongside custom models + aliases; refresh only when that state changes
+  // (fail-open: fetch failure leaves rows unfiltered, never blank).
+  const [comboNames, setComboNames] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/combos", { cache: "no-store" })
+      .then(async (res) => ({ ok: res.ok, data: await res.json().catch(() => ({})) }))
+      .then(({ ok, data }) => {
+        if (cancelled) return;
+        if (ok && Array.isArray(data.combos)) {
+          setComboNames(new Set(data.combos.map((c) => c?.name).filter(Boolean)));
+        } else if (!cancelled) {
+          setComboNames(null);
+        }
+      })
+      .catch(() => { if (!cancelled) setComboNames(null); });
+    return () => { cancelled = true; };
+  }, []);
   const [disabledModelIds, setDisabledModelIds] = useState([]);
   const [confirmState, setConfirmState] = useState(null);
   const [showAgRiskModal, setShowAgRiskModal] = useState(false);
@@ -1154,6 +1174,7 @@ export default function ProviderDetailPage() {
           onDeleteCustomModel={(modelId) => handleDeleteCustomModel(modelId, "llm", providerStorageAlias)}
           connections={connections}
           isAnthropic={isAnthropicCompatible}
+          comboNames={comboNames}
         />
       );
     }
@@ -1172,6 +1193,7 @@ export default function ProviderDetailPage() {
       providerAlias: providerStorageAlias,
       builtInModels: models,
       type: "llm",
+      comboNames,
     });
 
     return (
