@@ -1,0 +1,94 @@
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  getProxyPools: vi.fn(),
+  getProviderConnections: vi.fn(),
+}));
+
+vi.mock("next/server", () => ({
+  NextResponse: {
+    json(body, init = {}) {
+      return new Response(JSON.stringify(body), {
+        status: init.status || 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    },
+  },
+}));
+
+vi.mock("@/models", () => ({
+  createProxyPool: vi.fn(),
+  getProxyPools: mocks.getProxyPools,
+  getProviderConnections: mocks.getProviderConnections,
+}));
+
+const { GET } = await import("../../src/app/api/proxy-pools/route.js");
+
+const pools = [
+  {
+    id: "pool-http",
+    name: "private egress",
+    proxyUrl: "http://user:pass@192.25.205.17:48173",
+    lastTestedAt: "2026-10-03T10:00:00.000Z",
+  },
+  {
+    id: "pool-relay",
+    name: "relay",
+    type: "vercel",
+    proxyUrl: "https://vercel-relay-sensitive-id.vercel.app",
+    lastTestedAt: "2026-10-03T11:00:00.000Z",
+  },
+];
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.getProxyPools.mockResolvedValue(pools);
+  mocks.getProviderConnections.mockResolvedValue(
+    Array.from({ length: 16 }, (_, index) => ({
+      id: `connection-${index}`,
+      providerSpecificData: { proxyPoolId: "pool-relay" },
+    }))
+  );
+});
+
+describe("proxy-pool list masking", () => {
+  it("never sends a proxy host, port, or relay hostname in list payloads", async () => {
+    const response = await GET(new Request("http://localhost/api/proxy-pools"));
+    const body = await response.json();
+    const serialized = JSON.stringify(body);
+
+    expect(serialized).not.toContain("192.25.205.17");
+    expect(serialized).not.toContain("48173");
+    expect(serialized).not.toContain("vercel-relay-sensitive-id.vercel.app");
+    expect(body.proxyPools.map((pool) => pool.proxyUrlMasked)).toEqual(["***", "***"]);
+  });
+
+  it("preserves non-sensitive bound counts and last-tested timestamps", async () => {
+    const response = await GET(
+      new Request("http://localhost/api/proxy-pools?includeUsage=true")
+    );
+    const body = await response.json();
+
+    expect(body.proxyPools[0]).toMatchObject({
+      boundConnectionCount: 0,
+      lastTestedAt: "2026-10-03T10:00:00.000Z",
+    });
+    expect(body.proxyPools[1]).toMatchObject({
+      boundConnectionCount: 16,
+      lastTestedAt: "2026-10-03T11:00:00.000Z",
+    });
+  });
+
+  it("renders the censored value through the guarded single-record reveal flow", () => {
+    const pagePath = fileURLToPath(
+      new URL("../../src/app/(dashboard)/dashboard/proxy-pools/page.js", import.meta.url)
+    );
+    const source = fs.readFileSync(pagePath, "utf8");
+
+    expect(source).toContain("MaskedProxyValue");
+    expect(source).toMatch(/revealUrl=\{`\/api\/proxy-pools\/\$\{pool\.id\}\/reveal`\}/);
+    expect(source).not.toMatch(/>\{pool\.proxyUrlMasked\s*\|\|\s*""\}/);
+  });
+});
