@@ -8,6 +8,7 @@ import Drawer from "@/shared/components/Drawer";
 import Pagination from "@/shared/components/Pagination";
 import { cn } from "@/shared/utils/cn";
 import { AI_PROVIDERS, getProviderByAlias } from "@/shared/constants/providers";
+import { deriveListFields } from "./usageMeta.js";
 
 let providerNameCache = null;
 let providerNodesCache = null;
@@ -279,7 +280,7 @@ export default function RequestDetailsTab() {
 
       <Card padding="none" className="min-w-0 max-w-full overflow-hidden">
         <div className="max-w-full overflow-x-auto overscroll-x-contain" role="region" aria-label="Request details table; scroll horizontally for additional columns" tabIndex={0}>
-          <table className="w-full min-w-[960px]">
+          <table className="w-full min-w-[1380px]">
             <thead>
               <tr className="border-b border-black/5 dark:border-white/5">
                 <th className="text-left p-4 text-sm font-semibold text-text-main">Timestamp</th>
@@ -287,6 +288,9 @@ export default function RequestDetailsTab() {
                 <th className="text-left p-4 text-sm font-semibold text-text-main">Provider</th>
                 <th className="text-left p-4 text-sm font-semibold text-text-main">IP</th>
                 <th className="text-left p-4 text-sm font-semibold text-text-main">Status</th>
+                <th className="text-left p-4 text-sm font-semibold text-text-main">Status code</th>
+                <th className="text-left p-4 text-sm font-semibold text-text-main">API key</th>
+                <th className="text-left p-4 text-sm font-semibold text-text-main">Error excerpt</th>
                 <th className="text-right p-4 text-sm font-semibold text-text-main">Input Tokens</th>
                 <th className="text-right p-4 text-sm font-semibold text-text-main">Cached</th>
                 <th className="text-right p-4 text-sm font-semibold text-text-main">Cache Creation</th>
@@ -300,17 +304,19 @@ export default function RequestDetailsTab() {
               {loading ? (
                 Array.from({ length: 6 }, (_, index) => (
                   <tr key={index} aria-hidden="true">
-                    <td colSpan="12" className="h-12 animate-pulse border-b border-black/5 bg-[var(--color-surface-strong)] dark:border-white/5" />
+                    <td colSpan="15" className="h-12 animate-pulse border-b border-black/5 bg-[var(--color-surface-strong)] dark:border-white/5" />
                   </tr>
                 ))
               ) : details.length === 0 ? (
                 <tr>
-                  <td colSpan="12" className="p-8 text-center text-text-muted">
+                  <td colSpan="15" className="p-8 text-center text-text-muted">
                     No request details found
                   </td>
                 </tr>
               ) : (
-                details.map((detail, index) => (
+                details.map((detail, index) => {
+                  const listFields = deriveListFields(detail);
+                  return (
                   <tr
                     key={`${detail.id}-${index}`}
                     className="border-b border-black/5 dark:border-white/5 last:border-b-0 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
@@ -368,7 +374,8 @@ export default function RequestDetailsTab() {
                       </Button>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -421,6 +428,21 @@ export default function RequestDetailsTab() {
                   {selectedDetail.status}{selectedDetail.status !== "success" && (selectedDetail.statusCode ?? selectedDetail.httpStatus ?? selectedDetail.errorCode) ? ` · ${selectedDetail.statusCode ?? selectedDetail.httpStatus ?? selectedDetail.errorCode}` : ""}
                 </span>
               </div>
+              <div>
+                <span className="text-text-muted">Status code:</span>{" "}
+                <span className="text-text-main font-mono">{deriveListFields(selectedDetail).statusCode ?? "—"}</span>
+              </div>
+              <div>
+                <span className="text-text-muted">API key:</span>{" "}
+                <span className="text-text-main">{deriveListFields(selectedDetail).keyName || "—"}</span>
+                {deriveListFields(selectedDetail).apiKeyMasked && <span className="ml-2 font-mono text-xs text-text-muted">{deriveListFields(selectedDetail).apiKeyMasked}</span>}
+              </div>
+              {deriveListFields(selectedDetail).errorExcerpt && (
+                <div className="sm:col-span-2">
+                  <span className="text-text-muted">Error excerpt:</span>{" "}
+                  <span className="break-words text-text-main">{deriveListFields(selectedDetail).errorExcerpt}</span>
+                </div>
+              )}
               <div>
                 <span className="text-text-muted">Latency:</span>{" "}
                 <span className="text-text-main font-mono">

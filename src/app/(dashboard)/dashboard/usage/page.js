@@ -6,6 +6,7 @@ import { SegmentedControl } from "@/shared/components";
 import UsageDashboard from "./components/UsageDashboard";
 import UsageLogs from "./components/UsageLogs";
 import RequestDetailsTab from "./components/RequestDetailsTab";
+import PerKeyUsageSection from "./components/PerKeyUsageSection";
 
 const PERIODS = [
   { value: "today", label: "Today" },
@@ -45,13 +46,23 @@ export default function UsagePage() {
 function UsageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [period, setPeriod] = useState("today");
+  const periodFromUrl = searchParams.get("period");
+  const [period, setPeriodState] = useState(
+    PERIODS.some(({ value }) => value === periodFromUrl) ? periodFromUrl : "today"
+  );
   const [mode, setMode] = useState("costs");
 
   const tabFromUrl = searchParams.get("tab");
   const activeTab = tabFromUrl && ["overview", "logs", "details"].includes(tabFromUrl)
     ? tabFromUrl
     : "overview";
+
+  const handlePeriodChange = (value) => {
+    setPeriodState(value);
+    const params = new URLSearchParams(searchParams);
+    params.set("period", value);
+    router.push(`/dashboard/usage?${params.toString()}`, { scroll: false });
+  };
 
   const handleTabChange = (value) => {
     if (value === activeTab) return;
@@ -73,17 +84,17 @@ function UsageContent() {
           onChange={handleTabChange}
           className="w-full sm:w-auto"
         />
-        {activeTab === "overview" && (
+        {["overview", "details"].includes(activeTab) && (
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-            <SegmentedControl options={VALUE_MODES} value={mode} onChange={setMode} size="sm" className="w-full sm:w-auto" />
-            <SegmentedControl options={PERIODS} value={period} onChange={setPeriod} size="sm" className="w-full sm:w-auto" />
+            {activeTab === "overview" && <SegmentedControl options={VALUE_MODES} value={mode} onChange={setMode} size="sm" className="w-full sm:w-auto" />}
+            <SegmentedControl options={PERIODS} value={period} onChange={handlePeriodChange} size="sm" className="w-full sm:w-auto" />
           </div>
         )}
       </div>
 
       {activeTab === "overview" && <UsageDashboard period={period} mode={mode} />}
       {activeTab === "logs" && <UsageLogs />}
-      {activeTab === "details" && <RequestDetailsTab />}
+      {activeTab === "details" && <><PerKeyUsageSection period={period} /><RequestDetailsTab /></>}
     </div>
   );
 }

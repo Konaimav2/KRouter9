@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { getRequestDetails } from "@/lib/usageDb";
+import { getApiKeys } from "@/lib/db/repos/apiKeysRepo.js";
+import { buildKeyMap, deriveListFields, LOCAL_KEY_LABEL } from "@/app/(dashboard)/dashboard/usage/components/usageMeta.js";
 
 /**
  * GET /api/usage/request-details
@@ -48,18 +50,57 @@ export async function GET(request) {
     
     const result = await getRequestDetails(filter);
 
+    // Server-side key identity: raw keys NEVER leave this route. getApiKeys
+    // returns rows with raw key material; the map is used only to resolve a
+    // display name, and only masked values are attached to each row.
+    let keyMap = {};
+    try {
+      keyMap = buildKeyMap(await getApiKeys());
+    } catch {
+      keyMap = {};
+    }
+
     // Redact conversation payloads: the stored details include full request
     // bodies (user prompts, tool calls) and provider responses. Returning them
     // wholesale lets any dashboard-authenticated user (or, if requireLogin is
     // disabled, anyone) read every user's conversation history. Keep the
     // metadata (model, tokens, latency, status) but drop message content.
+    // F09: attach derived list columns — numeric statusCode, masked apiKey
+    // identity (name or masked ref, NEVER the raw key), and an error excerpt —
+    // fail-open so old rows without the fields still list.
     const redactedDetails = (result.details || []).map((d) => {
       const redacted = { ...d };
       for (const key of ["request", "providerRequest", "providerResponse", "response"]) {
         if (redacted[key] !== undefined) {
-          redacted[key] = { redacted: true };
+          if (key === "response" && redacted[key] && typeof redacted[key] === "object") {
+            const resp = redacted[key];
+            redacted[key] = {
+              redacted: true,
+              ...(typeof resp.error === "string" ? { error: resp.error.slice(0, 160) } : {}),
+              ...(Number.isFinite(Number(resp.status)) ? { status: Number(resp.status) } : {}),
+            };
+          } else {
+            redacted[key] = { redacted: true };
+          }
         }
       }
+      const derived = deriveListFields(
+        {
+          statusCode: d.statusCode, httpStatus: d.httpStatus, errorCode: d.errorCode,
+          response: d.response, error: d.error, message: d.message,
+          apiKey: typeof d.apiKey === "string" ? d.apiKey : undefined,
+        },
+        keyMap
+      );
+      // Raw key material must never leave this route, even if a stored row
+      // ever carries it (e.g. future engine threading). Only masked values.
+      delete redacted.apiKey;
+      redacted.statusCode = derived.statusCode;
+      redacted.errorExcerpt = derived.errorExcerpt;
+      redacted.apiKeyMasked = derived.apiKeyMasked;
+      // Attach both the display name and the local-key label check so clients
+      // can render consistently without touching raw key material.
+      redacted.keyName = derived.keyName || LOCAL_KEY_LABEL;
       return redacted;
     });
 
