@@ -68,7 +68,7 @@ export default function QuotaPage() {
           </p>
         </div>
         <Suspense fallback={<CardSkeleton />}>
-          <ProviderLimits />
+          <ProviderLimits sort="expiring" />
         </Suspense>
       </section>
     </main>
