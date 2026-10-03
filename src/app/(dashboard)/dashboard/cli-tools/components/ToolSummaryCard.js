@@ -2,39 +2,96 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { Card } from "@/shared/components";
+import Icon from "@/shared/components/Icon";
 
-// Derive simple connected/configured/not-installed status from API payload
 function getStatus(status, tool) {
-  if (tool?.configType === "guide") return { label: "Guide", cls: "bg-blue-500/10 text-blue-600 dark:text-blue-400" };
-  if (!status) return { label: "Unknown", cls: "bg-gray-500/10 text-gray-500" };
-  if (!status.installed) return { label: "Not installed", cls: "bg-gray-500/10 text-gray-500" };
-  if (status.has9Router) return { label: "Connected", cls: "bg-green-500/10 text-green-600 dark:text-green-400" };
-  return { label: "Not configured", cls: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400" };
+  if (tool?.configType === "guide")
+    return {
+      label: "Installation guide",
+      glyph: "◇",
+      tone: "text-[var(--color-info)]",
+    };
+  if (!status)
+    return {
+      label: "Unknown",
+      glyph: "○",
+      tone: "text-[var(--color-text-muted)]",
+    };
+  if (!status.installed)
+    return {
+      label: "Not installed",
+      glyph: "◇",
+      tone: "text-[var(--color-warning)]",
+    };
+  if (status.has9Router)
+    return {
+      label: "Connected",
+      glyph: "●",
+      tone: "text-[var(--color-success)]",
+    };
+  return {
+    label: "Not configured",
+    glyph: "◇",
+    tone: "text-[var(--color-warning)]",
+  };
 }
 
-export default function ToolSummaryCard({ toolId, tool, status }) {
-  const s = getStatus(status, tool);
+export default function ToolSummaryCard({ toolId, tool, status, rowNumber }) {
+  const state = getStatus(status, tool);
+  const endpoint =
+    status?.baseUrl ||
+    status?.endpoint ||
+    status?.model ||
+    tool.settingsFile ||
+    tool.description;
+
   return (
-    <Link href={`/dashboard/cli-tools/${toolId}`} className="block">
-      <Card padding="sm" className="h-full overflow-hidden hover:border-primary/50 transition-colors cursor-pointer">
-        <div className="flex h-full flex-col gap-2">
-          <div className="flex items-center gap-3">
-            <div className="size-8 flex items-center justify-center shrink-0">
-              {tool.image ? (
-                <Image src={tool.image} alt={tool.name} width={32} height={32} className="size-8 object-contain rounded-lg" sizes="32px" onError={(e) => { e.target.style.display = "none"; }} loading="lazy" decoding="async" />
-              ) : tool.icon ? (
-                <span className="material-symbols-outlined text-[28px]" style={{ color: tool.color }}>{tool.icon}</span>
-              ) : null}
-            </div>
-            <div className="min-w-0 flex-1">
-              <h3 className="font-medium text-sm truncate">{tool.name}</h3>
-              <span className={`inline-block mt-1 px-1.5 py-0.5 text-[10px] font-medium rounded-full ${s.cls}`}>{s.label}</span>
-            </div>
-            <span className="material-symbols-outlined text-text-muted text-[18px] shrink-0">chevron_right</span>
-          </div>
+    <div className="signal-row grid gap-3 px-4 py-3 sm:grid-cols-[2.5rem_minmax(12rem,1fr)_minmax(12rem,1fr)_auto] sm:items-center">
+      <span className="ledger-number">
+        {String(rowNumber).padStart(2, "0")}
+      </span>
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="grid size-8 shrink-0 place-items-center">
+          {tool.image ? (
+            <Image
+              src={tool.image}
+              alt=""
+              width={32}
+              height={32}
+              className="size-8 object-contain"
+              sizes="32px"
+              onError={(event) => {
+                event.currentTarget.style.display = "none";
+              }}
+              loading="lazy"
+              decoding="async"
+            />
+          ) : (
+            <Icon name={tool.icon || "terminal"} />
+          )}
+        </span>
+        <div className="min-w-0">
+          <h3 className="text-sm font-medium">{tool.name}</h3>
+          <p className="text-xs text-[var(--color-text-muted)]">
+            {tool.description}
+          </p>
         </div>
-      </Card>
-    </Link>
+      </div>
+      <div className="min-w-0">
+        <p className={`flex items-center gap-2 text-sm ${state.tone}`}>
+          <span aria-hidden="true">{state.glyph}</span>
+          <span>{state.label}</span>
+        </p>
+        <p className="data-text mt-1 truncate text-xs text-[var(--color-text-muted)]">
+          {endpoint}
+        </p>
+      </div>
+      <Link
+        href={`/dashboard/cli-tools/${toolId}`}
+        className="inline-flex min-h-11 items-center justify-center gap-2 border border-[var(--color-border)] px-3 text-sm hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
+      >
+        Configure <Icon name="chevron_right" size={16} />
+      </Link>
+    </div>
   );
 }

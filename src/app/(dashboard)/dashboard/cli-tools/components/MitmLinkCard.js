@@ -1,42 +1,52 @@
 "use client";
 
 import Link from "next/link";
-import { Card } from "@/shared/components";
 import Image from "next/image";
+import Icon from "@/shared/components/Icon";
 
-/**
- * Clickable card for MITM tools — navigates to /dashboard/mitm on click.
- */
-export default function MitmLinkCard({ tool }) {
+export default function MitmLinkCard({ tool, rowNumber }) {
   return (
-    <Link href="/dashboard/mitm" className="block">
-      <Card padding="sm" className="overflow-hidden hover:border-primary/50 transition-colors cursor-pointer">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="size-8 flex items-center justify-center shrink-0">
-              <Image
-                src={tool.image}
-                alt={tool.name}
-                width={32}
-                height={32}
-                className="size-8 object-contain rounded-lg"
-                sizes="32px"
-                onError={(e) => { e.target.style.display = "none"; }}
-              loading="lazy"
-              decoding="async"
-              />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h3 className="font-medium text-sm">{tool.name}</h3>
-                <span className="px-1.5 py-0.5 text-[10px] font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400 rounded-full">MITM</span>
-              </div>
-              <p className="text-xs text-text-muted truncate">{tool.description}</p>
-            </div>
-          </div>
-          <span className="material-symbols-outlined text-text-muted text-[20px]">chevron_right</span>
+    <div className="signal-row grid gap-3 px-4 py-3 sm:grid-cols-[2.5rem_minmax(12rem,1fr)_minmax(12rem,1fr)_auto] sm:items-center">
+      <span className="ledger-number">
+        {String(rowNumber).padStart(2, "0")}
+      </span>
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="grid size-8 shrink-0 place-items-center">
+          <Image
+            src={tool.image}
+            alt=""
+            width={32}
+            height={32}
+            className="size-8 object-contain"
+            sizes="32px"
+            onError={(event) => {
+              event.currentTarget.style.display = "none";
+            }}
+            loading="lazy"
+            decoding="async"
+          />
+        </span>
+        <div className="min-w-0">
+          <h3 className="text-sm font-medium">{tool.name}</h3>
+          <p className="text-xs text-[var(--color-text-muted)]">
+            {tool.description}
+          </p>
         </div>
-      </Card>
-    </Link>
+      </div>
+      <div className="min-w-0">
+        <span className="inline-flex border border-[var(--badge-border)] bg-[var(--badge-bg)] px-2 py-1 text-[10px] font-medium text-[var(--badge-fg)]">
+          MITM
+        </span>
+        <p className="data-text mt-1 truncate text-xs text-[var(--color-text-muted)]">
+          {tool.mitmDomain}
+        </p>
+      </div>
+      <Link
+        href="/dashboard/mitm"
+        className="inline-flex min-h-11 items-center justify-center gap-2 border border-[var(--color-border)] px-3 text-sm hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
+      >
+        Open <Icon name="chevron_right" size={16} />
+      </Link>
+    </div>
   );
 }
