@@ -24,7 +24,7 @@ import { useNotificationStore } from "@/store/notificationStore";
 import { useHeaderSearchStore } from "@/store/headerSearchStore";
 import ModelAvailabilityBadge from "./components/ModelAvailabilityBadge";
 import AddCompatibleModal from "./components/AddCompatibleModal";
-import { STATUS_FILTER_OPTIONS, matchesStatusFilter } from "./utils";
+import { buildCustomProviderDisplaySlugs, STATUS_FILTER_OPTIONS, matchesStatusFilter } from "./utils";
 import { normalizeErrorClass, errorClassLabel } from "@/shared/utils/errorClass";
 
 function getConnectionErrorTag(connection) {
@@ -283,6 +283,8 @@ export default function ProvidersPage() {
     }
   };
 
+  const customProviderSlugs = buildCustomProviderDisplaySlugs(providerNodes);
+
   const compatibleProviders = providerNodes
     .filter((node) => node.type === "openai-compatible")
     .map((node) => ({
@@ -291,6 +293,7 @@ export default function ProvidersPage() {
       color: "#10A37F",
       textIcon: "OC",
       apiType: node.apiType,
+      displaySlug: customProviderSlugs.get(node.id),
     }))
     .filter(
       (p) => matchSearch(p.name) && matchStatus(getProviderStats(p.id, "apikey")),
@@ -303,6 +306,7 @@ export default function ProvidersPage() {
       name: node.name || "Anthropic Compatible",
       color: "#D97757",
       textIcon: "AC",
+      displaySlug: customProviderSlugs.get(node.id),
     }))
     .filter(
       (p) => matchSearch(p.name) && matchStatus(getProviderStats(p.id, "apikey")),
@@ -455,7 +459,12 @@ export default function ProvidersPage() {
         </div>
       </LedgerBand>
 
-      <LedgerBand number="02" title="Provider registry" summary="Connected-first matrix grouped by authentication" action={<Button size="sm" variant="secondary" icon="play_arrow" loading={testingMode === "all"} onClick={() => handleBatchTest("all")}>Test all</Button>}>
+      <LedgerBand number="02" title="Custom endpoints" summary="OpenAI- and Anthropic-compatible endpoints">
+        <div className="flex flex-col gap-2 border-b border-[var(--ledger-rule)] p-3 sm:flex-row sm:justify-end"><Button size="sm" icon="add" onClick={() => setShowAddCompatibleModal(true)}>OpenAI compatible</Button><Button size="sm" variant="secondary" icon="add" onClick={() => setShowAddAnthropicCompatibleModal(true)}>Anthropic compatible</Button></div>
+        {compatibleProviders.length === 0 && anthropicCompatibleProviders.length === 0 ? <div className="p-8 text-center"><Icon name="extension" size={26} className="mx-auto text-[var(--color-text-muted)]" /><p className="mt-3 text-sm text-[var(--color-text-muted)]">No custom endpoints configured.</p></div> : <div className="divide-y divide-[var(--ledger-rule)]">{[...compatibleProviders, ...anthropicCompatibleProviders].map((provider, index) => <ApiKeyProviderCard key={provider.id} position={index + 1} providerId={provider.id} provider={provider} stats={getProviderStats(provider.id, "apikey")} authType="compatible" onToggle={(active) => handleToggleProvider(provider.id, "apikey", active)} />)}</div>}
+      </LedgerBand>
+
+      <LedgerBand number="03" title="Provider registry" summary="Connected-first matrix grouped by authentication" action={<Button size="sm" variant="secondary" icon="play_arrow" loading={testingMode === "all"} onClick={() => handleBatchTest("all")}>Test all</Button>}>
         <div className="grid gap-3 border-b border-[var(--ledger-rule)] bg-[var(--ledger-caption-bg)] p-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto]">
           <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="min-h-10 rounded-[var(--radius-sm)] border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm" aria-label="Filter providers by connection status">{STATUS_FILTER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
           <select value={errorClassFilter} onChange={(event) => setErrorClassFilter(event.target.value)} className="min-h-10 rounded-[var(--radius-sm)] border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm" aria-label="Filter providers by normalized error class"><option value="all">All error classes</option><option value="auth-invalid">Auth invalid</option><option value="refresh-invalid">Refresh invalid</option><option value="ratelimited">Rate limited</option><option value="network">Network</option></select>
@@ -479,10 +488,6 @@ export default function ProvidersPage() {
         )}
       </LedgerBand>
 
-      <LedgerBand number="03" title="Custom endpoints" summary="OpenAI- and Anthropic-compatible endpoints">
-        <div className="flex flex-col gap-2 border-b border-[var(--ledger-rule)] p-3 sm:flex-row sm:justify-end"><Button size="sm" icon="add" onClick={() => setShowAddCompatibleModal(true)}>OpenAI compatible</Button><Button size="sm" variant="secondary" icon="add" onClick={() => setShowAddAnthropicCompatibleModal(true)}>Anthropic compatible</Button></div>
-        {compatibleProviders.length === 0 && anthropicCompatibleProviders.length === 0 ? <div className="p-8 text-center"><Icon name="extension" size={26} className="mx-auto text-[var(--color-text-muted)]" /><p className="mt-3 text-sm text-[var(--color-text-muted)]">No custom endpoints configured.</p></div> : <div className="divide-y divide-[var(--ledger-rule)]">{[...compatibleProviders, ...anthropicCompatibleProviders].map((provider, index) => <ApiKeyProviderCard key={provider.id} position={index + 1} providerId={provider.id} provider={provider} stats={getProviderStats(provider.id, "apikey")} authType="compatible" onToggle={(active) => handleToggleProvider(provider.id, "apikey", active)} />)}</div>}
-      </LedgerBand>
 
       <AddCompatibleModal variant="openai" isOpen={showAddCompatibleModal} onClose={() => setShowAddCompatibleModal(false)} onCreated={(node) => { setProviderNodes((prev) => [...prev, node]); setShowAddCompatibleModal(false); }} />
       <AddCompatibleModal variant="anthropic" isOpen={showAddAnthropicCompatibleModal} onClose={() => setShowAddAnthropicCompatibleModal(false)} onCreated={(node) => { setProviderNodes((prev) => [...prev, node]); setShowAddAnthropicCompatibleModal(false); }} />
@@ -534,7 +539,7 @@ function ProviderSignalRow({ position, providerId, provider, stats, authType, on
       <span className="border-r border-[var(--signal-row-rail)] pr-3 text-center font-mono text-xs tabular-nums text-[var(--color-primary)]">{String(position).padStart(2, "0")}</span>
       <Link href={`/dashboard/providers/${providerId}`} className="flex min-w-0 items-center gap-3 rounded-[var(--radius-xs)] focus-visible:shadow-[var(--focus-ring)]">
         <ProviderIcon src={iconPath} alt={provider.name} size={30} className="size-8 shrink-0 rounded-[var(--radius-sm)] object-contain" fallbackText={provider.textIcon || provider.id.slice(0, 2).toUpperCase()} fallbackColor={provider.color} />
-        <span className="min-w-0"><span className="block truncate font-semibold">{provider.name}</span><span className="block text-xs text-[var(--color-text-muted)]">{authLabel}</span></span>
+        <span className="min-w-0"><span className="block truncate font-semibold">{provider.name}</span>{provider.displaySlug ? <span className="block truncate font-mono text-xs text-[var(--color-text-muted)]">{provider.displaySlug}</span> : <span className="block text-xs text-[var(--color-text-muted)]">{authLabel}</span>}</span>
       </Link>
       <Link href={`/dashboard/providers/${providerId}`} className="col-span-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 pl-[3.25rem] text-xs sm:col-span-1 sm:pl-0">
         <span className="inline-flex items-center gap-2"><StatusGlyph type={state} /><span>{stateLabel}</span></span>
@@ -559,7 +564,7 @@ function ProviderSignalRow({ position, providerId, provider, stats, authType, on
 ProviderSignalRow.propTypes = {
   position: PropTypes.number.isRequired,
   providerId: PropTypes.string.isRequired,
-  provider: PropTypes.shape({ id: PropTypes.string.isRequired, name: PropTypes.string.isRequired, color: PropTypes.string, textIcon: PropTypes.string, apiType: PropTypes.string, noAuth: PropTypes.bool }).isRequired,
+  provider: PropTypes.shape({ id: PropTypes.string.isRequired, name: PropTypes.string.isRequired, color: PropTypes.string, textIcon: PropTypes.string, apiType: PropTypes.string, displaySlug: PropTypes.string, noAuth: PropTypes.bool }).isRequired,
   stats: PropTypes.shape({ connected: PropTypes.number, error: PropTypes.number, total: PropTypes.number, errorCode: PropTypes.string, errorClass: PropTypes.string, errorTime: PropTypes.string, allDisabled: PropTypes.bool }).isRequired,
   authType: PropTypes.string,
   onToggle: PropTypes.func,

@@ -20,6 +20,13 @@ import {
 } from "@/shared/utils/playgroundModels.js";
 
 
+const NEW_CHAT_COOLDOWN_SECONDS = 3;
+const NEW_CHAT_COOLDOWN_MS = NEW_CHAT_COOLDOWN_SECONDS * 1000;
+
+export function canCreateChat(lastCreatedAtMs, nowMs, cooldownMs = 3000) {
+  return nowMs - lastCreatedAtMs >= cooldownMs;
+}
+
 const STORAGE_KEYS = {
   sessions: "basic-chat.sessions",
   activeSessionId: "basic-chat.activeSessionId",
@@ -173,6 +180,7 @@ export default function BasicChatPageClient() {
   const [renamingSessionId, setRenamingSessionId] = useState("");
   const [renameDraft, setRenameDraft] = useState("");
   const [deleteSessionId, setDeleteSessionId] = useState("");
+  const [newChatCooldown, setNewChatCooldown] = useState(0);
   const fileInputRef = useRef(null);
   const textFileInputRef = useRef(null);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
@@ -187,6 +195,8 @@ export default function BasicChatPageClient() {
   const renameTriggerRef = useRef(null);
   const deleteDialogRef = useRef(null);
   const deleteTriggerRef = useRef(null);
+  const newChatCreationRef = useRef(false);
+  const lastChatCreatedAtRef = useRef(0);
 
   const restoreFocus = useCallback((ref) => {
     globalThis.requestAnimationFrame?.(() => ref.current?.focus());
@@ -211,8 +221,19 @@ export default function BasicChatPageClient() {
   }, [restoreFocus]);
 
   useEffect(() => {
+    // Hydration is an external browser lifecycle boundary.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (newChatCooldown <= 0) return undefined;
+    newChatCreationRef.current = false;
+    const timer = globalThis.setTimeout(() => {
+      setNewChatCooldown((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+    return () => globalThis.clearTimeout(timer);
+  }, [newChatCooldown]);
 
   useEffect(() => {
     let cancelled = false;
@@ -546,6 +567,8 @@ export default function BasicChatPageClient() {
       };
       initializedRef.current = true;
       // Drop stored empty sessions (abandoned composers) so history stays meaningful.
+      // Initialization synchronizes persisted browser state after provider loading.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSessions((prev) => [session, ...prev.filter((s) => (s.messages || []).length > 0)]);
       setActiveSessionId(session.id);
       setActiveProviderId(savedProvider.providerId);
@@ -592,9 +615,15 @@ export default function BasicChatPageClient() {
   };
 
   const handleNewChat = () => {
-    if (!activeModel) return;
+    const nowMs = Date.now();
+    if (!activeModel || newChatCreationRef.current
+      || !canCreateChat(lastChatCreatedAtRef.current, nowMs, NEW_CHAT_COOLDOWN_MS)) return false;
+    newChatCreationRef.current = true;
     const session = ensureSessionForModel(activeModel);
-    if (!session) return;
+    if (!session) {
+      newChatCreationRef.current = false;
+      return false;
+    }
     setSessions((prev) => [session, ...prev]);
     setActiveSessionId(session.id);
     setActiveProviderId(session.providerId);
@@ -603,6 +632,9 @@ export default function BasicChatPageClient() {
     setAttachments([]);
     setStreamingMessageId("");
     setStreamingText("");
+    lastChatCreatedAtRef.current = nowMs;
+    setNewChatCooldown(NEW_CHAT_COOLDOWN_SECONDS);
+    return true;
   };
 
   const handleSelectSession = (sessionId) => {
@@ -964,7 +996,7 @@ export default function BasicChatPageClient() {
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--color-canvas)] text-[var(--color-text)]">
       <div className="relative mx-auto flex h-full min-h-0 w-full max-w-[var(--layout-content-max)] flex-1 flex-col lg:grid lg:grid-cols-[240px_minmax(0,1fr)]">
         <aside className="hidden min-h-0 border-r border-[var(--ledger-rule)] bg-[var(--color-surface)] lg:flex lg:flex-col lg:row-span-2">
-          <div className="border-b border-[var(--ledger-rule)] p-3"><Button fullWidth icon="add" onClick={handleNewChat} disabled={!activeModel}>New chat</Button></div>
+          <div className="border-b border-[var(--ledger-rule)] p-3"><Button fullWidth icon="add" onClick={handleNewChat} disabled={!activeModel || newChatCooldown > 0}>{newChatCooldown > 0 ? `New chat (${newChatCooldown}s)` : "New chat"}</Button></div>
           <div className="min-h-0 flex-1 overflow-y-auto p-2 custom-scrollbar">
             <p className="px-2 py-2 text-[10px] font-semibold uppercase tracking-[.12em] text-[var(--color-text-subtle)]">Sessions</p>
             {sessionItems.map((session, index) => {
@@ -989,10 +1021,10 @@ export default function BasicChatPageClient() {
                 <div className="max-h-[60vh] overflow-y-auto p-2 custom-scrollbar">{visibleGroups.length === 0 ? <p className="p-4 text-sm text-[var(--color-text-muted)]">No models match this search.</p> : visibleGroups.map((group) => <section key={group.providerId} className="mb-2 border border-[var(--ledger-border)]"><header className="flex items-center justify-between bg-[var(--ledger-caption-bg)] px-3 py-2"><h3 className="text-sm font-semibold">{group.providerName}</h3><span className="data-text text-[10px] text-[var(--color-text-muted)]">{group.models.length} models</span></header>{group.models.map((model, index) => <button key={model.id} type="button" onClick={() => handleSelectModel(model.id)} className={`signal-row flex w-full items-center gap-3 px-3 py-2 text-left ${model.id === activeModelId ? "bg-[var(--signal-row-bg-selected)] before:bg-[var(--signal-row-rail-active)]" : ""}`}><span className="data-text w-6 text-[10px] text-[var(--color-text-subtle)]">{String(index + 1).padStart(2, "0")}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm">{model.name}</span><span className="data-text block truncate text-[10px] text-[var(--color-text-muted)]">{model.requestModel}</span></span>{model.id === activeModelId ? <Icon name="check_circle" className="text-[18px] text-[var(--color-primary)]" /> : null}</button>)}</section>)}</div>
               </div> : null}
             </div>
-            <div className="flex items-center gap-2">{activeThinkingLevels ? <select value={thinkingLevel} onChange={(e) => setThinkingLevel(e.target.value)} aria-label="Thinking level" className="h-11 rounded-[var(--input-radius)] border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm"><option value="auto">Thinking: Auto</option>{activeThinkingLevels.map((level) => <option key={level} value={level}>{level}</option>)}</select> : null}<button ref={historyTriggerRef} type="button" onClick={() => setHistoryOpen(true)} className="grid size-11 place-items-center rounded-[var(--radius-sm)] border border-[var(--button-border)] lg:hidden" aria-label="Open session history"><Icon name="history" /></button><Button variant="secondary" size="sm" icon="add" onClick={handleNewChat} className="hidden sm:flex lg:hidden">New</Button></div>
+            <div className="flex items-center gap-2">{activeThinkingLevels ? <select value={thinkingLevel} onChange={(e) => setThinkingLevel(e.target.value)} aria-label="Thinking level" className="h-11 rounded-[var(--input-radius)] border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm"><option value="auto">Thinking: Auto</option>{activeThinkingLevels.map((level) => <option key={level} value={level}>{level}</option>)}</select> : null}<button ref={historyTriggerRef} type="button" onClick={() => setHistoryOpen(true)} className="grid size-11 place-items-center rounded-[var(--radius-sm)] border border-[var(--button-border)] lg:hidden" aria-label="Open session history"><Icon name="history" /></button><Button variant="secondary" size="sm" icon="add" onClick={handleNewChat} disabled={!activeModel || newChatCooldown > 0} className="hidden sm:flex lg:hidden">{newChatCooldown > 0 ? `New (${newChatCooldown}s)` : "New"}</Button></div>
           </div>
 
-          {historyOpen ? <div className="fixed inset-0 z-[var(--z-drawer)] lg:hidden"><button type="button" aria-label="Close history" onClick={closeHistory} className="absolute inset-0 bg-[var(--color-overlay)]" /><div ref={historyMenuRef} role="dialog" aria-modal="true" aria-label="Session history" className="absolute inset-y-0 left-0 flex w-[min(88vw,320px)] flex-col border-r border-[var(--dialog-border)] bg-[var(--dialog-bg)] shadow-[var(--shadow-float)]"><div className="flex min-h-16 items-center justify-between border-b border-[var(--ledger-rule)] px-4"><h2 className="font-semibold">Sessions</h2><button type="button" aria-label="Close history" onClick={closeHistory} className="grid size-11 place-items-center"><Icon name="close" /></button></div><div className="p-3"><Button fullWidth icon="add" onClick={() => { handleNewChat(); closeHistory(); }}>New chat</Button></div><div className="flex-1 overflow-y-auto p-2">{sessionItems.map((session) => <div key={session.id} className="signal-row flex items-center gap-2 px-3 py-3"><button type="button" onClick={() => handleSelectSession(session.id)} className="min-w-0 flex-1 text-left"><span className="block truncate text-sm font-medium">{session.title}</span><span className="data-text text-[10px] text-[var(--color-text-muted)]">{formatRelativeTime(session.updatedAt)} · {session.modelName}</span></button><button type="button" onClick={(event) => beginRenameSession(session, event.currentTarget)} aria-label={`Rename ${session.title}`} className="grid size-11 place-items-center"><Icon name="edit" className="text-[18px]" /></button><button type="button" onClick={(event) => { deleteTriggerRef.current = event.currentTarget; setDeleteSessionId(session.id); }} aria-label={`Delete ${session.title}`} className="grid size-11 place-items-center text-[var(--color-danger)]"><Icon name="delete" className="text-[18px]" /></button></div>)}</div></div></div> : null}
+          {historyOpen ? <div className="fixed inset-0 z-[var(--z-drawer)] lg:hidden"><button type="button" aria-label="Close history" onClick={closeHistory} className="absolute inset-0 bg-[var(--color-overlay)]" /><div ref={historyMenuRef} role="dialog" aria-modal="true" aria-label="Session history" className="absolute inset-y-0 left-0 flex w-[min(88vw,320px)] flex-col border-r border-[var(--dialog-border)] bg-[var(--dialog-bg)] shadow-[var(--shadow-float)]"><div className="flex min-h-16 items-center justify-between border-b border-[var(--ledger-rule)] px-4"><h2 className="font-semibold">Sessions</h2><button type="button" aria-label="Close history" onClick={closeHistory} className="grid size-11 place-items-center"><Icon name="close" /></button></div><div className="p-3"><Button fullWidth icon="add" disabled={!activeModel || newChatCooldown > 0} onClick={() => { if (handleNewChat()) closeHistory(); }}>{newChatCooldown > 0 ? `New chat (${newChatCooldown}s)` : "New chat"}</Button></div><div className="flex-1 overflow-y-auto p-2">{sessionItems.map((session) => <div key={session.id} className="signal-row flex items-center gap-2 px-3 py-3"><button type="button" onClick={() => handleSelectSession(session.id)} className="min-w-0 flex-1 text-left"><span className="block truncate text-sm font-medium">{session.title}</span><span className="data-text text-[10px] text-[var(--color-text-muted)]">{formatRelativeTime(session.updatedAt)} · {session.modelName}</span></button><button type="button" onClick={(event) => beginRenameSession(session, event.currentTarget)} aria-label={`Rename ${session.title}`} className="grid size-11 place-items-center"><Icon name="edit" className="text-[18px]" /></button><button type="button" onClick={(event) => { deleteTriggerRef.current = event.currentTarget; setDeleteSessionId(session.id); }} aria-label={`Delete ${session.title}`} className="grid size-11 place-items-center text-[var(--color-danger)]"><Icon name="delete" className="text-[18px]" /></button></div>)}</div></div></div> : null}
         {loadError ? (
           <div className="mt-4 rounded-[18px] border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-rose-100">
             <div className="flex items-start gap-3">
