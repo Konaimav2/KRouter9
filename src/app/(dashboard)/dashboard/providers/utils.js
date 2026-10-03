@@ -17,3 +17,17 @@ export function matchesStatusFilter(statusFilter, stats, isNoAuth = false) {
   if (statusFilter === "all") return true;
   return getConnectionStatus(stats, isNoAuth) === statusFilter;
 }
+
+export function buildCustomProviderDisplaySlugs(nodes = []) {
+  const seen = new Map();
+  return new Map(nodes.map((node) => {
+    const dashedName = String(node?.name || node?.id || "custom")
+      .trim()
+      .replace(/\s+/g, "-");
+    const base = `provider/${dashedName || "custom"}`;
+    const dedupeKey = base.toLocaleLowerCase();
+    const occurrence = (seen.get(dedupeKey) || 0) + 1;
+    seen.set(dedupeKey, occurrence);
+    return [node.id, occurrence === 1 ? base : `${base}-${occurrence}`];
+  }));
+}
