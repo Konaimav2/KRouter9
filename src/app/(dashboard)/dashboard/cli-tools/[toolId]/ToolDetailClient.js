@@ -2,14 +2,26 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { CardSkeleton } from "@/shared/components";
+import Icon from "@/shared/components/Icon";
 import { CLI_TOOLS } from "@/shared/constants/cliTools";
-import { getModelsByProviderId, PROVIDER_ID_TO_ALIAS } from "@/shared/constants/models";
 import {
-  ClaudeToolCard, CodexToolCard, DroidToolCard, OpenClawToolCard,
-  HermesToolCard, DefaultToolCard, OpenCodeToolCard, CoworkToolCard,
-  ClineToolCard, KiloToolCard, DeepSeekTuiToolCard,
-  JcodeToolCard, GrokBuildToolCard,
+  getModelsByProviderId,
+  PROVIDER_ID_TO_ALIAS,
+} from "@/shared/constants/models";
+import {
+  ClaudeToolCard,
+  CodexToolCard,
+  DroidToolCard,
+  OpenClawToolCard,
+  HermesToolCard,
+  DefaultToolCard,
+  OpenCodeToolCard,
+  CoworkToolCard,
+  ClineToolCard,
+  KiloToolCard,
+  DeepSeekTuiToolCard,
+  JcodeToolCard,
+  GrokBuildToolCard,
 } from "../components";
 
 const CLOUD_URL = process.env.NEXT_PUBLIC_CLOUD_URL;
@@ -47,9 +59,13 @@ export default function ToolDetailClient({ toolId, machineId }) {
         }
         if (tunnelRes.ok) {
           const data = await tunnelRes.json();
-          setTunnelEnabled(!!(data.tunnel?.enabled || data.tunnel?.settingsEnabled));
+          setTunnelEnabled(
+            !!(data.tunnel?.enabled || data.tunnel?.settingsEnabled),
+          );
           setTunnelPublicUrl(data.tunnel?.publicUrl || "");
-          setTailscaleEnabled(!!(data.tailscale?.enabled || data.tailscale?.settingsEnabled));
+          setTailscaleEnabled(
+            !!(data.tailscale?.enabled || data.tailscale?.settingsEnabled),
+          );
           setTailscaleUrl(data.tailscale?.tunnelUrl || "");
         }
         if (keysRes.ok) {
@@ -62,23 +78,33 @@ export default function ToolDetailClient({ toolId, machineId }) {
         if (mounted) setLoading(false);
       }
     })();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  const getActiveProviders = () => connections.filter(c => c.isActive !== false);
+  const getActiveProviders = () =>
+    connections.filter((c) => c.isActive !== false);
 
   const getAllAvailableModels = () => {
     const activeProviders = getActiveProviders();
     const models = [];
     const seenModels = new Set();
-    activeProviders.forEach(conn => {
+    activeProviders.forEach((conn) => {
       const alias = PROVIDER_ID_TO_ALIAS[conn.provider] || conn.provider;
       const providerModels = getModelsByProviderId(conn.provider);
-      providerModels.forEach(m => {
+      providerModels.forEach((m) => {
         const modelValue = `${alias}/${m.id}`;
         if (!seenModels.has(modelValue)) {
           seenModels.add(modelValue);
-          models.push({ value: modelValue, label: `${alias}/${m.id}`, provider: conn.provider, alias, connectionName: conn.name, modelId: m.id });
+          models.push({
+            value: modelValue,
+            label: `${alias}/${m.id}`,
+            provider: conn.provider,
+            alias,
+            connectionName: conn.name,
+            modelId: m.id,
+          });
         }
       });
 
@@ -91,20 +117,32 @@ export default function ToolDetailClient({ toolId, machineId }) {
       if (providerModels.length === 0) {
         const prefix = conn.providerSpecificData?.prefix || alias;
         const fallbackModels = [];
-        if (conn.defaultModel) fallbackModels.push({ id: conn.defaultModel, name: conn.defaultModel });
-        (conn.providerSpecificData?.customModels || []).forEach(m => {
-          if (m?.id && !fallbackModels.some(f => f.id === m.id)) fallbackModels.push({ id: m.id, name: m.name || m.id });
+        if (conn.defaultModel)
+          fallbackModels.push({
+            id: conn.defaultModel,
+            name: conn.defaultModel,
+          });
+        (conn.providerSpecificData?.customModels || []).forEach((m) => {
+          if (m?.id && !fallbackModels.some((f) => f.id === m.id))
+            fallbackModels.push({ id: m.id, name: m.name || m.id });
         });
         if (fallbackModels.length === 0 && conn.testStatus === "active") {
           // Provider is confirmed reachable but exposes no model info anywhere;
           // still let the user apply so they aren't stuck on a permanently disabled button.
           fallbackModels.push({ id: "model-id", name: `${prefix}/model-id` });
         }
-        fallbackModels.forEach(m => {
+        fallbackModels.forEach((m) => {
           const modelValue = `${prefix}/${m.id}`;
           if (!seenModels.has(modelValue)) {
             seenModels.add(modelValue);
-            models.push({ value: modelValue, label: `${prefix}/${m.id}`, provider: conn.provider, alias: prefix, connectionName: conn.name, modelId: m.id });
+            models.push({
+              value: modelValue,
+              label: `${prefix}/${m.id}`,
+              provider: conn.provider,
+              alias: prefix,
+              connectionName: conn.name,
+              modelId: m.id,
+            });
           }
         });
       }
@@ -113,7 +151,7 @@ export default function ToolDetailClient({ toolId, machineId }) {
   };
 
   const handleModelMappingChange = useCallback((tId, alias, target) => {
-    setModelMappings(prev => {
+    setModelMappings((prev) => {
       if (prev[tId]?.[alias] === target) return prev;
       return { ...prev, [tId]: { ...prev[tId], [alias]: target } };
     });
@@ -143,31 +181,128 @@ export default function ToolDetailClient({ toolId, machineId }) {
 
     switch (toolId) {
       case "claude":
-        return <ClaudeToolCard {...commonProps} activeProviders={getActiveProviders()} modelMappings={modelMappings[toolId] || {}} onModelMappingChange={(a, t) => handleModelMappingChange(toolId, a, t)} hasActiveProviders={hasActiveProviders} cloudEnabled={cloudEnabled} />;
+        return (
+          <ClaudeToolCard
+            {...commonProps}
+            activeProviders={getActiveProviders()}
+            modelMappings={modelMappings[toolId] || {}}
+            onModelMappingChange={(a, t) =>
+              handleModelMappingChange(toolId, a, t)
+            }
+            hasActiveProviders={hasActiveProviders}
+            cloudEnabled={cloudEnabled}
+          />
+        );
       case "codex":
-        return <CodexToolCard {...commonProps} activeProviders={getActiveProviders()} cloudEnabled={cloudEnabled} />;
+        return (
+          <CodexToolCard
+            {...commonProps}
+            activeProviders={getActiveProviders()}
+            cloudEnabled={cloudEnabled}
+          />
+        );
       case "opencode":
-        return <OpenCodeToolCard {...commonProps} activeProviders={getActiveProviders()} cloudEnabled={cloudEnabled} />;
+        return (
+          <OpenCodeToolCard
+            {...commonProps}
+            activeProviders={getActiveProviders()}
+            cloudEnabled={cloudEnabled}
+          />
+        );
       case "cowork":
-        return <CoworkToolCard {...commonProps} activeProviders={getActiveProviders()} hasActiveProviders={hasActiveProviders} cloudEnabled={cloudEnabled} cloudUrl={CLOUD_URL} tunnelEnabled={tunnelEnabled} tunnelPublicUrl={tunnelPublicUrl} tailscaleEnabled={tailscaleEnabled} tailscaleUrl={tailscaleUrl} />;
+        return (
+          <CoworkToolCard
+            {...commonProps}
+            activeProviders={getActiveProviders()}
+            hasActiveProviders={hasActiveProviders}
+            cloudEnabled={cloudEnabled}
+            cloudUrl={CLOUD_URL}
+            tunnelEnabled={tunnelEnabled}
+            tunnelPublicUrl={tunnelPublicUrl}
+            tailscaleEnabled={tailscaleEnabled}
+            tailscaleUrl={tailscaleUrl}
+          />
+        );
       case "droid":
-        return <DroidToolCard {...commonProps} activeProviders={getActiveProviders()} hasActiveProviders={hasActiveProviders} cloudEnabled={cloudEnabled} />;
+        return (
+          <DroidToolCard
+            {...commonProps}
+            activeProviders={getActiveProviders()}
+            hasActiveProviders={hasActiveProviders}
+            cloudEnabled={cloudEnabled}
+          />
+        );
       case "openclaw":
-        return <OpenClawToolCard {...commonProps} activeProviders={getActiveProviders()} hasActiveProviders={hasActiveProviders} cloudEnabled={cloudEnabled} />;
+        return (
+          <OpenClawToolCard
+            {...commonProps}
+            activeProviders={getActiveProviders()}
+            hasActiveProviders={hasActiveProviders}
+            cloudEnabled={cloudEnabled}
+          />
+        );
       case "hermes":
-        return <HermesToolCard {...commonProps} activeProviders={getActiveProviders()} hasActiveProviders={hasActiveProviders} cloudEnabled={cloudEnabled} />;
+        return (
+          <HermesToolCard
+            {...commonProps}
+            activeProviders={getActiveProviders()}
+            hasActiveProviders={hasActiveProviders}
+            cloudEnabled={cloudEnabled}
+          />
+        );
       case "cline":
-        return <ClineToolCard {...commonProps} activeProviders={getActiveProviders()} cloudEnabled={cloudEnabled} />;
+        return (
+          <ClineToolCard
+            {...commonProps}
+            activeProviders={getActiveProviders()}
+            cloudEnabled={cloudEnabled}
+          />
+        );
       case "kilo":
-        return <KiloToolCard {...commonProps} activeProviders={getActiveProviders()} cloudEnabled={cloudEnabled} />;
+        return (
+          <KiloToolCard
+            {...commonProps}
+            activeProviders={getActiveProviders()}
+            cloudEnabled={cloudEnabled}
+          />
+        );
       case "deepseek-tui":
-        return <DeepSeekTuiToolCard {...commonProps} activeProviders={getActiveProviders()} hasActiveProviders={hasActiveProviders} cloudEnabled={cloudEnabled} />;
+        return (
+          <DeepSeekTuiToolCard
+            {...commonProps}
+            activeProviders={getActiveProviders()}
+            hasActiveProviders={hasActiveProviders}
+            cloudEnabled={cloudEnabled}
+          />
+        );
       case "jcode":
-        return <JcodeToolCard {...commonProps} activeProviders={getActiveProviders()} hasActiveProviders={hasActiveProviders} cloudEnabled={cloudEnabled} />;
+        return (
+          <JcodeToolCard
+            {...commonProps}
+            activeProviders={getActiveProviders()}
+            hasActiveProviders={hasActiveProviders}
+            cloudEnabled={cloudEnabled}
+          />
+        );
       case "grok-build":
-        return <GrokBuildToolCard {...commonProps} activeProviders={getActiveProviders()} hasActiveProviders={hasActiveProviders} cloudEnabled={cloudEnabled} />;
+        return (
+          <GrokBuildToolCard
+            {...commonProps}
+            activeProviders={getActiveProviders()}
+            hasActiveProviders={hasActiveProviders}
+            cloudEnabled={cloudEnabled}
+          />
+        );
       default:
-        return <DefaultToolCard toolId={toolId} {...commonProps} activeProviders={getActiveProviders()} cloudEnabled={cloudEnabled} tunnelEnabled={tunnelEnabled} />;
+        return (
+          <DefaultToolCard
+            toolId={toolId}
+            {...commonProps}
+            activeProviders={getActiveProviders()}
+            cloudEnabled={cloudEnabled}
+            tunnelEnabled={tunnelEnabled}
+          />
+        );
     }
   };
 
@@ -175,8 +310,11 @@ export default function ToolDetailClient({ toolId, machineId }) {
   if (!tool) {
     return (
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-1 sm:px-0">
-        <Link href="/dashboard/cli-tools" className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-primary w-fit">
-          <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+        <Link
+          href="/dashboard/cli-tools"
+          className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-primary w-fit"
+        >
+          <Icon name="arrow_back" size={18} />
           Back to CLI Tools
         </Link>
         <p className="text-sm text-text-muted">Tool not found or disabled.</p>
@@ -186,15 +324,40 @@ export default function ToolDetailClient({ toolId, machineId }) {
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-1 sm:px-0">
-      <Link href="/dashboard/cli-tools" className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-primary w-fit">
-        <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+      <Link
+        href="/dashboard/cli-tools"
+        className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-primary w-fit"
+      >
+        <Icon name="arrow_back" size={18} />
         Back to CLI Tools
       </Link>
       <div className="flex flex-col gap-1">
-        <h1 className="text-xl font-semibold text-text-main sm:text-2xl">{tool.name}</h1>
+        <h1 className="text-xl font-semibold text-text-main sm:text-2xl">
+          {tool.name}
+        </h1>
         <p className="text-sm text-text-muted">{tool.description}</p>
       </div>
-      {loading ? <CardSkeleton /> : renderToolCard()}
+      {loading ? (
+        <section className="ledger-band">
+          <header className="ledger-caption">
+            <span className="ledger-number">01</span>
+            <h2 className="font-semibold">Configuration</h2>
+          </header>
+          <div className="signal-row grid animate-pulse gap-3 px-4 py-4 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto]">
+            <span className="ledger-number">01</span>
+            <span className="h-8 bg-[var(--color-surface-raised)]" />
+            <span className="h-10 w-24 bg-[var(--color-surface-raised)]" />
+          </div>
+        </section>
+      ) : (
+        <section className="ledger-band">
+          <header className="ledger-caption">
+            <span className="ledger-number">01</span>
+            <h2 className="font-semibold">Configuration</h2>
+          </header>
+          <div className="p-4">{renderToolCard()}</div>
+        </section>
+      )}
     </div>
   );
 }

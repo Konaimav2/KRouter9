@@ -1,12 +1,22 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CardSkeleton } from "@/shared/components";
 import { CLI_TOOLS, MITM_TOOLS } from "@/shared/constants/cliTools";
 import { MitmLinkCard } from "./components";
 import ToolSummaryCard from "./components/ToolSummaryCard";
 
 const ALL_STATUSES_URL = "/api/cli-tools/all-statuses";
+
+function RowSkeleton({ number }) {
+  return (
+    <div className="signal-row grid animate-pulse gap-3 px-4 py-3 sm:grid-cols-[2.5rem_minmax(12rem,1fr)_minmax(12rem,1fr)_auto] sm:items-center">
+      <span className="ledger-number">{String(number).padStart(2, "0")}</span>
+      <span className="h-8 bg-[var(--color-surface-raised)]" />
+      <span className="h-5 bg-[var(--color-surface-raised)]" />
+      <span className="h-10 w-24 bg-[var(--color-surface-raised)]" />
+    </div>
+  );
+}
 
 export default function CLIToolsPageClient({ machineId }) {
   const [loading, setLoading] = useState(true);
@@ -24,43 +34,52 @@ export default function CLIToolsPageClient({ machineId }) {
         if (mounted) setLoading(false);
       }
     })();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
-
-  if (loading) {
-    return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-        <CardSkeleton />
-        <CardSkeleton />
-        <CardSkeleton />
-        <CardSkeleton />
-        <CardSkeleton />
-        <CardSkeleton />
-      </div>
-    );
-  }
 
   const regularTools = Object.entries(CLI_TOOLS);
   const mitmTools = Object.entries(MITM_TOOLS);
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-1 sm:px-0">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-        {regularTools.map(([toolId, tool]) => (
-          <ToolSummaryCard key={toolId} toolId={toolId} tool={tool} status={toolStatuses[toolId]} />
+    <div className="mx-auto flex w-full max-w-[72rem] flex-col gap-6 px-1 sm:px-0">
+      <section className="ledger-band">
+        <header className="ledger-caption">
+          <span className="ledger-number">01</span>
+          <h2 className="font-semibold">Installed clients</h2>
+          <span className="data-text ml-auto text-xs text-[var(--color-text-muted)]">
+            {regularTools.length} registered
+          </span>
+        </header>
+        {loading
+          ? regularTools
+              .slice(0, 6)
+              .map(([, tool], index) => (
+                <RowSkeleton key={tool.id} number={index + 1} />
+              ))
+          : regularTools.map(([toolId, tool], index) => (
+              <ToolSummaryCard
+                key={toolId}
+                rowNumber={index + 1}
+                toolId={toolId}
+                tool={tool}
+                status={toolStatuses[toolId]}
+              />
+            ))}
+      </section>
+      <section className="ledger-band">
+        <header className="ledger-caption">
+          <span className="ledger-number">02</span>
+          <h2 className="font-semibold">Interception tools</h2>
+          <span className="data-text ml-auto text-xs text-[var(--color-text-muted)]">
+            {mitmTools.length} registered
+          </span>
+        </header>
+        {mitmTools.map(([toolId, tool], index) => (
+          <MitmLinkCard key={toolId} rowNumber={index + 1} tool={tool} />
         ))}
-      </div>
-      <div className="flex flex-col gap-3 sm:gap-4">
-        <div className="flex items-center gap-2 px-1">
-          <span className="material-symbols-outlined text-[18px] text-primary">security</span>
-          <h2 className="text-sm font-semibold text-text-main">MITM Tools</h2>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-          {mitmTools.map(([toolId, tool]) => (
-            <MitmLinkCard key={toolId} tool={tool} />
-          ))}
-        </div>
-      </div>
+      </section>
     </div>
   );
 }
