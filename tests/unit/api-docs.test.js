@@ -37,7 +37,9 @@ describe("API documentation (P4)", () => {
 
   it("ships a /docs reference page", () => {
     const page = read("src/app/docs/page.js");
-    expect(page).toMatch(/KRouter9 API Reference/);
+    // Wording changed in the Switchboard Ledger redesign (Read-mode layout) —
+    // assert the reference page itself, not the old heading.
+    expect(page).toMatch(/API Reference/);
     expect(page).toMatch(/\/v1\/chat\/completions/);
   });
 
