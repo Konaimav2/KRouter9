@@ -11,6 +11,9 @@ import {
   requestPrefixFor,
   normalizeStaticModel,
   normalizeLiveModel,
+  normalizeCuratedModel,
+  selectConnectionCuratedIds,
+  isComboShadowed,
   dedupeModels,
   buildComboGroup,
   filterModelGroups,
@@ -271,6 +274,39 @@ export default function BasicChatPageClient() {
             .map((model) => normalizeStaticModel(model, connection))
             .filter(Boolean);
           group.models.push(...staticModels);
+          group.curatedCache = group.curatedCache || [];
+          const { ids: curatedIds, outputAlias } = selectConnectionCuratedIds(
+            providersData.customModels || [],
+            providersData.modelAliases || {},
+            connection
+          );
+          for (const entry of curatedIds) {
+            const m = normalizeCuratedModel(entry, connection, outputAlias);
+            if (m) group.curatedCache.push(m);
+          }
+        }
+
+        let comboNames = new Set();
+        try {
+          const combosPre = await fetch("/api/combos", { cache: "no-store" });
+          const combosPreData = await combosPre.json().catch(() => ({}));
+          if (combosPre.ok) {
+            const list = combosPreData.combos || combosPreData;
+            if (Array.isArray(list)) comboNames = new Set(list.map((c) => c?.name).filter(Boolean));
+          }
+        } catch {
+          // combos unavailable — phantom filter stays off, models still listed.
+        }
+        for (const group of providerMap.values()) {
+          // F04: drop curated rows shadowed by a combo of the same bare tail —
+          // they resolve via the combo path, never this connection; the bare
+          // combo entry (built below) already advertises them.
+          group.models.push(
+            ...(group.curatedCache || []).filter(
+              (m) => !isComboShadowed(m.requestModel || m.id, comboNames)
+            )
+          );
+          delete group.curatedCache;
         }
 
         const liveResults = await Promise.all(

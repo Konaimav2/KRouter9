@@ -314,6 +314,12 @@ export async function buildModelsList(kindFilter) {
   const combosByName = new Map(
     combos.filter((c) => typeof c?.name === "string").map((c) => [c.name, c])
   );
+  // F04: bare combo names shadow any curated (custom/alias) id with the same
+  // tail. `grip/<combo>` resolves via the combo path (handleChat
+  // getComboModels-first + tail strip in src/sse/services/model.js), never the
+  // grip connection — the bare combo entry above already advertises it, so the
+  // prefixed form must not be emitted as a provider model.
+  const comboNames = new Set(combosByName.keys());
 
   // Combos first (filtered by kind). Web combos expose `kind` so AI knows search vs fetch.
   // Combos use their bare names only. Clients that slug-qualify model ids
@@ -554,6 +560,10 @@ export async function buildModelsList(kindFilter) {
       const mergedModelIds = codexLive ? modelIds : Array.from(new Set([...modelIds, ...customModelIds, ...aliasModelIds]));
 
       for (const modelId of mergedModelIds) {
+        // F04: drop curated ids whose bare tail matches a combo name — they
+        // resolve via the combo path (handleChat getComboModels-first), never
+        // the provider connection. The bare combo entry advertises the combo.
+        if (comboNames.has(String(modelId).trim())) continue;
         // Resolve kind: prefer custom/live metadata, then static, then ID heuristics.
         const customKind = customModelKindById.get(modelId);
         const liveKind = liveModelKindById.get(modelId);

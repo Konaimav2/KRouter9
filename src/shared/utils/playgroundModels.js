@@ -1,4 +1,5 @@
 import { AI_PROVIDERS, getProviderAlias, isAnthropicCompatibleProvider, isOpenAICompatibleProvider } from "@/shared/constants/providers";
+import { PROVIDER_ID_TO_ALIAS } from "@/shared/constants/models";
 
 function humanize(value = "") {
   return String(value)
@@ -135,5 +136,90 @@ export function buildComboGroup(combos) {
     providerType: "combo",
     connections: [],
     models,
+  };
+}
+
+// True when a curated id can never route to its provider: its bare tail
+// (after the last "/") matches a combo name. `grip/<combo>` resolves via the
+// combo path (handleChat getComboModels-first + tail strip in
+// src/sse/services/model.js), never the grip connection; the bare combo
+// entry already advertises the combo. Pure so both /v1/models and the
+// playground picker share one predicate (F04 single-source).
+export function isComboShadowed(modelId, comboNames) {
+  if (!modelId || !comboNames || comboNames.size === 0) return false;
+  const tail = String(modelId).split("/").pop().trim();
+  if (!tail) return false;
+  return comboNames.has(tail);
+}
+
+function modelType(model) {
+  return model?.kind || model?.type || "llm";
+}
+
+// Single-source curated selector: the exact per-connection curated pool
+// /v1/models merges (custom store + legacy aliases, triple-alias predicate),
+// keyed by any of the three aliases the route matches (output/legacy prefix,
+// static registry alias, raw node/provider id). Returns bare ids plus the
+// connection's display (output) alias for qualification. `type` mirrors the
+// route: llm-listed custom rows keep imageToText members (vision-capable chat
+// models stay in the LLM list).
+export function selectConnectionCuratedIds(customModels, modelAliases, connection, type = "llm") {
+  const providerId = connection?.provider || connection?.id || "";
+  const psd = connection?.providerSpecificData || {};
+  const staticAlias = PROVIDER_ID_TO_ALIAS[providerId] || providerId;
+  const outputAlias = String(
+    psd?.prefix || getProviderAlias(providerId) || staticAlias || ""
+  ).trim();
+  const ids = [];
+  const seen = new Set();
+
+  for (const m of customModels || []) {
+    if (!m?.id) continue;
+    const alias = m.providerAlias;
+    if (alias !== outputAlias && alias !== staticAlias && alias !== providerId) continue;
+    const kind = modelType(m);
+    const allowAsLlm = type === "llm" && kind === "imageToText";
+    if (type && kind !== type && !allowAsLlm) continue;
+    const id = String(m.id).trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    ids.push({
+      id,
+      name: m.name || id,
+      source: m.source || "custom",
+    });
+  }
+
+  for (const [aliasName, fullModel] of Object.entries(modelAliases || {})) {
+    if (typeof fullModel !== "string" || !fullModel.includes("/")) continue;
+    if (
+      !fullModel.startsWith(`${outputAlias}/`) &&
+      !fullModel.startsWith(`${staticAlias}/`) &&
+      !fullModel.startsWith(`${providerId}/`)
+    ) continue;
+    const id = String(fullModel.split("/").pop() || "").trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    ids.push({ id, name: aliasName || id, source: "legacyAlias", alias: aliasName });
+  }
+
+  return { ids, outputAlias, staticAlias, providerId };
+}
+
+// Normalize one curated bare id to the fully-qualified picker entry — the
+// same `{prefix}/{id}` shape normalizeLiveModel emits and /v1/models lists.
+export function normalizeCuratedModel(entry, connection, outputAlias) {
+  const rawId = typeof entry === "string" ? entry : entry?.id;
+  if (!rawId) return null;
+  const alias = outputAlias || connection?.providerSpecificData?.prefix || connection?.provider || connection?.id || "";
+  const name = typeof entry === "string" ? entry : entry?.name || rawId;
+  const source = typeof entry === "string" ? "custom" : entry?.source || "custom";
+  return {
+    id: `${alias}/${rawId}`,
+    requestModel: `${alias}/${rawId}`,
+    name,
+    providerId: connection?.provider,
+    providerName: getProviderLabel(connection),
+    source,
   };
 }
