@@ -1,10 +1,11 @@
 "use client";
 
+import Icon from "@/shared/components/Icon";
 import { useState, useEffect, useRef } from "react";
 import { getStatusVariant as getConnectionStatusVariant } from "@/shared/utils/connectionStatus";
+import { normalizeErrorClass, errorClassLabel } from "@/shared/utils/errorClass";
 import PropTypes from "prop-types";
 import { Badge, Toggle, Tooltip } from "@/shared/components";
-import MaskedProxyValue from "@/shared/components/MaskedProxyValue";
 import { useCooldownNow } from "@/shared/hooks/useCooldownNow";
 import CooldownTimer from "./CooldownTimer";
 
@@ -120,8 +121,11 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
     return null;
   };
 
+  const errorClass = connection.lastError ? normalizeErrorClass(connection) : null;
+
   return (
-    <div className={`group flex min-w-0 flex-col gap-3 rounded-lg p-2 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.02] sm:flex-row sm:items-center sm:justify-between ${connection.isActive === false ? "opacity-60" : ""}`}>
+    <div className={`grid min-w-0 grid-cols-[2.5rem_minmax(0,1fr)] gap-3 px-2 py-3 transition-colors hover:bg-[var(--signal-row-bg-hover)] sm:grid-cols-[2.5rem_minmax(0,1fr)_auto] sm:items-center ${connection.isActive === false ? "bg-[var(--color-surface-strong)]" : ""}`}>
+      <span className="flex h-full min-h-12 items-center justify-center border-r border-[var(--signal-row-rail)] font-mono text-xs tabular-nums text-[var(--color-primary)]">{String((connection.priority ?? 0) + 1).padStart(2, "0")}</span>
       <div className="flex min-w-0 flex-1 items-start gap-2 sm:items-center sm:gap-3">
         {/* Priority arrows */}
         <div className="flex shrink-0 flex-col">
@@ -130,19 +134,17 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
             disabled={isFirst}
             className={`p-0.5 rounded ${isFirst ? "text-text-muted/30 cursor-not-allowed" : "hover:bg-sidebar text-text-muted hover:text-primary"}`}
           >
-            <span className="material-symbols-outlined text-sm">keyboard_arrow_up</span>
+            <Icon name="arrow_upward" size={15} />
           </button>
           <button
             onClick={onMoveDown}
             disabled={isLast}
             className={`p-0.5 rounded ${isLast ? "text-text-muted/30 cursor-not-allowed" : "hover:bg-sidebar text-text-muted hover:text-primary"}`}
           >
-            <span className="material-symbols-outlined text-sm">keyboard_arrow_down</span>
+            <Icon name="arrow_downward" size={15} />
           </button>
         </div>
-        <span className="material-symbols-outlined shrink-0 text-base text-text-muted">
-          {authIcon}
-        </span>
+        <Icon name={authIcon} size={17} className="shrink-0 text-text-muted" />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium truncate">{displayName}</p>
           {secondaryDisplayName && (
@@ -166,7 +168,7 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
                 {connection.lastError}
               </span>
             )}
-            <span className="text-xs text-text-muted">#{connection.priority}</span>
+            {errorClass && errorClass !== "unknown" && <Badge variant="error" size="sm">{errorClassLabel(errorClass)}</Badge>}
             {connection.globalPriority && (
               <span className="text-xs text-text-muted">Auto: {connection.globalPriority}</span>
             )}
@@ -195,7 +197,7 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
           )}
         </div>
       </div>
-      <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-end">
+      <div className="col-span-2 flex w-full items-center justify-between gap-2 pl-[3.25rem] sm:col-span-1 sm:w-auto sm:justify-end sm:pl-0">
         <div className="grid flex-1 grid-cols-3 gap-1 sm:flex sm:flex-none">
           {/* Proxy button with inline dropdown */}
           {(proxyPools || []).length > 0 && (
@@ -205,9 +207,7 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
                 className={`flex w-full flex-col items-center rounded px-2 py-1 transition-colors hover:bg-black/5 dark:hover:bg-white/5 ${hasAnyProxy ? "text-primary" : "text-text-muted hover:text-primary"}`}
                 disabled={updatingProxy}
               >
-                <span className="material-symbols-outlined text-[18px]">
-                  {updatingProxy ? "progress_activity" : "lan"}
-                </span>
+                <Icon name={updatingProxy ? "progress_activity" : "lan"} size={18} className={updatingProxy ? "animate-spin" : ""} />
                 <span className="text-[10px] leading-tight">Proxy</span>
               </button>
               {showProxyDropdown && (
@@ -237,17 +237,17 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
                 onClick={() => autoPing.onToggle(!autoPing.on)}
                 className={`flex w-full flex-col items-center rounded px-2 py-1 transition-colors hover:bg-black/5 dark:hover:bg-white/5 ${autoPing.on ? "text-primary" : "text-text-muted hover:text-primary"}`}
               >
-                <span className="material-symbols-outlined text-[18px]">bolt</span>
+                <Icon name="bolt" size={18} />
                 <span className="text-[10px] leading-tight">Auto-ping</span>
               </button>
             </Tooltip>
           )}
           <button onClick={onEdit} className="flex flex-col items-center rounded px-2 py-1 text-text-muted hover:bg-black/5 hover:text-primary dark:hover:bg-white/5">
-            <span className="material-symbols-outlined text-[18px]">edit</span>
+            <Icon name="edit" size={18} />
             <span className="text-[10px] leading-tight">Edit</span>
           </button>
           <button onClick={onDelete} className="flex flex-col items-center rounded px-2 py-1 text-red-500 hover:bg-red-500/10">
-            <span className="material-symbols-outlined text-[18px]">delete</span>
+            <Icon name="delete" size={18} />
             <span className="text-[10px] leading-tight">Delete</span>
           </button>
         </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import Icon from "./Icon";
 import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
@@ -178,7 +179,7 @@ const getPageInfo = (pathname) => {
   return { title: "", description: "", breadcrumbs: [] };
 };
 
-export default function Header({ onMenuClick, showMenuButton = true }) {
+export default function Header({ onMenuClick, showMenuButton = true, menuButtonRef }) {
   const pathname = usePathname();
   const [displayName, setDisplayName] = useState("");
   const [loginMethod, setLoginMethod] = useState("");
@@ -225,95 +226,30 @@ export default function Header({ onMenuClick, showMenuButton = true }) {
   };
 
   return (
-    <header className="shrink-0 flex items-center justify-between gap-3 px-4 lg:px-8 pt-3 pb-2 border-b border-border-subtle bg-surface/60 backdrop-blur-xl lg:bg-transparent lg:backdrop-blur-none z-20">
-      {/* Mobile menu button */}
-      <div className="flex items-center gap-3 lg:hidden shrink-0">
-        {showMenuButton && (
-          <button
-            onClick={onMenuClick}
-            className="text-text-main hover:text-primary transition-colors"
-          >
-            <span className="material-symbols-outlined">menu</span>
-          </button>
-        )}
-      </div>
+    <header className="z-[var(--z-sticky)] flex min-h-[var(--layout-workbar-height)] shrink-0 items-center gap-3 border-b border-[var(--workbar-border)] bg-[var(--workbar-bg)] px-4 lg:px-6">
+      {showMenuButton ? (
+        <button ref={menuButtonRef} type="button" onClick={onMenuClick} aria-label="Open navigation" className="grid size-11 shrink-0 place-items-center rounded-[var(--radius-sm)] border border-[var(--button-border)] text-[var(--color-text-muted)] lg:hidden">
+          <Icon name="menu" />
+        </button>
+      ) : null}
 
-      {/* Page title with breadcrumbs */}
-      <div className="flex flex-col min-w-0 flex-1">
+      <div className="min-w-0 flex-1">
         {breadcrumbs.length > 0 ? (
-          <div className="flex items-center gap-2">
+          <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-sm">
             {breadcrumbs.map((crumb, index) => (
-              <div
-                key={`${crumb.label}-${crumb.href || "current"}`}
-                className="flex items-center gap-2"
-              >
-                {index > 0 && (
-                  <span className="material-symbols-outlined text-text-muted text-base">
-                    chevron_right
-                  </span>
-                )}
-                {crumb.href ? (
-                  <Link
-                    href={crumb.href}
-                    className="text-text-muted hover:text-primary transition-colors"
-                  >
-                    {crumb.label}
-                  </Link>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    {crumb.image && (
-                      <ProviderIcon
-                        src={crumb.image}
-                        alt={crumb.label}
-                        size={28}
-                        className="object-contain rounded max-w-[28px] max-h-[28px]"
-                        fallbackText={crumb.label.slice(0, 2).toUpperCase()}
-                      />
-                    )}
-                    <h1 className="text-base lg:text-2xl font-semibold text-text-main tracking-tight truncate">
-                      {translate(crumb.label)}
-                    </h1>
-                  </div>
-                )}
+              <div key={`${crumb.label}-${crumb.href || "current"}`} className="flex min-w-0 items-center gap-2">
+                {index > 0 ? <span className="text-[var(--color-text-subtle)]">/</span> : null}
+                {crumb.href ? <Link href={crumb.href} className="text-[var(--color-text-muted)] hover:text-[var(--color-primary)]">{translate(crumb.label)}</Link> : <h1 className="truncate text-[var(--text-lg)] font-semibold">{translate(crumb.label)}</h1>}
               </div>
             ))}
-          </div>
-        ) : title ? (
-          <div>
-            <div className="flex items-center gap-2">
-              {icon && (
-                <span className="material-symbols-outlined text-primary text-xl lg:text-2xl">
-                  {icon}
-                </span>
-              )}
-              <h1 className="text-base lg:text-2xl font-semibold tracking-tight truncate">
-                {translate(title)}
-              </h1>
-            </div>
-            {description && (
-              <p className="hidden lg:block text-sm text-text-muted truncate">
-                {translate(description)}
-              </p>
-            )}
-          </div>
-        ) : null}
+          </nav>
+        ) : title ? <h1 className="truncate text-[var(--text-lg)] font-semibold tracking-[-.01em]">{translate(title)}</h1> : null}
       </div>
 
-      {/* Right actions */}
-      <div className="flex items-center gap-1 shrink-0">
-        {displayName && (loginMethod === "OIDC" || loginMethod === "SAML") && (
-          <div
-            className="hidden sm:flex items-center max-w-[220px] px-3 py-1.5 rounded-full border border-border bg-surface/70 text-xs text-text-muted truncate"
-            title={displayName}
-          >
-            <span className="material-symbols-outlined text-[14px] mr-1.5 text-primary">person</span>
-            <span className="truncate">{displayName}</span>
-            <span className="ml-2 shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
-              {loginMethod}
-            </span>
-          </div>
-        )}
-        <HeaderSearch />
+      <HeaderSearch />
+      <div className="flex shrink-0 items-center gap-1">
+        <Link href="/docs" className="hidden h-10 items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--button-border)] px-3 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)] sm:flex"><Icon name="menu_book" className="text-[18px]" />Docs</Link>
+        {displayName && (loginMethod === "OIDC" || loginMethod === "SAML") ? <div className="data-text hidden max-w-44 truncate rounded-[var(--radius-xs)] border border-[var(--color-border)] px-2 py-1 text-[11px] text-[var(--color-text-muted)] md:block" title={displayName}>{displayName} · {loginMethod}</div> : null}
         <ThemeToggle />
         <HeaderLanguage />
         <HeaderMenu onLogout={handleLogout} />
@@ -331,16 +267,16 @@ function HeaderSearch() {
   if (!visible) return null;
 
   return (
-    <div className="relative w-[160px] sm:w-[220px]">
-      <span className="material-symbols-outlined absolute left-2 top-1/2 -translate-y-1/2 text-text-muted text-[16px] pointer-events-none">
-        search
-      </span>
+    <div className="relative hidden w-[180px] sm:block lg:w-[260px]">
+      <Icon name="search" className="absolute left-2 top-1/2 -translate-y-1/2 text-text-muted text-[16px] pointer-events-none" />
       <input
         type="text"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Escape") { setQuery(""); e.currentTarget.blur(); } }}
         placeholder={placeholder}
-        className="w-full h-8 pl-7 pr-7 rounded-lg border border-border bg-surface/60 text-sm focus:outline-none focus:border-primary/50 transition-colors"
+        aria-label={placeholder || "Search this page"}
+        className="h-10 w-full rounded-[var(--input-radius)] border border-[var(--input-border)] bg-[var(--input-bg)] pl-8 pr-8 text-sm focus:border-[var(--input-border-focus)] focus:outline-none"
       />
       {query && (
         <button
@@ -349,7 +285,7 @@ function HeaderSearch() {
           className="absolute right-1 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main p-0.5 rounded"
           aria-label="Clear search"
         >
-          <span className="material-symbols-outlined text-[16px]">close</span>
+          <Icon name="close" className="text-[16px]" />
         </button>
       )}
     </div>
@@ -359,4 +295,5 @@ function HeaderSearch() {
 Header.propTypes = {
   onMenuClick: PropTypes.func,
   showMenuButton: PropTypes.bool,
+  menuButtonRef: PropTypes.shape({ current: PropTypes.object }),
 };

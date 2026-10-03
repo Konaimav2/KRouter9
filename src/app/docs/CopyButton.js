@@ -1,39 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import Icon from "@/shared/components/Icon";
 
-// Copy-to-clipboard button for static content. All props must be static
-// strings (server components cannot pass functions to client components).
-// `path` resolves against the current origin in the browser; in `text`, the
-// literal token $BASE is replaced with the origin at click time.
 export default function CopyButton({ text, path, label = "Copy" }) {
-  const [copied, setCopied] = useState(false);
+  const [state, setState] = useState("idle");
+  const timerRef = useRef(null);
+  useEffect(() => () => clearTimeout(timerRef.current), []);
+
   const onCopy = async () => {
     const origin = typeof window !== "undefined" ? window.location.origin : "";
-    const raw = path ? `${origin}${path}` : (text || "");
-    const value = raw.split("$BASE").join(origin);
+    const value = (path ? `${origin}${path}` : (text || "")).split("$BASE").join(origin);
     try {
       await navigator.clipboard.writeText(value);
+      setState("copied");
+      timerRef.current = setTimeout(() => setState("idle"), 1500);
     } catch {
-      const ta = document.createElement("textarea");
-      ta.value = value;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      ta.remove();
+      setState("failed");
     }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
   };
-  return (
-    <button
-      type="button"
-      onClick={onCopy}
-      title={copied ? "Copied" : label}
-      aria-label={label}
-      className="rounded border border-border px-2 py-0.5 text-xs text-text-muted hover:bg-surface-2"
-    >
-      {copied ? "Copied" : label}
-    </button>
-  );
+
+  return <span className="inline-flex flex-col items-end gap-1"><button type="button" onClick={onCopy} aria-label={label} className="inline-flex min-h-9 items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--button-border)] px-2.5 text-xs text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]"><Icon name={state === "copied" ? "check" : "copy"} size={15}/>{state === "copied" ? "Copied" : label}</button><span className="sr-only" aria-live="polite">{state === "copied" ? "Copied" : state === "failed" ? "Copy failed — select manually" : ""}</span>{state === "failed" ? <span className="text-xs text-[var(--color-danger)]">Copy failed — select manually</span> : null}</span>;
 }

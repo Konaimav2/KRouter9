@@ -10,7 +10,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from "recharts";
 import Card from "@/shared/components/Card";
 
@@ -22,19 +21,10 @@ const fmtTokens = (n) => {
 
 const fmtCost = (n) => `$${(n || 0).toFixed(4)}`;
 
-export default function UsageChart({ period = "7d", viewMode: controlled, onViewModeChange }) {
+export default function UsageChart({ period = "7d", viewMode = "tokens" }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
-  // Single shared Tokens/Costs state with the table (W13): two identically-styled
-  // toggles disagreeing is exactly how "Tokens selected, costs shown" happens.
-  // Controlled when the parent passes viewMode; standalone otherwise.
-  const [internal, setInternal] = useState("tokens");
-  const viewMode = controlled ?? internal;
   const chartMode = viewMode === "costs" ? "cost" : "tokens";
-  const setViewMode = (v) => {
-    if (onViewModeChange) onViewModeChange(v === "cost" ? "costs" : "tokens");
-    else setInternal(v);
-  };
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -52,6 +42,8 @@ export default function UsageChart({ period = "7d", viewMode: controlled, onView
   }, [period]);
 
   useEffect(() => {
+    // Data loading is intentionally initiated when the selected period changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchData();
   }, [fetchData]);
 
@@ -59,23 +51,10 @@ export default function UsageChart({ period = "7d", viewMode: controlled, onView
 
   return (
     <Card className="flex min-w-0 flex-col gap-3 p-3 sm:p-4">
-      <div className="grid w-full grid-cols-2 items-center gap-1 rounded-lg border border-border bg-bg-subtle p-1 sm:w-auto sm:self-start">
-        <button
-          onClick={() => setViewMode("tokens")}
-          className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${chartMode === "tokens" ? "bg-primary text-white shadow-sm" : "text-text-muted hover:text-text hover:bg-bg-hover"}`}
-        >
-          Tokens
-        </button>
-        <button
-          onClick={() => setViewMode("cost")}
-          className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${chartMode === "cost" ? "bg-primary text-white shadow-sm" : "text-text-muted hover:text-text hover:bg-bg-hover"}`}
-        >
-          Cost
-        </button>
-      </div>
-
       {loading ? (
-        <div className="h-48 flex items-center justify-center text-text-muted text-sm">Loading...</div>
+        <div className="space-y-3 py-3" aria-label="Loading usage trend">
+          {Array.from({ length: 5 }, (_, index) => <div key={index} className="h-7 animate-pulse bg-[var(--color-surface-strong)]" />)}
+        </div>
       ) : !hasData ? (
         <div className="h-48 flex items-center justify-center text-text-muted text-sm">No data for this period</div>
       ) : (
@@ -147,4 +126,5 @@ export default function UsageChart({ period = "7d", viewMode: controlled, onView
 
 UsageChart.propTypes = {
   period: PropTypes.string,
+  viewMode: PropTypes.oneOf(["tokens", "costs"]),
 };

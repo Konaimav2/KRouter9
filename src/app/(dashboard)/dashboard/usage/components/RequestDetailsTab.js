@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { BrainCircuit, ChevronRight, ImageIcon, Languages, LogIn, LogOut } from "lucide-react";
 import Card from "@/shared/components/Card";
 import Button from "@/shared/components/Button";
 import Drawer from "@/shared/components/Drawer";
@@ -51,8 +52,11 @@ function getProviderName(providerId, cache) {
   return providerConfig?.name || providerId;
 }
 
+const SECTION_ICONS = { input: LogIn, translate: Languages, data_object: Languages, output: LogOut };
+
 function CollapsibleSection({ title, children, defaultOpen = false, icon = null }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
+  const SectionIcon = icon ? SECTION_ICONS[icon] : null;
   
   return (
     <div className="border border-black/5 dark:border-white/5 rounded-lg overflow-hidden">
@@ -62,15 +66,10 @@ function CollapsibleSection({ title, children, defaultOpen = false, icon = null 
         className="w-full flex items-center justify-between p-3 bg-black/[0.02] dark:bg-white/[0.02] hover:bg-black/[0.04] dark:hover:bg-white/[0.04] transition-colors"
       >
         <div className="flex items-center gap-2">
-          {icon && <span className="material-symbols-outlined text-[18px] text-text-muted">{icon}</span>}
+          {SectionIcon && <SectionIcon aria-hidden="true" size={18} className="text-text-muted" />}
           <span className="font-semibold text-sm text-text-main">{title}</span>
         </div>
-        <span className={cn(
-          "material-symbols-outlined text-[20px] text-text-muted transition-transform duration-200",
-          isOpen ? "rotate-90" : ""
-        )}>
-          chevron_right
-        </span>
+        <ChevronRight aria-hidden="true" size={20} className={cn("text-text-muted transition-transform duration-200", isOpen ? "rotate-90" : "")} />
       </button>
       
       {isOpen && (
@@ -157,10 +156,14 @@ export default function RequestDetailsTab() {
   }, [pagination.page, pagination.pageSize, filters]);
 
   useEffect(() => {
+    // Provider options are loaded when the details tab mounts.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchProviders();
   }, [fetchProviders]);
 
   useEffect(() => {
+    // Detail rows are loaded whenever pagination or filters change.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchDetails();
   }, [fetchDetails]);
 
@@ -295,14 +298,11 @@ export default function RequestDetailsTab() {
             </thead>
             <tbody>
               {loading ? (
-                <tr>
-                  <td colSpan="12" className="p-8 text-center text-text-muted">
-                    <div className="flex items-center justify-center gap-2">
-                      <span className="material-symbols-outlined animate-spin text-[20px]">progress_activity</span>
-                      Loading...
-                    </div>
-                  </td>
-                </tr>
+                Array.from({ length: 6 }, (_, index) => (
+                  <tr key={index} aria-hidden="true">
+                    <td colSpan="12" className="h-12 animate-pulse border-b border-black/5 bg-[var(--color-surface-strong)] dark:border-white/5" />
+                  </tr>
+                ))
               ) : details.length === 0 ? (
                 <tr>
                   <td colSpan="12" className="p-8 text-center text-text-muted">
@@ -334,7 +334,7 @@ export default function RequestDetailsTab() {
                         "inline-block rounded px-2 py-0.5 text-xs font-semibold",
                         detail.status === "success" ? "bg-green-500/15 text-green-600" : "bg-red-500/15 text-red-600"
                       )}>
-                        {detail.status || "—"}
+                        {detail.status || "—"}{detail.status !== "success" && (detail.statusCode ?? detail.httpStatus ?? detail.errorCode) ? ` · ${detail.statusCode ?? detail.httpStatus ?? detail.errorCode}` : ""}
                       </span>
                     </td>
                     <td className="p-4 text-sm text-text-main text-right font-mono">
@@ -418,7 +418,7 @@ export default function RequestDetailsTab() {
                   "font-medium",
                   selectedDetail.status === "success" ? "text-green-600" : "text-red-600"
                 )}>
-                  {selectedDetail.status}
+                  {selectedDetail.status}{selectedDetail.status !== "success" && (selectedDetail.statusCode ?? selectedDetail.httpStatus ?? selectedDetail.errorCode) ? ` · ${selectedDetail.statusCode ?? selectedDetail.httpStatus ?? selectedDetail.errorCode}` : ""}
                 </span>
               </div>
               <div>
@@ -474,7 +474,7 @@ export default function RequestDetailsTab() {
             {selectedDetail.pxpipe && (
               <div className="rounded-lg border border-black/5 dark:border-white/5 p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="material-symbols-outlined text-[18px] text-text-muted">image</span>
+                  <ImageIcon aria-hidden="true" size={18} className="text-text-muted" />
                   <span className="font-semibold text-sm text-text-main">PXPIPE</span>
                   <span className={cn(
                     "text-xs px-2 py-0.5 rounded",
@@ -543,7 +543,7 @@ export default function RequestDetailsTab() {
                 {selectedDetail.response?.thinking && (
                   <div className="mb-4">
                     <h4 className="font-semibold text-text-main mb-2 flex items-center gap-2 text-xs uppercase tracking-wide opacity-70">
-                      <span className="material-symbols-outlined text-[16px]">psychology</span>
+                      <BrainCircuit aria-hidden="true" size={16} />
                       Thinking Process
                     </h4>
                     <pre className="max-h-[200px] max-w-full overflow-auto rounded-lg border border-amber-200 bg-amber-50 p-3 font-mono text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100 sm:p-4">

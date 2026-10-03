@@ -1,174 +1,32 @@
 import Link from "next/link";
 import CopyButton from "./CopyButton";
+import DocsJumpMenu from "./DocsJumpMenu";
 
-export const metadata = {
-  title: "API Reference — KRouter9",
-  description: "KRouter9 OpenAI-compatible API reference",
-};
+export const metadata = { title: "API Reference — KRouter9", description: "KRouter9 OpenAI-compatible API reference" };
 
 const SECTIONS = [
-  {
-    title: "Chat",
-    endpoints: [
-      { method: "POST", path: "/v1/chat/completions", desc: "OpenAI-compatible chat completion. Supports stream=true, tools, and response_format." },
-      { method: "POST", path: "/v1/api/chat", desc: "Alternate chat entrypoint." },
-    ],
-  },
-  {
-    title: "Responses",
-    endpoints: [
-      { method: "POST", path: "/v1/responses", desc: "Responses API completion; previous_response_id for continuation." },
-      { method: "POST", path: "/v1/responses/compact", desc: "Compact a Responses conversation." },
-    ],
-  },
-  {
-    title: "Messages (Claude)",
-    endpoints: [
-      { method: "POST", path: "/v1/messages", desc: "Anthropic Messages API." },
-      { method: "POST", path: "/v1/messages/count_tokens", desc: "Count input tokens." },
-    ],
-  },
-  {
-    title: "Embeddings",
-    endpoints: [
-      { method: "POST", path: "/v1/embeddings", desc: "Create embeddings." },
-    ],
-  },
-  {
-    title: "Images / Audio / Video",
-    endpoints: [
-      { method: "POST", path: "/v1/images/generations", desc: "Generate an image." },
-      { method: "POST", path: "/v1/audio/speech", desc: "Text-to-speech." },
-      { method: "POST", path: "/v1/audio/transcriptions", desc: "Speech-to-text (multipart)." },
-      { method: "GET", path: "/v1/audio/voices", desc: "List TTS voices." },
-      { method: "POST", path: "/v1/videos/generations", desc: "Create a video job." },
-      { method: "GET", path: "/v1/videos/{id}", desc: "Get a video job status." },
-      { method: "POST", path: "/v1/videos/edits", desc: "Edit a video." },
-      { method: "POST", path: "/v1/videos/extensions", desc: "Extend a video." },
-      { method: "POST", path: "/v1/ocr", desc: "OCR an image." },
-      { method: "POST", path: "/v1/music", desc: "Music generation (returns 501 in this build)." },
-    ],
-  },
-  {
-    title: "Search / Ranking / Moderation",
-    endpoints: [
-      { method: "POST", path: "/v1/search", desc: "Web search." },
-      { method: "POST", path: "/v1/web/fetch", desc: "Fetch and extract a web page." },
-      { method: "POST", path: "/v1/rerank", desc: "Rerank documents." },
-      { method: "POST", path: "/v1/moderations", desc: "Content moderation." },
-    ],
-  },
-  {
-    title: "Models",
-    endpoints: [
-      { method: "GET", path: "/v1/models", desc: "List available models." },
-      { method: "GET", path: "/v1/models/{model}", desc: "Model detail." },
-    ],
-  },
+  ["Chat", [["POST", "/v1/chat/completions", "OpenAI-compatible chat completion. Supports stream=true, tools, and response_format."], ["POST", "/v1/api/chat", "Alternate chat entrypoint."]]],
+  ["Responses", [["POST", "/v1/responses", "Responses API completion; previous_response_id for continuation."], ["POST", "/v1/responses/compact", "Compact a Responses conversation."]]],
+  ["Messages (Claude)", [["POST", "/v1/messages", "Anthropic Messages API."], ["POST", "/v1/messages/count_tokens", "Count input tokens."]]],
+  ["Embeddings", [["POST", "/v1/embeddings", "Create embeddings."]]],
+  ["Images / Audio / Video", [["POST", "/v1/images/generations", "Generate an image."], ["POST", "/v1/audio/speech", "Text-to-speech."], ["POST", "/v1/audio/transcriptions", "Speech-to-text (multipart)."], ["GET", "/v1/audio/voices", "List TTS voices."], ["POST", "/v1/videos/generations", "Create a video job."], ["GET", "/v1/videos/{id}", "Get a video job status."], ["POST", "/v1/videos/edits", "Edit a video."], ["POST", "/v1/videos/extensions", "Extend a video."], ["POST", "/v1/ocr", "OCR an image."], ["POST", "/v1/music", "Music generation (returns 501 in this build)."]]],
+  ["Search / Ranking / Moderation", [["POST", "/v1/search", "Web search."], ["POST", "/v1/web/fetch", "Fetch and extract a web page."], ["POST", "/v1/rerank", "Rerank documents."], ["POST", "/v1/moderations", "Content moderation."]]],
+  ["Models", [["GET", "/v1/models", "List available models."], ["GET", "/v1/models/{model}", "Model detail."]]],
 ];
+const slug = (value) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+const CURL = `curl $BASE/v1/chat/completions \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer $KROUTER9_KEY" \\\n  -d '{"model":"gpt-5.6-sol","messages":[{"role":"user","content":"Hello"}]}'`;
 
 export default function DocsPage() {
-  return (
-    <div className="min-h-screen bg-bg text-text-main">
-      <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
-        <header className="mb-8">
-          <div className="flex items-center justify-between gap-4">
-            <h1 className="text-2xl font-semibold sm:text-3xl">KRouter9 API Reference</h1>
-            <a
-              href="/api/docs/openapi.yaml"
-              className="rounded-lg border border-border px-3 py-1.5 text-sm text-text-muted hover:bg-surface-2"
-            >
-              OpenAPI (YAML)
-            </a>
-          </div>
-          <p className="mt-2 text-sm text-text-muted">
-            OpenAI-compatible routing gateway. Point any OpenAI/Claude/Gemini client at the base
-            URL and authenticate with your API key.
-          </p>
-        </header>
-
-        <section className="mb-8 rounded-lg border border-border bg-surface-2 p-4">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <h2 className="font-medium">Quickstart</h2>
-            <CopyButton
-              label="Copy curl"
-              text={`curl $BASE/v1/chat/completions -H "Content-Type: application/json" -H "Authorization: Bearer $KROUTER9_KEY" -d '{"model":"gpt-5.6-sol","messages":[{"role":"user","content":"Hello"}]}'`}
-            />
-          </div>
-          <pre className="overflow-x-auto rounded bg-black/20 p-3 text-xs dark:bg-black/40">
-{`curl $BASE/v1/chat/completions \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer $KROUTER9_KEY" \\
-  -d '{"model":"gpt-5.6-sol","messages":[{"role":"user","content":"Hello"}]}'`}
-          </pre>
-          <p className="mt-2 text-sm text-text-muted">
-            <code className="rounded bg-black/10 px-1 dark:bg-white/10">$BASE</code> is the gateway
-            origin shown in your browser address bar; <code className="rounded bg-black/10 px-1 dark:bg-white/10">$KROUTER9_KEY</code> is
-            an API key from Endpoint &amp; Key. Add <code className="rounded bg-black/10 px-1 dark:bg-white/10">&quot;stream&quot;: true</code> for
-            server-sent events.
-          </p>
-        </section>
-
-        <section className="mb-8 rounded-lg border border-border bg-surface-2 p-4">
-          <h2 className="mb-2 font-medium">Authentication</h2>
-          <ul className="list-disc space-y-1 pl-5 text-sm text-text-muted">
-            <li>
-              <strong className="text-text-primary">LLM API</strong> — send{" "}
-              <code className="rounded bg-black/10 px-1 dark:bg-white/10">Authorization: Bearer &lt;key&gt;</code>{" "}
-              or <code className="rounded bg-black/10 px-1 dark:bg-white/10">x-api-key</code>.
-              The Gemini-native <code className="rounded bg-black/10 px-1 dark:bg-white/10">/v1beta/*</code> surface
-              also accepts <code className="rounded bg-black/10 px-1 dark:bg-white/10">x-goog-api-key</code> and{" "}
-              <code className="rounded bg-black/10 px-1 dark:bg-white/10">?key=</code>.
-            </li>
-            <li>
-              <strong className="text-text-primary">Dashboard API</strong> — same-origin session cookie/JWT or{" "}
-              <code className="rounded bg-black/10 px-1 dark:bg-white/10">x-9r-cli-token</code>.
-            </li>
-            <li>Per-key limits: RPM, TPM, model allow/deny, credit and token quota (0 = unlimited).</li>
-          </ul>
-        </section>
-
-        <section className="mb-8 rounded-lg border border-border p-4">
-          <h2 className="mb-2 font-medium">Errors</h2>
-          <pre className="overflow-x-auto rounded bg-black/20 p-3 text-xs dark:bg-black/40">
-{`{ "error": { "message": "...", "type": "...", "code": "..." } }`}
-          </pre>
-          <p className="mt-2 text-sm text-text-muted">
-            400 bad request · 401 missing/invalid key · 402 credit exhausted · 403 model not allowed ·
-            404 model not found · 429 rate/token limit · 502/503/504 upstream failure
-          </p>
-        </section>
-
-        {SECTIONS.map((section) => (
-          <section key={section.title} className="mb-8">
-            <h2 className="mb-3 font-medium">{section.title}</h2>
-            <div className="flex flex-col divide-y divide-border rounded-lg border border-border">
-              {section.endpoints.map((e) => (
-                <div key={e.path} className="flex flex-col gap-1 p-3 sm:flex-row sm:items-center sm:gap-4">
-                  <span className={`w-16 shrink-0 rounded px-2 py-0.5 text-center text-xs font-semibold ${e.method === "GET" ? "bg-blue-500/15 text-blue-500" : "bg-green-500/15 text-green-500"}`}>
-                    {e.method}
-                  </span>
-                  <code className="text-sm text-text-primary">{e.path}</code>
-                  <span className="flex items-center gap-2 sm:ml-auto">
-                    <span className="text-xs text-text-muted sm:text-right">{e.desc}</span>
-                    <CopyButton
-                      label="Copy URL"
-                      path={e.path}
-                    />
-                  </span>
-                </div>
-              ))}
-            </div>
-          </section>
-        ))}
-
-        <footer className="border-t border-border pt-6 text-sm text-text-muted">
-          <Link href="/dashboard" className="text-primary hover:underline">
-            ← Back to dashboard
-          </Link>
-          <span className="ml-3">Full dashboard endpoint reference: docs/API-AUTOMATION.md</span>
-        </footer>
-      </div>
-    </div>
-  );
+  const index = [["quickstart", "Quickstart"], ["authentication", "Authentication"], ["errors", "Errors"], ...SECTIONS.map(([title]) => [slug(title), title])];
+  return <div className="min-h-screen bg-[var(--color-canvas)] text-[var(--color-text)]"><a href="#docs-main" className="skip-link">Skip to content</a>
+    <header className="sticky top-0 z-[var(--z-sticky)] border-b border-[var(--workbar-border)] bg-[var(--workbar-bg)]"><div className="mx-auto flex min-h-16 max-w-[var(--layout-content-max)] items-center gap-3 px-4 lg:px-8"><img src="/krouter9.png" alt="" className="size-8 object-contain"/><span className="font-semibold">KRouter9</span><span className="text-[var(--color-text-subtle)]">/</span><span className="text-sm text-[var(--color-text-muted)]">API Reference</span><nav className="ml-auto flex items-center gap-2"><Link href="/dashboard" className="rounded-[var(--radius-sm)] border border-[var(--button-border)] px-3 py-2 text-sm">Dashboard</Link><a href="/api/docs/openapi.yaml" className="rounded-[var(--radius-sm)] bg-[var(--color-primary)] px-3 py-2 text-sm font-semibold text-[var(--color-on-primary)]">OpenAPI YAML</a></nav></div></header>
+    <div className="mx-auto grid max-w-[var(--layout-content-max)] gap-8 px-4 py-8 lg:grid-cols-[220px_minmax(0,var(--layout-reading-max))_180px] lg:px-8">
+      <aside className="hidden lg:block"><nav aria-label="Documentation sections" className="sticky top-24 border-l border-[var(--color-border)] pl-4"><p className="mb-3 text-xs font-semibold tracking-[var(--tracking-label)] text-[var(--color-text-subtle)]">Sections</p>{index.map(([id,label]) => <a key={id} href={`#${id}`} className="block py-1.5 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-primary)]">{label}</a>)}</nav></aside>
+      <main id="docs-main" tabIndex={-1} className="min-w-0"><DocsJumpMenu sections={index} />
+        <section id="quickstart" tabIndex={-1} className="ledger-band scroll-mt-24"><header className="ledger-caption"><span className="ledger-number">01</span><h1 className="text-xl font-semibold">Quickstart</h1></header><div className="space-y-4 p-5"><p className="text-sm leading-6 text-[var(--color-text-muted)]">Use the gateway origin shown in your browser as <code>$BASE</code>. Create an API key in Endpoint &amp; Key. Add <code>&quot;stream&quot;: true</code> for server-sent events.</p><div className="overflow-hidden border border-[var(--color-border)] bg-[var(--color-code-bg)]"><div className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] px-3 py-2 text-xs text-[var(--p-carbon-300)]"><span className="data-text">shell</span><CopyButton label="Copy curl" text={CURL}/></div><pre className="overflow-x-auto p-4 text-xs text-[var(--p-carbon-100)]"><code>{CURL}</code></pre></div></div></section>
+        <section id="authentication" tabIndex={-1} className="ledger-band mt-8 scroll-mt-24"><header className="ledger-caption"><span className="ledger-number">02</span><h2 className="font-semibold">Authentication</h2></header><ul className="list-disc space-y-2 p-5 pl-10 text-sm leading-6 text-[var(--color-text-muted)]"><li><strong className="text-[var(--color-text)]">LLM API</strong> — send <code>Authorization: Bearer &lt;key&gt;</code> or <code>x-api-key</code>. The Gemini-native <code>/v1beta/*</code> surface also accepts <code>x-goog-api-key</code> and <code>?key=</code>.</li><li><strong className="text-[var(--color-text)]">Dashboard API</strong> — same-origin session cookie/JWT or <code>x-9r-cli-token</code>.</li><li>Per-key limits: RPM, TPM, model allow/deny, credit and token quota (0 = unlimited).</li></ul></section>
+        <section id="errors" tabIndex={-1} className="ledger-band mt-8 scroll-mt-24"><header className="ledger-caption"><span className="ledger-number">03</span><h2 className="font-semibold">Errors</h2></header><div className="space-y-3 p-5"><pre className="overflow-x-auto bg-[var(--color-code-bg)] p-4 text-xs text-[var(--p-carbon-100)]"><code>{`{ "error": { "message": "...", "type": "...", "code": "..." } }`}</code></pre><p className="text-sm text-[var(--color-text-muted)]">400 bad request · 401 missing/invalid key · 402 credit exhausted · 403 model not allowed · 404 model not found · 429 rate/token limit · 502/503/504 upstream failure</p></div></section>
+        {SECTIONS.map(([title,endpoints],sectionIndex) => <section id={slug(title)} key={title} tabIndex={-1} className="ledger-band mt-8 scroll-mt-24"><header className="ledger-caption"><span className="ledger-number">{String(sectionIndex + 4).padStart(2,"0")}</span><h2 className="font-semibold">{title}</h2></header><div>{endpoints.map(([method,path,desc]) => <div key={path} className="signal-row grid gap-2 px-4 py-3 sm:grid-cols-[64px_minmax(180px,1fr)_minmax(180px,1fr)_auto] sm:items-center"><span className={`data-text rounded-[var(--radius-xs)] border px-2 py-1 text-center text-xs font-semibold ${method === "GET" ? "border-[var(--color-info)] text-[var(--color-info)]" : "border-[var(--color-success)] text-[var(--color-success)]"}`}>{method}</span><code className="break-all text-sm">{path}</code><span className="text-sm text-[var(--color-text-muted)]">{desc}</span><CopyButton label={`Copy ${method} ${path} URL`} path={path}/></div>)}</div></section>)}
+      </main><aside className="hidden xl:block"><div className="sticky top-24 text-sm text-[var(--color-text-muted)]"><p className="font-medium text-[var(--color-text)]">On this page</p><p className="mt-2">Use the section index to jump between endpoint families. Copy actions resolve against the current origin.</p></div></aside>
+    </div></div>;
 }
