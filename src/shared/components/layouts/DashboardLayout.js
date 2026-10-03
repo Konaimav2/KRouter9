@@ -22,6 +22,8 @@ export default function DashboardLayout({ children }) {
   const removeNotification = useNotificationStore((state) => state.removeNotification);
   const isPlayground = pathname === "/dashboard/basic-chat";
 
+  // Route changes close the transient mobile navigation.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setSidebarOpen(false), [pathname]);
   useEffect(() => {
     if (!sidebarOpen) return undefined;
@@ -48,9 +50,9 @@ export default function DashboardLayout({ children }) {
       <div className="hidden shrink-0 lg:flex"><Sidebar /></div>
       <div className={`fixed inset-y-0 left-0 z-50 lg:hidden ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} transition-transform duration-[var(--duration-base)]`}><Sidebar onClose={() => { setSidebarOpen(false); menuButtonRef.current?.focus(); }} /></div>
 
-      <main className="flex min-w-0 flex-1 flex-col bg-[var(--color-canvas)]">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--color-canvas)]">
         <Header key={pathname} onMenuClick={() => setSidebarOpen(true)} menuButtonRef={menuButtonRef} />
-        <div id="dashboard-main" tabIndex={-1} className={isPlayground ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "flex-1 overflow-y-auto p-[var(--layout-page-pad-mobile)] md:p-[var(--layout-page-pad-tablet)] lg:p-[var(--layout-page-pad-desktop)] custom-scrollbar"}>
+        <div id="dashboard-main" tabIndex={-1} className={isPlayground ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "min-h-0 flex-1 overflow-y-auto overscroll-contain p-[var(--layout-page-pad-mobile)] md:p-[var(--layout-page-pad-tablet)] lg:p-[var(--layout-page-pad-desktop)] custom-scrollbar"}>
           <div className={isPlayground ? "flex h-full min-h-0 w-full flex-1 flex-col" : "mx-auto w-full max-w-[var(--layout-content-max)]"}>{children}</div>
         </div>
       </main>

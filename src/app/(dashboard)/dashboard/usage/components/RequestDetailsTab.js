@@ -277,8 +277,8 @@ export default function RequestDetailsTab() {
         </div>
       </Card>
 
-      <Card padding="none">
-        <div className="overflow-x-auto">
+      <Card padding="none" className="min-w-0 max-w-full overflow-hidden">
+        <div className="max-w-full overflow-x-auto overscroll-x-contain" role="region" aria-label="Request details table; scroll horizontally for additional columns" tabIndex={0}>
           <table className="w-full min-w-[960px]">
             <thead>
               <tr className="border-b border-black/5 dark:border-white/5">

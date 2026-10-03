@@ -59,8 +59,10 @@ export default function CombosPage() {
   const { copied, copy } = useCopyToClipboard();
 
   useEffect(() => {
+    // Initial load intentionally synchronizes remote state after mount.
+    // eslint-disable-next-line react-hooks/immutability
     fetchData();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   const fetchData = async () => {
     setFetchError("");
@@ -311,7 +313,7 @@ const STRATEGY_OPTIONS = [
 function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onEdit, onDelete, onChangeModels, strategy = {}, onSetStrategy }) {
   const [showJudgeSelect, setShowJudgeSelect] = useState(false);
   const [showAddModel, setShowAddModel] = useState(false);
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
   const [announcement, setAnnouncement] = useState("");
@@ -380,7 +382,20 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onEdi
         <div className="border-t border-[var(--ledger-rule)] bg-[var(--color-surface-strong)] p-3 sm:p-4">
           <div className="space-y-2">
             {combo.models.map((model, index) => (
-              <div key={`${model}-${index}`} className="grid min-h-14 grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 border border-[var(--ledger-rule)] bg-[var(--ledger-bg)] px-3 py-2">
+              <div
+                key={`${model}-${index}`}
+                draggable
+                onDragStart={(event) => event.dataTransfer.setData("text/plain", String(index))}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const source = Number.parseInt(event.dataTransfer.getData("text/plain"), 10);
+                  if (!Number.isInteger(source) || source === index) return;
+                  onChangeModels(arrayMove(combo.models, source, index));
+                  setAnnouncement(`${combo.models[source]} moved from position ${source + 1} to ${index + 1}`);
+                }}
+                className="grid min-h-14 cursor-grab grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 border border-[var(--ledger-rule)] bg-[var(--ledger-bg)] px-3 py-2 active:cursor-grabbing"
+              >
                 <div className="flex h-full flex-col items-center justify-center border-r border-[var(--route-line)] pr-3 font-mono text-xs tabular-nums text-[var(--color-primary)]">{String(index + 1).padStart(2, "0")}</div>
                 <div className="min-w-0"><code className="block break-all font-mono text-xs text-[var(--color-text)]">{model}</code><div className="mt-1 flex flex-wrap items-center gap-2"><span className="inline-flex items-center gap-1 text-[11px] text-[var(--color-text-muted)]"><span className="size-2 rounded-full border border-[var(--color-text-subtle)]" />Not tested</span><CapacityBadges caps={getCaps?.(model)} /></div></div>
                 <div className="flex items-center gap-1">
@@ -429,6 +444,8 @@ function CapacityAdapterSection({ capacityAdapter, onChange, activeProviders, ge
 
 function CapacityAdapterCap({ cap, entry, onChange, activeProviders, getCaps }) {
   const [showModelSelect, setShowModelSelect] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [announcement, setAnnouncement] = useState("");
   const { enabled, roundRobin, models } = entry;
   const patch = (value) => onChange({ ...entry, ...value });
   const handleAdd = (model) => { if (model?.value && !models.includes(model.value)) patch({ models: [...models, model.value] }); };
@@ -438,10 +455,11 @@ function CapacityAdapterCap({ cap, entry, onChange, activeProviders, getCaps }) 
   return (
     <article className={enabled ? "" : "bg-[var(--color-surface-strong)]"}>
       <div className="grid gap-3 px-4 py-4 md:grid-cols-[minmax(220px,1fr)_auto] md:items-center">
-        <div className="flex min-w-0 items-center gap-3">
+        <button type="button" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded} className="flex min-w-0 items-center gap-3 text-left">
+          <Icon name={expanded ? "chevron_down" : "chevron_right"} size={18} className="shrink-0 text-[var(--color-text-muted)]" />
           <span className="flex size-9 shrink-0 items-center justify-center border border-[var(--signal-row-rail)]"><Icon name={cap.icon} size={18} className="text-[var(--color-primary)]" /></span>
-          <div className="min-w-0"><h3 className="font-semibold">{cap.label} pool</h3><p className="text-xs text-[var(--color-text-muted)]">{cap.desc}. Switches when the requested route lacks this capability.</p></div>
-        </div>
+          <span className="min-w-0"><span className="block font-semibold">{cap.label} pool</span><span className="block text-xs text-[var(--color-text-muted)]">{models.length} model{models.length === 1 ? "" : "s"} · {cap.desc}. Switches when the requested route lacks this capability.</span></span>
+        </button>
         <div className="flex flex-wrap items-center gap-3">
           <label className="flex min-h-11 items-center gap-2 text-xs"><Toggle checked={enabled} onChange={(value) => patch({ enabled: value })} size="sm" /><span>{enabled ? "Enabled" : "Disabled"}</span></label>
           <div className="grid grid-cols-2 overflow-hidden rounded-[var(--radius-sm)] border border-[var(--color-border)]">
@@ -450,9 +468,23 @@ function CapacityAdapterCap({ cap, entry, onChange, activeProviders, getCaps }) 
           </div>
         </div>
       </div>
-      <div className="space-y-2 border-t border-[var(--ledger-rule)] bg-[var(--color-surface-strong)] p-3 sm:p-4">
+      {expanded && <div className="space-y-2 border-t border-[var(--ledger-rule)] bg-[var(--color-surface-strong)] p-3 sm:p-4">
         {models.map((model, index) => (
-          <div key={`${model}-${index}`} className="grid min-h-14 grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 border border-[var(--ledger-rule)] bg-[var(--ledger-bg)] px-3 py-2">
+          <div
+            key={`${model}-${index}`}
+            draggable={enabled}
+            onDragStart={(event) => event.dataTransfer.setData("text/plain", String(index))}
+            onDragOver={(event) => { if (enabled) event.preventDefault(); }}
+            onDrop={(event) => {
+              event.preventDefault();
+              if (!enabled) return;
+              const source = Number.parseInt(event.dataTransfer.getData("text/plain"), 10);
+              if (!Number.isInteger(source) || source === index) return;
+              patch({ models: arrayMove(models, source, index) });
+              setAnnouncement(`${models[source]} moved from position ${source + 1} to ${index + 1}`);
+            }}
+            className={`grid min-h-14 grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 border border-[var(--ledger-rule)] bg-[var(--ledger-bg)] px-3 py-2 ${enabled ? "cursor-grab active:cursor-grabbing" : ""}`}
+          >
             <span className="border-r border-[var(--route-line)] pr-3 text-center font-mono text-xs tabular-nums text-[var(--color-primary)]">{String(index + 1).padStart(2, "0")}</span>
             <div className="min-w-0"><code className="block break-all font-mono text-xs">{model}</code><div className="mt-1 flex items-center gap-2"><span className="inline-flex items-center gap-1 text-[11px] text-[var(--color-text-muted)]"><Icon name={cap.icon} size={13} />{cap.desc}</span><CapacityBadges caps={getCaps?.(model)} /></div></div>
             <div className="flex items-center gap-1">
@@ -463,7 +495,8 @@ function CapacityAdapterCap({ cap, entry, onChange, activeProviders, getCaps }) 
           </div>
         ))}
         <button type="button" disabled={!enabled} onClick={() => setShowModelSelect(true)} className="flex min-h-12 w-full items-center justify-center gap-2 border border-dashed border-[var(--color-primary-border)] font-medium text-[var(--color-primary)] disabled:cursor-not-allowed disabled:text-[var(--color-text-disabled)]"><Icon name="add" size={17} />Add fallback model</button>
-      </div>
+      </div>}
+      <span className="sr-only" aria-live="polite">{announcement}</span>
       {showModelSelect && <ModelSelectModal isOpen={showModelSelect} onClose={() => setShowModelSelect(false)} onSelect={handleAdd} activeProviders={activeProviders} title={`Add ${cap.label} model`} addedModelValues={models} capFilter={cap.key} includeCombos closeOnSelect={false} />}
     </article>
   );
@@ -607,6 +640,8 @@ function ComboFormModal({ isOpen, combo, onClose, onSave, activeProviders, kindF
   };
 
   useEffect(() => {
+    // Modal data is fetched only while the modal is mounted open.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (isOpen) fetchModalData();
   }, [isOpen]);
 

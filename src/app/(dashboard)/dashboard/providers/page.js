@@ -151,8 +151,10 @@ export default function ProvidersPage() {
   };
 
   useEffect(() => {
+    // Initial load intentionally synchronizes remote state after mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchProviders();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // P2 scaling: group connections by provider ONCE per connections change so
   // getProviderStats is O(group) instead of O(all connections) on every call.
@@ -445,8 +447,8 @@ export default function ProvidersPage() {
           {healthFilters.map(([id, label, count, icon, type]) => {
             const active = id === "connected" || id === "disabled" ? statusFilter === id : errorClassFilter === id;
             return (
-              <button key={id} type="button" aria-pressed={active} onClick={() => { if (id === "connected" || id === "disabled") { setStatusFilter(active ? "all" : id); setErrorClassFilter("all"); } else { setErrorClassFilter(active ? "all" : id); setStatusFilter("all"); } }} className={`flex min-h-14 items-center gap-3 bg-[var(--ledger-bg)] px-4 text-left hover:bg-[var(--signal-row-bg-hover)] ${active ? "bg-[var(--signal-row-bg-selected)]" : ""}`}>
-                <StatusGlyph type={type} /><span className="min-w-0 flex-1 text-sm text-[var(--color-text-muted)]">{label}</span><span className="font-mono text-lg tabular-nums">{count}</span>
+              <button key={id} type="button" aria-pressed={active} onClick={() => { if (id === "connected" || id === "disabled") { setStatusFilter(active ? "all" : id); setErrorClassFilter("all"); } else { setErrorClassFilter(active ? "all" : id); setStatusFilter("all"); } }} className={`grid min-h-16 grid-cols-[auto_minmax(0,1fr)] grid-rows-[1fr_1fr] items-baseline gap-x-3 bg-[var(--ledger-bg)] px-4 py-2 text-left hover:bg-[var(--signal-row-bg-hover)] ${active ? "bg-[var(--signal-row-bg-selected)]" : ""}`}>
+                <span className="row-span-2 self-center"><StatusGlyph type={type} /></span><span className="self-end font-mono text-lg leading-none tabular-nums">{count}</span><span className="min-w-0 self-start truncate text-sm text-[var(--color-text-muted)]">{label}</span>
               </button>
             );
           })}
@@ -536,7 +538,11 @@ function ProviderSignalRow({ position, providerId, provider, stats, authType, on
       </Link>
       <Link href={`/dashboard/providers/${providerId}`} className="col-span-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 pl-[3.25rem] text-xs sm:col-span-1 sm:pl-0">
         <span className="inline-flex items-center gap-2"><StatusGlyph type={state} /><span>{stateLabel}</span></span>
-        <span className="font-mono tabular-nums text-[var(--color-text-muted)]">{connected} ready · {error} error · {total} total</span>
+        <span className="inline-grid grid-flow-col auto-cols-max items-baseline gap-3 text-[var(--color-text-muted)]">
+          <span className="inline-grid grid-cols-[auto_auto] items-baseline gap-1"><span className="font-mono tabular-nums text-[var(--color-text)]">{connected}</span><span>ready</span></span>
+          <span className="inline-grid grid-cols-[auto_auto] items-baseline gap-1"><span className="font-mono tabular-nums text-[var(--color-text)]">{error}</span><span>error</span></span>
+          <span className="inline-grid grid-cols-[auto_auto] items-baseline gap-1"><span className="font-mono tabular-nums text-[var(--color-text)]">{total}</span><span>total</span></span>
+        </span>
         {errorCode && <span className="font-mono text-[var(--color-danger)]">{errorCode}</span>}
         {errorTime && <span className="text-[var(--color-text-subtle)]">{errorTime}</span>}
         {isCompatible && <span className="border border-[var(--badge-border)] px-1.5 py-0.5">{provider.apiType === "responses" ? "Responses" : "Chat"}</span>}
