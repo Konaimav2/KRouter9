@@ -73,6 +73,12 @@ let writeBufferBytes = 0;
 let flushTimer = null;
 let isFlushing = false;
 
+function maskKeyRef(key) {
+  if (!key || typeof key !== "string") return null;
+  if (key.length <= 8) return key.charAt(0) + "***";
+  return key.slice(0, 8) + "***";
+}
+
 function sanitizeHeaders(headers) {
   if (!headers || typeof headers !== "object") return {};
   const sensitiveKeys = ["authorization", "x-api-key", "cookie", "token", "api-key"];
@@ -130,6 +136,14 @@ async function flushToDatabase() {
             status: item.status || null,
             latency: item.latency || {},
             tokens: item.tokens || {},
+            // F09: persist MASKED key identity only — raw keys NEVER land in
+            // the blob. A pre-masked identity (apiKeyMasked/keyName) passes
+            // through; a raw apiKey is masked at write and then dropped.
+            // Old rows without either field read back fail-open (nulls).
+            apiKeyMasked: typeof item.apiKeyMasked === "string"
+              ? item.apiKeyMasked
+              : maskKeyRef(item.apiKey),
+            keyName: typeof item.keyName === "string" ? item.keyName : undefined,
             request: truncateField(item.request, config.maxJsonSize),
             providerRequest: truncateField(item.providerRequest, config.maxJsonSize),
             providerResponse: truncateField(item.providerResponse, config.maxJsonSize),
@@ -195,6 +209,16 @@ export async function saveRequestDetail(detail) {
       flushToDatabase().catch(() => {});
     }, config.flushIntervalMs);
   }
+}
+
+/**
+ * Flush the buffered request details synchronously-ish (awaits the in-flight
+ * drain). Exposed for tests: the background flush path is timer-driven, so
+ * suites await this instead of sleeping on wall-clock time.
+ */
+export async function flushRequestDetailsForTest() {
+  if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+  await flushToDatabase();
 }
 
 export async function getRequestDetails(filter = {}) {
