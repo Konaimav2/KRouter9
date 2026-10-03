@@ -1,14 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
-import { Badge, Button, Card, CardSkeleton, Input, MaskedProxyValue, Modal, Toggle, ConfirmModal } from "@/shared/components";
+import { Button, CardSkeleton, Input, MaskedProxyValue, Modal, Toggle, ConfirmModal } from "@/shared/components";
+import Icon from "@/shared/components/Icon";
 import { useNotificationStore } from "@/store/notificationStore";
-
-function getStatusVariant(status) {
-  if (status === "active") return "success";
-  if (status === "error") return "error";
-  return "default";
-}
 
 function formatDateTime(value) {
   if (!value) return "Never";
@@ -81,7 +76,9 @@ export default function ProxyPoolsPage() {
     }
   }, []);
 
+  // Initial API synchronization intentionally updates local view state.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchProxyPools();
   }, [fetchProxyPools]);
 
@@ -330,7 +327,9 @@ export default function ProxyPoolsPage() {
   };
 
   // Cleanup selectedIds when pools change
+  // Remove selections whose backing rows disappeared after a refresh.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedIds((prev) => prev.filter((id) => proxyPools.some((p) => p.id === id)));
   }, [proxyPools]);
 
@@ -596,15 +595,15 @@ export default function ProxyPoolsPage() {
             </Button>
 
             {showRelayMenu && (
-              <div className="absolute left-0 top-full z-50 mt-1 w-48 rounded-xl border border-black/10 bg-white p-1 shadow-xl dark:border-white/10 dark:bg-zinc-900 sm:left-auto sm:right-0">
+              <div className="absolute left-0 top-full z-50 mt-1 w-48 rounded-[var(--radius-sm)] border border-border bg-[var(--color-surface-raised)] p-1 shadow-[var(--shadow-float)] sm:left-auto sm:right-0">
                 <button
                   onClick={() => {
                     openCloudflareModal();
                     setShowRelayMenu(false);
                   }}
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-text-main transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+                  className="flex w-full items-center gap-2 rounded-[var(--radius-sm)] px-3 py-2 text-sm text-text-main hover:bg-surface-2"
                 >
-                  <span className="material-symbols-outlined text-[20px] text-orange-500">cloud</span>
+                  <Icon name="cloud" size={20} />
                   Cloudflare Relay
                 </button>
                 <button
@@ -612,9 +611,9 @@ export default function ProxyPoolsPage() {
                     openVercelModal();
                     setShowRelayMenu(false);
                   }}
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-text-main transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+                  className="flex w-full items-center gap-2 rounded-[var(--radius-sm)] px-3 py-2 text-sm text-text-main hover:bg-surface-2"
                 >
-                  <span className="material-symbols-outlined text-[20px] text-blue-500">cloud_upload</span>
+                  <Icon name="cloud_upload" size={20} />
                   Vercel Relay
                 </button>
                 <button
@@ -622,9 +621,9 @@ export default function ProxyPoolsPage() {
                     openDenoModal();
                     setShowRelayMenu(false);
                   }}
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-text-main transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+                  className="flex w-full items-center gap-2 rounded-[var(--radius-sm)] px-3 py-2 text-sm text-text-main hover:bg-surface-2"
                 >
-                  <span className="material-symbols-outlined text-[20px] text-green-500">terminal</span>
+                  <Icon name="terminal" size={20} />
                   Deno Relay
                 </button>
               </div>
@@ -638,153 +637,59 @@ export default function ProxyPoolsPage() {
         </div>
       </div>
 
-      <Card>
-        <div className="mb-4 flex flex-wrap items-center gap-2">
+      <section className="ledger-band">
+        <div className="ledger-caption flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span>01 Proxy routes</span>
+            <span className="data-text">Total {proxyPools.length} · Active {activeCount}</span>
+          </div>
           {proxyPools.length > 0 && (
-            <label className="flex items-center gap-1.5 text-xs text-text-muted cursor-pointer">
-              <input
-                type="checkbox"
-                checked={allSelected}
-                onChange={toggleSelectAll}
-                className="size-4 rounded border-black/20 dark:border-white/20"
-              />
+            <label className="flex min-h-11 cursor-pointer items-center gap-2 text-xs text-text-muted">
+              <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="size-4 border-border" />
               {allSelected ? "Unselect all" : "Select all"}
             </label>
           )}
-          <Badge variant="default">Total: {proxyPools.length}</Badge>
-          <Badge variant="success">Active: {activeCount}</Badge>
         </div>
 
         {(selectedIds.length > 0 || healthChecking) && (
-          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
-            <span className="material-symbols-outlined text-[18px] text-primary">checklist</span>
-            <span className="text-xs font-medium text-primary">
-              {selectedIds.length > 0 ? `${selectedIds.length} selected` : "All pools"}
-            </span>
+          <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-3 py-2">
+            <Icon name="checklist" size={18} className="text-primary" />
+            <span className="text-xs font-medium">{selectedIds.length > 0 ? `${selectedIds.length} selected` : "All pools"}</span>
             <div className="ml-auto flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                icon={healthChecking ? "progress_activity" : "health_and_safety"}
-                onClick={handleHealthCheck}
-                disabled={healthChecking || bulkBusy || proxyPools.length === 0}
-              >
-                {healthChecking ? `Checking ${healthProgress.current}/${healthProgress.total}` : "Health Check"}
-              </Button>
-              {selectedIds.length > 0 && (
-                <>
-                  <Button size="sm" variant="secondary" icon="toggle_on" onClick={() => bulkSetActive(true)} disabled={bulkBusy || healthChecking}>
-                    Activate
-                  </Button>
-                  <Button size="sm" variant="secondary" icon="toggle_off" onClick={() => bulkSetActive(false)} disabled={bulkBusy || healthChecking}>
-                    Deactivate
-                  </Button>
-                  <Button size="sm" variant="secondary" icon="delete" onClick={bulkDelete} disabled={bulkBusy || healthChecking}>
-                    Delete
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={clearSelection} disabled={bulkBusy || healthChecking}>
-                    Clear
-                  </Button>
-                </>
-              )}
+              <Button size="sm" icon={healthChecking ? "progress_activity" : "health_and_safety"} onClick={handleHealthCheck} disabled={healthChecking || bulkBusy || proxyPools.length === 0}>{healthChecking ? `Checking ${healthProgress.current}/${healthProgress.total}` : "Health Check"}</Button>
+              {selectedIds.length > 0 && <><Button size="sm" variant="secondary" icon="toggle_on" onClick={() => bulkSetActive(true)} disabled={bulkBusy || healthChecking}>Activate</Button><Button size="sm" variant="secondary" icon="toggle_off" onClick={() => bulkSetActive(false)} disabled={bulkBusy || healthChecking}>Deactivate</Button><Button size="sm" variant="secondary" icon="delete" onClick={bulkDelete} disabled={bulkBusy || healthChecking}>Delete</Button><Button size="sm" variant="ghost" onClick={clearSelection} disabled={bulkBusy || healthChecking}>Clear</Button></>}
             </div>
           </div>
         )}
 
         {proxyPools.length === 0 ? (
-          <div className="text-center py-10">
-            <p className="text-text-main font-medium mb-1">No proxy pool entries yet</p>
-            <p className="text-sm text-text-muted mb-4">
-              Create a proxy pool entry, then assign it to connections.
-            </p>
+          <div className="signal-row flex flex-wrap items-center justify-between gap-3 px-3 py-5">
+            <div><p className="font-medium">No proxy pool entries yet</p><p className="text-sm text-text-muted">Create a proxy pool entry, then assign it to connections.</p></div>
             <Button icon="add" onClick={openCreateModal}>Add Proxy Pool</Button>
           </div>
-        ) : (
-          <div className="flex flex-col divide-y divide-black/[0.04] dark:divide-white/[0.05]">
-            {proxyPools.map((pool) => (
-              <div key={pool.id} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-start gap-3 min-w-0 flex-1">
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.includes(pool.id)}
-                    onChange={() => toggleSelect(pool.id)}
-                    className="mt-1 size-4 shrink-0 rounded border-black/20 dark:border-white/20"
-                  />
-                  <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="min-w-0 max-w-full truncate text-sm font-medium sm:max-w-[18rem]">{pool.name}</p>
-                    <Badge variant={getStatusVariant(pool.testStatus)} size="sm" dot>
-                      {pool.testStatus || "unknown"}
-                    </Badge>
-                    <Badge variant={pool.isActive ? "success" : "default"} size="sm">
-                      {pool.isActive ? "active" : "inactive"}
-                    </Badge>
-                    {pool.type === "vercel" && (
-                      <Badge variant="default" size="sm">vercel relay</Badge>
-                    )}
-                    {pool.type === "cloudflare" && (
-                      <Badge variant="default" size="sm">cloudflare relay</Badge>
-                    )}
-                    <Badge variant="default" size="sm">
-                      {pool.boundConnectionCount || 0} bound
-                    </Badge>
-                  </div>
-                  <div className="mt-1 min-w-0 text-xs text-text-muted">
-                    <MaskedProxyValue
-                      masked={pool.proxyUrlMasked || "***"}
-                      revealUrl={`/api/proxy-pools/${pool.id}/reveal`}
-                      hasAuth={pool.hasProxyAuth === true}
-                    />
-                  </div>
-                  {pool.noProxy ? (
-                    <p className="text-xs text-text-muted truncate">No proxy: {pool.noProxy}</p>
-                  ) : null}
-                  <p className="text-[11px] text-text-muted mt-1">
-                    Last tested: {formatDateTime(pool.lastTestedAt)}
-                    {pool.lastError ? ` · ${pool.lastError}` : ""}
-                  </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-end gap-1">
-                  <Toggle
-                    size="sm"
-                    checked={pool.isActive === true}
-                    onChange={() => handleToggleActive(pool)}
-                    title={pool.isActive ? "Disable" : "Enable"}
-                  />
-                  <button
-                    onClick={() => handleTest(pool.id)}
-                    className="p-2 rounded hover:bg-black/5 dark:hover:bg-white/5 text-text-muted hover:text-primary"
-                    title="Test proxy"
-                    disabled={testingId === pool.id}
-                  >
-                    <span
-                      className="material-symbols-outlined text-[18px]"
-                      style={testingId === pool.id ? { animation: "spin 1s linear infinite" } : undefined}
-                    >
-                      {testingId === pool.id ? "progress_activity" : "science"}
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => openEditModal(pool)}
-                    className="p-2 rounded hover:bg-black/5 dark:hover:bg-white/5 text-text-muted hover:text-primary"
-                    title="Edit"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">edit</span>
-                  </button>
-                  <button
-                    onClick={() => handleDelete(pool)}
-                    className="p-2 rounded hover:bg-red-500/10 text-red-500"
-                    title="Delete"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">delete</span>
-                  </button>
-                </div>
+        ) : proxyPools.map((pool, index) => {
+          const status = pool.testStatus || "unknown";
+          const statusTone = status === "active" ? "text-success" : status === "error" ? "text-danger" : "text-text-muted";
+          const statusGlyph = status === "active" ? "●" : status === "error" ? "■" : "○";
+          return (
+            <div key={pool.id} className="signal-row grid grid-cols-[auto_2rem_minmax(0,1fr)] items-start gap-3 px-3 py-3 sm:grid-cols-[auto_2rem_minmax(0,1fr)_auto]">
+              <input type="checkbox" checked={selectedIds.includes(pool.id)} onChange={() => toggleSelect(pool.id)} className="mt-1 size-4 border-border" aria-label={`Select ${pool.name}`} />
+              <span className="ledger-number">{String(index + 1).padStart(2, "0")}</span>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1"><p className="truncate text-sm font-medium">{pool.name}</p><span className={`inline-flex items-center gap-1 text-xs ${statusTone}`}><span aria-hidden="true">{statusGlyph}</span>{status}</span><span className={pool.isActive ? "text-success text-xs" : "text-text-muted text-xs"}>{pool.isActive ? "● Active" : "Ⅱ Inactive"}</span></div>
+                <div className="mt-1 text-xs text-text-muted"><MaskedProxyValue masked={pool.proxyUrlMasked || "***"} revealUrl={`/api/proxy-pools/${pool.id}/reveal`} hasAuth={pool.hasProxyAuth === true} /></div>
+                <div className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-text-muted"><span>{pool.noProxy ? `No proxy: ${pool.noProxy}` : "No proxy: none"}</span>{pool.type && <span>{pool.type} relay</span>}<span>{pool.boundConnectionCount || 0} bound</span><span>Last tested: {formatDateTime(pool.lastTestedAt)}</span>{pool.lastError && <span className="text-danger">■ {pool.lastError}</span>}</div>
               </div>
-            ))}
-          </div>
-        )}
-      </Card>
+              <div className="col-span-3 flex min-h-11 items-center justify-end gap-1 sm:col-span-1">
+                <Toggle size="sm" checked={pool.isActive === true} onChange={() => handleToggleActive(pool)} title={pool.isActive ? "Disable" : "Enable"} />
+                <button onClick={() => handleTest(pool.id)} className="flex size-11 items-center justify-center text-text-muted hover:text-primary" title="Test proxy" disabled={testingId === pool.id}><Icon name={testingId === pool.id ? "progress_activity" : "science"} size={18} /></button>
+                <button onClick={() => openEditModal(pool)} className="flex size-11 items-center justify-center text-text-muted hover:text-primary" title="Edit"><Icon name="edit" size={18} /></button>
+                <button onClick={() => handleDelete(pool)} className="flex size-11 items-center justify-center text-danger" title="Delete"><Icon name="delete" size={18} /></button>
+              </div>
+            </div>
+          );
+        })}
+      </section>
 
       <Modal
         isOpen={showBatchImportModal}
@@ -1048,7 +953,7 @@ export default function ProxyPoolsPage() {
             <Button
               fullWidth
               onClick={handleSave}
-              disabled={!formData.name.trim() || !formData.proxyUrl.trim() || saving}
+              disabled={!formData.name.trim() || (!editingProxyPool && !formData.proxyUrl.trim()) || saving}
             >
               {saving ? "Saving..." : "Save"}
             </Button>

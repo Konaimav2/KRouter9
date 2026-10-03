@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Card, Button, Input, Modal, Toggle, ConfirmModal } from "@/shared/components";
+import { Button, Input, Modal, Toggle, ConfirmModal } from "@/shared/components";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import { getCurrentLocale, onLocaleChange } from "@/i18n/runtime";
 import {
@@ -62,24 +62,6 @@ export default function TokenSaverClient() {
 
   const { copied, copy } = useCopyToClipboard();
 
-  useEffect(() => {
-    setLocale(getCurrentLocale());
-    return onLocaleChange(() => setLocale(getCurrentLocale()));
-  }, []);
-
-  const isWenyanLocale = WENYAN_LOCALES.includes(locale);
-  const visibleCavemanLevels = isWenyanLocale
-    ? CAVEMAN_LEVELS
-    : CAVEMAN_LEVELS.filter((lvl) => !lvl.wenyan);
-
-  useEffect(() => {
-    const current = CAVEMAN_LEVELS.find((lvl) => lvl.id === cavemanLevel);
-    if (current?.wenyan && !isWenyanLocale) {
-      setCavemanLevel("ultra");
-      patchSetting({ cavemanLevel: "ultra" });
-    }
-  }, [isWenyanLocale, cavemanLevel]);
-
   const patchSetting = async (patch) => {
     try {
       await fetch("/api/settings", {
@@ -91,6 +73,28 @@ export default function TokenSaverClient() {
       console.log("Error updating setting:", error);
     }
   };
+
+  // Locale synchronization intentionally updates local presentation state.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLocale(getCurrentLocale());
+    return onLocaleChange(() => setLocale(getCurrentLocale()));
+  }, []);
+
+  const isWenyanLocale = WENYAN_LOCALES.includes(locale);
+  const visibleCavemanLevels = isWenyanLocale
+    ? CAVEMAN_LEVELS
+    : CAVEMAN_LEVELS.filter((lvl) => !lvl.wenyan);
+
+  // Leaving a Wenyan locale restores the supported non-Wenyan level.
+  useEffect(() => {
+    const current = CAVEMAN_LEVELS.find((lvl) => lvl.id === cavemanLevel);
+    if (current?.wenyan && !isWenyanLocale) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setCavemanLevel("ultra");
+      patchSetting({ cavemanLevel: "ultra" });
+    }
+  }, [isWenyanLocale, cavemanLevel]);
 
   const handleRtkEnabled = async (value) => {
     try {
@@ -478,324 +482,57 @@ export default function TokenSaverClient() {
 
   return (
     <div className="space-y-6 p-6">
-      <Card id="rtk">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary">
-              bolt
-            </span>
-            Token Saver
-          </h2>
+      <section id="rtk" className="ledger-band">
+        <div className="ledger-caption flex flex-wrap items-center justify-between gap-3">
+          <span>01 Compression pipeline</span>
+          <span className="data-text">{[rtkEnabled, headroomEnabled, cavemanEnabled, ponytailEnabled].filter(Boolean).length} of 4 stages enabled</span>
         </div>
-        <div className="flex items-center justify-between pt-2 pb-4 border-b border-border gap-4">
-          <div className="min-w-0 flex-1">
-            <p className="font-medium">
-              Compress tool output{" "}
-              <a
-                href="https://github.com/rtk-ai/rtk"
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs font-normal text-primary underline hover:opacity-80"
-              >
-                (RTK)
-              </a>
-            </p>
-            <p className="text-sm text-text-muted">
-              git/grep/ls/tree/logs → 60-90% fewer input tokens
-            </p>
-          </div>
-          <Toggle
-            checked={rtkEnabled}
-            onChange={() => handleRtkEnabled(!rtkEnabled)}
-          />
+
+        <div className="signal-row grid gap-3 px-3 py-4 sm:grid-cols-[2rem_minmax(0,1fr)_auto] sm:items-center">
+          <span className="ledger-number">01</span>
+          <div><p className="font-medium">Tool output · <a href="https://github.com/rtk-ai/rtk" target="_blank" rel="noreferrer" className="text-primary underline">RTK</a></p><p className="text-sm text-text-muted">git/grep/ls/tree/logs → 60-90% fewer input tokens</p><p className={rtkEnabled ? "text-xs text-success" : "text-xs text-text-muted"}>{rtkEnabled ? "● Enabled" : "Ⅱ Disabled"}</p></div>
+          <Toggle checked={rtkEnabled} onChange={() => handleRtkEnabled(!rtkEnabled)} />
         </div>
-        <div className="flex items-center justify-between py-4 gap-4 flex-wrap">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-3 flex-wrap">
-              <p className="font-medium">
-                Compress context{" "}
-                <a
-                  href="https://github.com/chopratejas/headroom"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs font-normal text-primary underline hover:opacity-80"
-                >
-                  (Headroom)
-                </a>
-              </p>
-              <span
-                className={`text-xs px-2 py-0.5 rounded ${headroomRunning ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}
-              >
-                {headroomStatusLabel}
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowHeadroomInstallModal(true)}
-                className="text-xs text-primary underline hover:opacity-80"
-              >
-                {headroomRunning ? "Manage" : "Setup"}
-              </button>
-            </div>
-            <p className="text-sm text-text-muted mt-1">
-              Compress prompts via /v1/compress before routing to the model
-            </p>
-          </div>
-          <Toggle
-            checked={headroomEnabled}
-            onChange={() => handleHeadroomEnabled(!headroomEnabled)}
-          />
+
+        <div className="signal-row grid gap-3 px-3 py-4 sm:grid-cols-[2rem_minmax(0,1fr)_auto] sm:items-center">
+          <span className="ledger-number">02</span>
+          <div><div className="flex flex-wrap items-center gap-3"><p className="font-medium">Context · <a href="https://github.com/chopratejas/headroom" target="_blank" rel="noreferrer" className="text-primary underline">Headroom</a></p><span className={`inline-flex items-center gap-1 text-xs ${headroomRunning ? "text-success" : headroomStatus.loading ? "text-text-muted" : "text-warning"}`}>{headroomRunning ? "●" : headroomStatus.loading ? "○" : headroomStatus.installed ? "Ⅱ" : "◇"} {headroomStatusLabel}</span><button type="button" onClick={() => setShowHeadroomInstallModal(true)} className="text-xs text-primary underline">{headroomRunning ? "Manage" : "Setup"}</button></div><p className="text-sm text-text-muted">Compress prompts via /v1/compress before routing to the model</p></div>
+          <Toggle checked={headroomEnabled} onChange={() => handleHeadroomEnabled(!headroomEnabled)} />
         </div>
         {headroomStatus.installed && (
-          <div className="mb-3 ml-1 pl-3 pb-4 border-l-2 border-border">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs text-text-muted">
-                Compression extras
-                {headroomExtras.version ? ` · v${headroomExtras.version}` : ""}:
-              </span>
-              {headroomExtras.available.map((extra) => {
-                const installed = !!headroomExtras.extras[extra];
-                const pending = pendingExtras.includes(extra);
-                const extraTitle =
-                  extra === "code"
-                    ? "tree-sitter AST compression for code responses"
-                    : "Kompress-v2 HF model for prose/agentic traces (~+1GB)";
-
-                if (installed) {
-                  const active = extra === "code" ? codeAware : kompress;
-                  return (
-                    <div
-                      key={extra}
-                      className="flex items-center gap-1.5 text-xs px-2 py-1 rounded border border-success/40 bg-success/5 text-text"
-                      title={extraTitle}
-                    >
-                      <Toggle
-                        size="sm"
-                        checked={active}
-                        disabled={restartingProxy}
-                        onChange={() => toggleExtraActive(extra, !active)}
-                      />
-                      <span className="font-medium">[{extra}]</span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveExtra(extra)}
-                        disabled={removingExtra === extra}
-                        className="ml-1 text-error underline hover:opacity-80 disabled:opacity-50"
-                        title={`Uninstall [${extra}]`}
-                      >
-                        {removingExtra === extra ? "Uninstalling…" : "Uninstall"}
-                      </button>
-                    </div>
-                  );
-                }
-
-                return (
-                  <label
-                    key={extra}
-                    className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded border cursor-pointer transition-colors ${
-                      pending
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border text-text-muted hover:bg-surface-2"
-                    }`}
-                    title={extraTitle}
-                  >
-                    <input
-                      type="checkbox"
-                      className="w-3 h-3"
-                      checked={pending}
-                      onChange={() => togglePendingExtra(extra)}
-                    />
-                    <span className="font-medium">[{extra}]</span>
-                    <span className="opacity-70">not installed</span>
-                  </label>
-                );
-              })}
-              {pendingExtras.length > 0 && (
-                <button
-                  onClick={handleInstallExtras}
-                  disabled={extrasActionLoading}
-                  className="text-xs px-2.5 py-1 rounded bg-primary text-white hover:opacity-90 disabled:opacity-50"
-                >
-                  {extrasActionLoading
-                    ? "Installing…"
-                    : `Install [proxy,${pendingExtras.join(",")}]`}
-                </button>
-              )}
-            </div>
-            {extrasActionError && (
-              <p className="text-xs text-error mt-1">{extrasActionError}</p>
-            )}
-            {restartingProxy && (
-              <p className="text-xs text-text-muted mt-1">Restarting proxy…</p>
-            )}
-            {(extrasActionLoading || removingExtra) && installLog && (
-              <pre className="mt-2 max-h-32 overflow-auto rounded bg-surface-2 p-2 text-[10px] leading-tight text-text-muted whitespace-pre-wrap">
-                {installLog}
-              </pre>
-            )}
-            <p className="text-xs text-text-muted mt-1">
-              Installing adds the package; use <code>on</code>/<code>off</code>{" "}
-              to activate it (restarts the proxy). Default install is{" "}
-              <code>[proxy]</code> only (SmartCrusher for JSON). Adding{" "}
-              <code>[code]</code> enables AST compression
-              (Python/JS/TS/Go/Rust/Java/C/C++/Perl). Adding <code>[ml]</code>{" "}
-              enables the Kompress-v2 HF model for prose/agentic traces but
-              adds ~1 GB (torch + huggingface-hub).
-            </p>
+          <div className="border-b border-border bg-surface-2 px-3 py-3 sm:pl-14">
+            <p className="mb-2 text-xs text-text-muted">Compression extras{headroomExtras.version ? ` · v${headroomExtras.version}` : ""}</p>
+            {headroomExtras.available.map((extra) => {
+              const installed = !!headroomExtras.extras[extra]; const pending = pendingExtras.includes(extra); const active = extra === "code" ? codeAware : kompress;
+              return <div key={extra} className="signal-row flex flex-wrap items-center gap-3 py-2 text-xs"><code className="font-medium">[{extra}]</code><span className={installed ? "text-success" : "text-text-muted"}>{installed ? "● Installed" : "◇ Not installed"}</span>{installed ? <><span>{active ? "● Active" : "Ⅱ Inactive"}</span><Toggle size="sm" checked={active} disabled={restartingProxy} onChange={() => toggleExtraActive(extra, !active)} /><button type="button" onClick={() => handleRemoveExtra(extra)} disabled={removingExtra === extra} className="text-danger underline">{removingExtra === extra ? "Uninstalling…" : "Uninstall"}</button></> : <label className="flex items-center gap-2"><input type="checkbox" checked={pending} onChange={() => togglePendingExtra(extra)} /> Select to install</label>}</div>;
+            })}
+            {pendingExtras.length > 0 && <Button size="sm" onClick={handleInstallExtras} disabled={extrasActionLoading}>{extrasActionLoading ? "Installing…" : `Install [proxy,${pendingExtras.join(",")}]`}</Button>}
+            {extrasActionError && <p className="mt-2 text-xs text-danger">■ {extrasActionError}</p>}{restartingProxy && <p className="mt-2 text-xs text-text-muted">○ Restarting proxy…</p>}
+            {(extrasActionLoading || removingExtra) && installLog && <pre className="mt-2 max-h-32 overflow-auto bg-[var(--color-code-bg)] p-2 text-[10px] leading-tight text-text-muted whitespace-pre-wrap">{installLog}</pre>}
+            <p className="mt-2 text-xs text-text-muted">Installing adds the package; use <code>on</code>/<code>off</code> to activate it (restarts the proxy). Default install is <code>[proxy]</code> only (SmartCrusher for JSON). Adding <code>[code]</code> enables AST compression (Python/JS/TS/Go/Rust/Java/C/C++/Perl). Adding <code>[ml]</code> enables the Kompress-v2 HF model for prose/agentic traces but adds ~1 GB (torch + huggingface-hub).</p>
           </div>
         )}
-        <div className="flex items-center justify-between pt-4 border-t border-border gap-4 flex-wrap">
-          <div className="min-w-0 flex-1">
-            <p className="font-medium">
-              Compress LLM output{" "}
-              <a
-                href="https://github.com/JuliusBrussee/caveman"
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs font-normal text-primary underline hover:opacity-80"
-              >
-                (Caveman)
-              </a>
-            </p>
-            <p className="text-sm text-text-muted">
-              Terse-style system prompt → ~65% fewer output tokens (up to 87%)
-            </p>
-          </div>
-          <div className="flex items-center gap-3 shrink-0">
-            {cavemanEnabled && (
-              <div className="flex flex-col items-end gap-1">
-                <div className="flex items-center gap-1.5">
-                  {visibleCavemanLevels.map((lvl) => (
-                    <button
-                      key={lvl.id}
-                      onClick={() => handleCavemanLevel(lvl.id)}
-                      className={`px-3 py-1.5 rounded text-xs font-medium border transition-colors ${
-                        cavemanLevel === lvl.id
-                          ? "bg-primary text-white border-primary"
-                          : "bg-transparent border-border text-text-muted hover:bg-surface-2"
-                      }`}
-                      title={lvl.desc}
-                    >
-                      {lvl.label}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-xs text-primary">
-                  {
-                    CAVEMAN_LEVELS.find((lvl) => lvl.id === cavemanLevel)
-                      ?.desc
-                  }
-                </p>
-              </div>
-            )}
-            <Toggle
-              checked={cavemanEnabled}
-              onChange={() => handleCavemanEnabled(!cavemanEnabled)}
-            />
-          </div>
+
+        <div className="signal-row grid gap-3 px-3 py-4 sm:grid-cols-[2rem_minmax(0,1fr)_auto] sm:items-center">
+          <span className="ledger-number">03</span>
+          <div><p className="font-medium">LLM output · <a href="https://github.com/JuliusBrussee/caveman" target="_blank" rel="noreferrer" className="text-primary underline">Caveman</a></p><p className="text-sm text-text-muted">Terse-style system prompt → ~65% fewer output tokens (up to 87%)</p><p className={cavemanEnabled ? "text-xs text-success" : "text-xs text-text-muted"}>{cavemanEnabled ? "● Enabled" : "Ⅱ Disabled"}</p></div><Toggle checked={cavemanEnabled} onChange={() => handleCavemanEnabled(!cavemanEnabled)} />
         </div>
-        <div className="flex items-center justify-between pt-4 mt-4 border-t border-border gap-4 flex-wrap">
-          <div className="min-w-0 flex-1">
-            <p className="font-medium">
-              Lazy senior dev{" "}
-              <a
-                href="https://github.com/DietrichGebert/ponytail"
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs font-normal text-primary underline hover:opacity-80"
-              >
-                (Ponytail)
-              </a>
-            </p>
-            <p className="text-sm text-text-muted">
-              Bias the model toward minimal code: YAGNI, reuse stdlib,
-              deletion over addition
-            </p>
-          </div>
-          <div className="flex items-center gap-3 shrink-0">
-            {ponytailEnabled && (
-              <div className="flex flex-col items-end gap-1">
-                <div className="flex items-center gap-1.5">
-                  {PONYTAIL_LEVELS.map((lvl) => (
-                    <button
-                      key={lvl.id}
-                      onClick={() => handlePonytailLevel(lvl.id)}
-                      className={`px-3 py-1.5 rounded text-xs font-medium border transition-colors ${
-                        ponytailLevel === lvl.id
-                          ? "bg-primary text-white border-primary"
-                          : "bg-transparent border-border text-text-muted hover:bg-surface-2"
-                      }`}
-                      title={lvl.desc}
-                    >
-                      {lvl.label}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-xs text-primary">
-                  {
-                    PONYTAIL_LEVELS.find((lvl) => lvl.id === ponytailLevel)
-                      ?.desc
-                  }
-                </p>
-              </div>
-            )}
-            <Toggle
-              checked={ponytailEnabled}
-              onChange={() => handlePonytailEnabled(!ponytailEnabled)}
-            />
-          </div>
+        {cavemanEnabled && <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-3 py-3 sm:pl-14"><span className="text-xs font-medium">Level</span>{visibleCavemanLevels.map((lvl) => <button key={lvl.id} onClick={() => handleCavemanLevel(lvl.id)} aria-pressed={cavemanLevel === lvl.id} className={`border px-3 py-2 text-xs font-medium ${cavemanLevel === lvl.id ? "border-primary bg-primary text-white" : "border-border text-text-muted"}`} title={lvl.desc}>{lvl.label}</button>)}<span className="text-xs text-primary">{CAVEMAN_LEVELS.find((lvl) => lvl.id === cavemanLevel)?.desc}</span></div>}
+
+        <div className="signal-row grid gap-3 px-3 py-4 sm:grid-cols-[2rem_minmax(0,1fr)_auto] sm:items-center">
+          <span className="ledger-number">04</span>
+          <div><p className="font-medium">Coding posture · <a href="https://github.com/DietrichGebert/ponytail" target="_blank" rel="noreferrer" className="text-primary underline">Ponytail</a></p><p className="text-sm text-text-muted">Bias the model toward minimal code: YAGNI, reuse stdlib, deletion over addition</p><p className={ponytailEnabled ? "text-xs text-success" : "text-xs text-text-muted"}>{ponytailEnabled ? "● Enabled" : "Ⅱ Disabled"}</p></div><Toggle checked={ponytailEnabled} onChange={() => handlePonytailEnabled(!ponytailEnabled)} />
         </div>
-        {/* PXPIPE hidden from UI — experimental, not exposed to users yet */}
-        {false && (
-        <div className="flex items-center justify-between pt-4 mt-4 border-t border-border gap-4 flex-wrap">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-3 flex-wrap">
-              <p className="font-medium">
-                Compress prompts as images{" "}
-                <a
-                  href="https://github.com/teamchong/pxpipe"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs font-normal text-primary underline hover:opacity-80"
-                >
-                  (PXPIPE)
-                </a>
-              </p>
-              <span className={`text-xs px-2 py-0.5 rounded ${pxpipeChipClass}`}>
-                {pxpipeStatusLabel}
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowPxpipeModal(true)}
-                className="text-xs text-primary underline hover:opacity-80"
-              >
-                {pxpipeStatus.installed ? "Manage" : "Setup"}
-              </button>
-              <a
-                href="/dashboard/pxpipe"
-                className="text-xs text-primary underline hover:opacity-80"
-              >
-                Dashboard
-              </a>
-            </div>
-            <p className="text-sm text-text-muted mt-1">
-              Transforms large textual context into optimized images before
-              sending to the LLM. Ideal for huge prompts, tool outputs and long
-              conversations.
-            </p>
-          </div>
-          <Toggle
-            checked={pxpipeEnabled}
-            disabled={!pxpipeStatus.installed}
-            onChange={() => handlePxpipeEnabled(!pxpipeEnabled)}
-          />
-        </div>
-        )}
-      </Card>
+        {ponytailEnabled && <div className="flex flex-wrap items-center gap-2 bg-surface-2 px-3 py-3 sm:pl-14"><span className="text-xs font-medium">Level</span>{PONYTAIL_LEVELS.map((lvl) => <button key={lvl.id} onClick={() => handlePonytailLevel(lvl.id)} aria-pressed={ponytailLevel === lvl.id} className={`border px-3 py-2 text-xs font-medium ${ponytailLevel === lvl.id ? "border-primary bg-primary text-white" : "border-border text-text-muted"}`} title={lvl.desc}>{lvl.label}</button>)}<span className="text-xs text-primary">{PONYTAIL_LEVELS.find((lvl) => lvl.id === ponytailLevel)?.desc}</span></div>}
+        {/* PXPIPE remains intentionally hidden while experimental. */}
+      </section>
 
       <Modal
         isOpen={showHeadroomInstallModal}
         title={headroomRunning ? "Headroom" : "Setup Headroom"}
+        operationLabel={headroomRunning ? "MANAGE" : "SETUP"}
         onClose={() => setShowHeadroomInstallModal(false)}
+        footer={<><Button onClick={() => refreshHeadroomStatus()} variant="secondary">Recheck</Button><Button onClick={() => setShowHeadroomInstallModal(false)}>Done</Button></>}
       >
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between text-sm">
@@ -895,21 +632,6 @@ export default function TokenSaverClient() {
           {headroomActionError && (
             <p className="text-sm text-warning">{headroomActionError}</p>
           )}
-          <div className="flex gap-2">
-            <Button
-              onClick={() => refreshHeadroomStatus()}
-              variant="ghost"
-              fullWidth
-            >
-              Recheck
-            </Button>
-            <Button
-              onClick={() => setShowHeadroomInstallModal(false)}
-              fullWidth
-            >
-              Done
-            </Button>
-          </div>
         </div>
       </Modal>
 

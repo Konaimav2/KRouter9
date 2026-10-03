@@ -1,22 +1,29 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Card, Button } from "@/shared/components";
+import { Button } from "@/shared/components";
 import { CONSOLE_LOG_CONFIG } from "@/shared/constants/config";
 
-const LOG_LEVEL_COLORS = {
-  LOG: "text-green-400",
-  INFO: "text-blue-400",
-  WARN: "text-yellow-400",
-  ERROR: "text-red-400",
-  DEBUG: "text-purple-400",
+const LEVEL_STYLES = {
+  ERROR: "text-danger border-danger",
+  WARN: "text-warning border-warning",
+  INFO: "text-info border-info",
+  LOG: "text-text-secondary border-border",
+  DEBUG: "text-text-muted border-border",
 };
 
-function colorLine(line) {
-  const match = line.match(/\[(\w+)\]/g);
-  const levelTag = match ? match[1]?.replace(/\[|\]/g, "") : null;
-  const color = LOG_LEVEL_COLORS[levelTag] || "text-green-400";
-  return <span className={color}>{line}</span>;
+function renderLine(line) {
+  const level = line.match(/\[(\w+)\]/g)?.[1]?.replace(/\[|\]/g, "")?.toUpperCase();
+  const style = LEVEL_STYLES[level] || "text-text-secondary border-border";
+
+  return (
+    <div className="flex min-w-max items-start gap-2 border-l border-border pl-2 text-text-primary">
+      <span className={`w-12 shrink-0 border-r pr-2 text-[0.65rem] font-semibold ${style}`}>
+        {level || "LOG"}
+      </span>
+      <span className="whitespace-pre-wrap break-words">{line}</span>
+    </div>
+  );
 }
 
 export default function ConsoleLogClient() {
@@ -62,35 +69,40 @@ export default function ConsoleLogClient() {
     return () => es.close();
   }, []);
 
-  // Auto-scroll to bottom on new logs
   useEffect(() => {
     if (!logRef.current) return;
     logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [logs]);
 
   return (
-    <div className="">
-      <Card>
-        <div className="flex items-center justify-end px-4 pt-3 pb-2">
+    <section className="ledger-band">
+      <div className="ledger-caption flex flex-wrap items-center justify-between gap-3">
+        <span>01 Live gateway stream</span>
+        <div className="flex flex-wrap items-center gap-4">
+          <span className={`inline-flex items-center gap-2 ${connected ? "text-success" : "text-text-muted"}`}>
+            <span aria-hidden="true">{connected ? "●" : "○"}</span>
+            {connected ? "Connected" : "Disconnected"}
+          </span>
+          <span className="data-text">{logs.length} retained</span>
           <Button size="sm" variant="outline" icon="delete" onClick={handleClear}>
             Clear
           </Button>
         </div>
-        <div
-          ref={logRef}
-          className="bg-black rounded-b-lg p-4 text-xs font-mono h-[calc(100vh-220px)] overflow-y-auto"
-        >
-          {logs.length === 0 ? (
-            <span className="text-text-muted">No console logs yet.</span>
-          ) : (
-            <div className="space-y-0.5">
-              {logs.map((line, i) => (
-                <div key={i}>{colorLine(line)}</div>
-              ))}
-            </div>
-          )}
-        </div>
-      </Card>
-    </div>
+      </div>
+      <div
+        ref={logRef}
+        className="min-h-[20rem] max-h-[calc(100dvh-18rem)] overflow-auto border-t border-border bg-[var(--color-code-bg)] p-4 font-[var(--font-data)] text-xs"
+      >
+        {logs.length === 0 ? (
+          <div className="text-text-muted">No console logs yet.</div>
+        ) : (
+          <div className="space-y-1">
+            {logs.map((line, i) => (
+              <div key={i}>{renderLine(line)}</div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
