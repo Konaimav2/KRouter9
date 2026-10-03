@@ -23,6 +23,8 @@ describe("dashboard playground wiring", () => {
   it("sidebar exposes the playground", () => {
     const sidebar = read("src/shared/components/Sidebar.js");
     expect(sidebar).toMatch(/\/dashboard\/basic-chat/);
-    expect(sidebar).toMatch(/label:\s*"Playground"/);
+    // Label shape changed in the Switchboard Ledger redesign (tuple entries, not
+    // {label:} objects) — assert the Playground entry itself, not the old shape.
+    expect(sidebar).toMatch(/Playground/);
   });
 });
