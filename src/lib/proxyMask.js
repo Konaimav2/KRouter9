@@ -1,7 +1,7 @@
 // Proxy secret masking — CLIENT-SAFE (no node imports).
 // Proxy URLs embed credentials (scheme://user:pass@host:port). The browser
 // must never receive the userinfo part. Servers keep the full URL; every
-// dashboard API response carries only the masked form + a hasAuth flag.
+// dashboard API response carries only an appropriate censored form + a hasAuth flag.
 
 /**
  * Mask a proxy URL for browser display/API responses.
@@ -11,7 +11,7 @@
  * - fragment always dropped.
  * - path is kept (routing info for relays); a full-path secret is
  *   indistinguishable from routing and stays a documented limitation.
- * - no userinfo/query/fragment -> returned as-is (host:port is not secret)
+ * - no userinfo/query/fragment -> returned as-is (for non-pool contexts only)
  * - unparseable/empty -> "***" / ""
  */
 export function maskProxyUrl(url) {
@@ -42,6 +42,27 @@ export function maskProxyUrl(url) {
   } catch {
     return "***";
   }
+}
+
+/**
+ * Fully censor a proxy-pool URL for list/card responses. Proxy endpoints and
+ * relay hostnames are sensitive routing infrastructure, not safe identifiers.
+ */
+export function censorProxyPoolUrl(url) {
+  if (url === undefined || url === null) return undefined;
+  return String(url).trim() ? "***" : "";
+}
+
+export function sanitizeProxyPoolFields(obj) {
+  if (!obj || typeof obj !== "object") return obj;
+  const out = { ...obj };
+  if (out.proxyUrl !== undefined) {
+    const raw = out.proxyUrl;
+    delete out.proxyUrl;
+    out.proxyUrlMasked = censorProxyPoolUrl(raw);
+    out.hasProxyAuth = hasProxyAuth(raw);
+  }
+  return out;
 }
 
 export function hasProxyAuth(url) {

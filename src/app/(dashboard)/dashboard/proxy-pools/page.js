@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
-import { Badge, Button, Card, CardSkeleton, Input, Modal, Toggle, ConfirmModal } from "@/shared/components";
+import { Badge, Button, Card, CardSkeleton, Input, MaskedProxyValue, Modal, Toggle, ConfirmModal } from "@/shared/components";
 import { useNotificationStore } from "@/store/notificationStore";
 
 function getStatusVariant(status) {
@@ -728,7 +728,13 @@ export default function ProxyPoolsPage() {
                       {pool.boundConnectionCount || 0} bound
                     </Badge>
                   </div>
-                  <p className="text-xs text-text-muted truncate mt-1" title={pool.hasProxyAuth ? "Credentials hidden — edit the pool to replace the URL" : undefined}>{pool.proxyUrlMasked || ""}{pool.hasProxyAuth ? " · auth hidden" : ""}</p>
+                  <div className="mt-1 min-w-0 text-xs text-text-muted">
+                    <MaskedProxyValue
+                      masked={pool.proxyUrlMasked || "***"}
+                      revealUrl={`/api/proxy-pools/${pool.id}/reveal`}
+                      hasAuth={pool.hasProxyAuth === true}
+                    />
+                  </div>
                   {pool.noProxy ? (
                     <p className="text-xs text-text-muted truncate">No proxy: {pool.noProxy}</p>
                   ) : null}
@@ -897,7 +903,7 @@ export default function ProxyPoolsPage() {
             value={cloudflareForm.apiToken}
             onChange={(e) => setCloudflareForm((prev) => ({ ...prev, apiToken: e.target.value }))}
             placeholder="your-cloudflare-api-token"
-            hint={<>Requires "Workers Scripts: Edit" permission. <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Get token →</a></>}
+            hint={<>Requires &quot;Workers Scripts: Edit&quot; permission. <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Get token →</a></>}
             type="password"
           />
           <Input
