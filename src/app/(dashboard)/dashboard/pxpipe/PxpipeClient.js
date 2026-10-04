@@ -1,283 +1,86 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
-import { Card, Button } from "@/shared/components";
+import { Activity, ArrowUpRight, CheckCircle2, CircleDashed, Clock3, Gauge, ImageIcon, RefreshCw } from "lucide-react";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { Button } from "@/shared/components";
 
 const fmtTokens = (n) => {
   if (n >= 1000000) return `${(n / 1000000).toFixed(2)}M`;
   if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
   return String(n || 0);
 };
-
 const fmtUptime = (ms) => {
   if (!ms || ms <= 0) return "—";
   const m = Math.floor(ms / 60000);
   const h = Math.floor(m / 60);
   return h > 0 ? `${h}h${String(m % 60).padStart(2, "0")}m` : `${m}m`;
 };
-
 const WINDOW_TABS = [
-  { id: "today", label: "Today" },
-  { id: "yesterday", label: "Yesterday" },
-  { id: "last7d", label: "7 days" },
-  { id: "last30d", label: "30 days" },
-  { id: "all", label: "All time" },
+  { id: "today", label: "Today" }, { id: "yesterday", label: "Yesterday" },
+  { id: "last7d", label: "7 days" }, { id: "last30d", label: "30 days" }, { id: "all", label: "All time" },
 ];
-
 const REASON_LABELS = {
-  applied: "Prompt exceeded threshold",
-  below_threshold: "Below size threshold",
-  not_profitable: "Compression not profitable",
-  below_min_chars: "Below minimum chars",
-  below_min_tokens: "Below minimum tokens",
-  unsupported_model: "Model not in allowlist",
-  unsupported_format: "Non-Claude request format",
-  timeout: "Compression timed out",
-  transform_error: "Transform error",
-  passthrough: "Passthrough",
-  disabled: "Disabled",
-  not_installed: "Not installed",
+  applied: "Prompt exceeded threshold", below_threshold: "Below size threshold", not_profitable: "Compression not profitable",
+  below_min_chars: "Below minimum chars", below_min_tokens: "Below minimum tokens", unsupported_model: "Model not in allowlist",
+  unsupported_format: "Non-Claude request format", timeout: "Compression timed out", transform_error: "Transform error",
+  passthrough: "Passthrough", disabled: "Disabled", not_installed: "Not installed",
 };
 
-function SummaryCard({ label, value, sub, tone }) {
-  return (
-    <Card className="p-4">
-      <p className="text-xs text-text-muted uppercase tracking-wide">{label}</p>
-      <p className={`text-xl font-semibold mt-1 ${tone || ""}`}>{value}</p>
-      {sub && <p className="text-xs text-text-muted mt-0.5">{sub}</p>}
-    </Card>
-  );
+function LedgerBand({ number, title, summary, action, children, id }) {
+  return <section id={id} className="min-w-0 overflow-hidden rounded-[var(--radius-md)] border border-[var(--ledger-border)] bg-[var(--ledger-bg)]"><header className="flex flex-col gap-3 border-b border-[var(--ledger-rule)] bg-[var(--ledger-caption-bg)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-center gap-3"><span className="font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">{number}</span><div className="min-w-0"><h2 className="font-semibold text-[var(--color-text)]">{title}</h2>{summary && <p className="text-xs text-[var(--color-text-muted)]">{summary}</p>}</div></div>{action}</header>{children}</section>;
+}
+
+function MetricRow({ position, label, value, sub, tone, icon: Icon }) {
+  return <div className="grid min-h-[var(--row-h-default)] grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 bg-[var(--ledger-bg)] px-3 py-3 hover:bg-[var(--signal-row-bg-hover)]"><span className="border-r border-[var(--signal-row-rail)] pr-3 text-center font-mono text-xs tabular-nums text-[var(--color-primary)]">{position}</span><span className="flex min-w-0 items-center gap-3"><Icon size={17} strokeWidth={1.75} className="shrink-0 text-[var(--color-text-muted)]"/><span className="min-w-0"><span className="block text-sm font-medium">{label}</span>{sub && <span className="block truncate text-xs text-[var(--color-text-muted)]">{sub}</span>}</span></span><strong className={`font-mono text-sm font-semibold tabular-nums ${tone || ""}`}>{value}</strong></div>;
 }
 
 export default function PxpipeClient() {
-  const [status, setStatus] = useState(null);
-  const [health, setHealth] = useState(null);
-  const [stats, setStats] = useState(null);
-  const [logs, setLogs] = useState(null);
-  const [windowId, setWindowId] = useState("last7d");
-  const [loading, setLoading] = useState(true);
-
+  const [status, setStatus] = useState(null); const [health, setHealth] = useState(null); const [stats, setStats] = useState(null); const [logs, setLogs] = useState(null); const [windowId, setWindowId] = useState("last7d"); const [loading, setLoading] = useState(true);
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [statusRes, statsRes, logsRes] = await Promise.all([
-        fetch("/api/pxpipe/status", { headers: { "Cache-Control": "no-store" } }),
-        fetch("/api/pxpipe/stats"),
-        fetch("/api/pxpipe/logs?limit=50"),
-      ]);
-      setStatus(await statusRes.json());
-      setStats(await statsRes.json());
-      setLogs(await logsRes.json());
-      const healthRes = await fetch("/api/pxpipe/health", { method: "POST" });
-      setHealth(await healthRes.json());
-    } catch {
-      /* sections render placeholders */
-    } finally {
-      setLoading(false);
-    }
+      const [statusRes, statsRes, logsRes] = await Promise.all([fetch("/api/pxpipe/status", { headers: { "Cache-Control": "no-store" } }), fetch("/api/pxpipe/stats"), fetch("/api/pxpipe/logs?limit=50")]);
+      setStatus(await statusRes.json()); setStats(await statsRes.json()); setLogs(await logsRes.json());
+      const healthRes = await fetch("/api/pxpipe/health", { method: "POST" }); setHealth(await healthRes.json());
+    } catch { /* sections render fail-open placeholders */ } finally { setLoading(false); }
   }, []);
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
+  useEffect(() => { refresh(); }, [refresh]);
   const w = stats?.windows?.[windowId];
-  const statusLabel = !status
-    ? "—"
-    : !status.installed
-      ? "Not installed"
-      : health?.healthy
-        ? "Healthy"
-        : status.running
-          ? "Running"
-          : "Stopped";
-
-  return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <h2 className="text-lg font-semibold flex items-center gap-2">
-          <span className="material-symbols-outlined text-primary">image</span>
-          PXPIPE Dashboard
-        </h2>
-        <div className="flex items-center gap-2">
-          <a href="/dashboard/token-saver" className="text-xs text-primary underline hover:opacity-80">
-            Token Saver settings
-          </a>
-          <Button size="sm" variant="ghost" onClick={refresh} disabled={loading}>
-            {loading ? "Refreshing…" : "Refresh"}
-          </Button>
-        </div>
+  const statusLabel = !status ? "—" : !status.installed ? "Not installed" : health?.healthy ? "Healthy" : status.running ? "Running" : "Stopped";
+  const refreshAction = <div className="flex flex-wrap items-center gap-2"><a href="/dashboard/token-saver" className="inline-flex min-h-10 items-center gap-2 px-2 text-sm font-medium text-[var(--color-primary)] hover:underline">Token Saver settings<ArrowUpRight size={15}/></a><Button size="sm" variant="secondary" onClick={refresh} disabled={loading}><RefreshCw size={15} className={loading ? "animate-spin" : ""}/>{loading ? "Refreshing…" : "Refresh"}</Button></div>;
+  return <div className="flex min-w-0 max-w-full flex-col gap-8 px-1 sm:px-0">
+    <LedgerBand number="01" title="PXPIPE signal" summary="Compression module state and current activity" action={refreshAction}>
+      <div className="grid gap-px bg-[var(--ledger-rule)] md:grid-cols-2 xl:grid-cols-3">
+        <MetricRow position="01" label="Status" value={statusLabel} icon={health?.healthy ? CheckCircle2 : CircleDashed} tone={health?.healthy ? "text-[var(--color-success)]" : status?.installed ? "text-[var(--color-warning)]" : "text-[var(--color-text-muted)]"} sub={status?.enabled ? "Enabled in pipeline" : "Disabled in pipeline"}/>
+        <MetricRow position="02" label="Version" value={status?.version ? `v${status.version}` : "—"} icon={ImageIcon} sub="pxpipe-proxy"/>
+        <MetricRow position="03" label="Uptime" value={fmtUptime(status?.uptimeMs)} icon={Clock3} sub="module loaded"/>
+        <MetricRow position="04" label="Requests" value={w ? w.requests.toLocaleString() : "—"} icon={Activity}/>
+        <MetricRow position="05" label="Compressed" value={w ? w.compressed.toLocaleString() : "—"} icon={Gauge} tone="text-[var(--color-success)]"/>
+        <MetricRow position="06" label="Bypassed" value={w ? w.bypassed.toLocaleString() : "—"} icon={CircleDashed}/>
       </div>
+    </LedgerBand>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <SummaryCard
-          label="Status"
-          value={statusLabel}
-          tone={health?.healthy ? "text-success" : status?.installed ? "text-warning" : "text-text-muted"}
-          sub={status?.enabled ? "Enabled in pipeline" : "Disabled in pipeline"}
-        />
-        <SummaryCard label="Version" value={status?.version ? `v${status.version}` : "—"} sub="pxpipe-proxy" />
-        <SummaryCard label="Uptime" value={fmtUptime(status?.uptimeMs)} sub="module loaded" />
-        <SummaryCard label="Requests" value={w ? w.requests.toLocaleString() : "—"} />
-        <SummaryCard label="Compressed" value={w ? w.compressed.toLocaleString() : "—"} tone="text-success" />
-        <SummaryCard label="Bypassed" value={w ? w.bypassed.toLocaleString() : "—"} />
+    <LedgerBand number="02" title="Token savings" summary="Estimated body-size reduction; billed Usage remains authoritative" action={<div className="flex max-w-full flex-wrap gap-1 border border-[var(--button-border)] bg-[var(--color-surface-strong)] p-1">{WINDOW_TABS.map(tab => <button key={tab.id} onClick={() => setWindowId(tab.id)} aria-pressed={windowId === tab.id} className={`min-h-8 px-3 text-xs font-medium ${windowId === tab.id ? "bg-[var(--button-primary-bg)] text-[var(--button-primary-fg)]" : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]"}`}>{tab.label}</button>)}</div>}>
+      <div className="grid gap-px bg-[var(--ledger-rule)] sm:grid-cols-2 lg:grid-cols-4">
+        {[["Original tokens", w ? fmtTokens(w.tokensBeforeEst) : "—"], ["After PXPIPE", w ? fmtTokens(w.tokensAfterEst) : "—"], ["Saved", w ? fmtTokens(w.tokensSavedEst) : "—", true], ["Reduction", w ? `${w.savedPct}%` : "—", true]].map(([label,value,good], i) => <div key={label} className="bg-[var(--ledger-bg)] p-4"><p className="text-xs text-[var(--color-text-muted)]">{label}</p><p className={`mt-1 font-mono text-lg font-semibold tabular-nums ${good ? "text-[var(--color-success)]" : ""}`}>{value}</p></div>)}
       </div>
+      <p className="border-t border-[var(--ledger-rule)] px-4 py-3 text-xs text-[var(--color-text-muted)]">Images generated: <span className="font-mono tabular-nums">{w ? w.imagesGenerated.toLocaleString() : "—"}</span> · average compression: <span className="font-mono tabular-nums">{w ? `${w.avgCompressionMs}ms` : "—"}</span> · errors: <span className="font-mono tabular-nums">{w ? w.errors : "—"}</span></p>
+    </LedgerBand>
 
-      <Card className="p-4">
-        <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
-          <h3 className="font-medium">Token savings (estimated)</h3>
-          <div className="flex items-center gap-1 rounded-lg border border-border bg-bg-subtle p-1">
-            {WINDOW_TABS.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setWindowId(tab.id)}
-                className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                  windowId === tab.id
-                    ? "bg-primary text-white shadow-sm"
-                    : "text-text-muted hover:text-text hover:bg-bg-hover"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-          <div>
-            <p className="text-xs text-text-muted">Original tokens</p>
-            <p className="text-lg font-semibold">{w ? fmtTokens(w.tokensBeforeEst) : "—"}</p>
-          </div>
-          <div>
-            <p className="text-xs text-text-muted">After PXPIPE</p>
-            <p className="text-lg font-semibold">{w ? fmtTokens(w.tokensAfterEst) : "—"}</p>
-          </div>
-          <div>
-            <p className="text-xs text-text-muted">Saved</p>
-            <p className="text-lg font-semibold text-success">{w ? fmtTokens(w.tokensSavedEst) : "—"}</p>
-          </div>
-          <div>
-            <p className="text-xs text-text-muted">Reduction</p>
-            <p className="text-lg font-semibold text-success">{w ? `${w.savedPct}%` : "—"}</p>
-          </div>
-        </div>
-        <p className="text-xs text-text-muted mt-3">
-          Estimates from body size before/after imaging; billed usage per request
-          (recorded on the Usage page) remains the ground truth. Images generated:{" "}
-          {w ? w.imagesGenerated.toLocaleString() : "—"} · avg compression time:{" "}
-          {w ? `${w.avgCompressionMs}ms` : "—"} · errors: {w ? w.errors : "—"}
-        </p>
-      </Card>
+    <LedgerBand number="03" title="Savings timeline" summary="Tokens saved over the last 30 days">
+      <div className="p-4">
+        {stats?.timeline?.some(d => d.tokensSavedEst > 0) ? <ResponsiveContainer width="100%" height={220}><AreaChart data={stats.timeline} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}><CartesianGrid stroke="var(--chart-grid)"/><XAxis dataKey="date" tick={{ fontSize: 11, fill: "var(--chart-axis)" }} tickFormatter={d => d.slice(5)}/><YAxis tick={{ fontSize: 11, fill: "var(--chart-axis)" }} tickFormatter={fmtTokens} width={48}/><Tooltip formatter={v => [fmtTokens(v), "Tokens saved"]}/><Area type="monotone" dataKey="tokensSavedEst" stroke="var(--chart-series-tertiary)" fill="var(--color-success-wash)" strokeWidth={2}/></AreaChart></ResponsiveContainer> : <div className="flex min-h-32 items-center justify-center gap-2 text-center text-sm text-[var(--color-text-muted)]"><CircleDashed size={18}/>No savings recorded yet. Enable PXPIPE and route a large Claude-format request.</div>}
+      </div>
+    </LedgerBand>
 
-      <Card className="p-4">
-        <h3 className="font-medium mb-3">Tokens saved — last 30 days</h3>
-        {stats?.timeline?.some((d) => d.tokensSavedEst > 0) ? (
-          <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={stats.timeline} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="gradPxpipe" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.25} />
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
-              <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={(d) => d.slice(5)} />
-              <YAxis tick={{ fontSize: 11 }} tickFormatter={fmtTokens} width={48} />
-              <Tooltip formatter={(v) => [fmtTokens(v), "Tokens saved"]} labelFormatter={(d) => d} />
-              <Area type="monotone" dataKey="tokensSavedEst" stroke="#10b981" fill="url(#gradPxpipe)" strokeWidth={2} />
-            </AreaChart>
-          </ResponsiveContainer>
-        ) : (
-          <div className="h-32 flex items-center justify-center text-text-muted text-sm">
-            No savings recorded yet — enable PXPIPE in the Token Saver and route a large Claude-format request.
-          </div>
-        )}
-      </Card>
+    <LedgerBand number="04" title="History" summary="Latest 50 compression decisions">
+      <div className="max-w-full overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead className="bg-[var(--table-header-bg)] text-left text-xs text-[var(--color-text-muted)]"><tr>{["Time","Model","Original","Compressed","Saved","%","Duration","Status"].map((h,i)=><th key={h} className={`px-3 py-2 ${i>1&&i<7 ? "text-right" : ""}`}>{h}</th>)}</tr></thead><tbody className="divide-y divide-[var(--ledger-rule)]">{(stats?.recent || []).slice(0,50).map((ev,i)=><tr key={`${ev.ts}-${i}`} className="hover:bg-[var(--table-row-hover)]"><td className="whitespace-nowrap px-3 py-2 text-[var(--color-text-muted)]">{new Date(ev.ts).toLocaleString()}</td><td className="px-3 py-2 font-mono text-xs">{ev.provider ? `${ev.provider}/${ev.model}` : ev.model || "—"}</td><td className="px-3 py-2 text-right font-mono text-xs">{ev.applied ? fmtTokens(ev.tokensBeforeEst) : "—"}</td><td className="px-3 py-2 text-right font-mono text-xs">{ev.applied ? fmtTokens(ev.tokensAfterEst) : "—"}</td><td className="px-3 py-2 text-right font-mono text-xs text-[var(--color-success)]">{ev.applied ? fmtTokens(ev.tokensSavedEst) : "—"}</td><td className="px-3 py-2 text-right font-mono text-xs">{ev.applied ? `${ev.savedPct}%` : "—"}</td><td className="px-3 py-2 text-right font-mono text-xs">{ev.durationMs != null ? `${ev.durationMs}ms` : "—"}</td><td className="px-3 py-2"><span className={`inline-flex items-center gap-2 border px-2 py-1 text-xs ${ev.applied ? "border-[var(--color-success)] bg-[var(--color-success-wash)] text-[var(--color-success)]" : ev.reason === "transform_error" || ev.reason === "timeout" ? "border-[var(--color-danger)] bg-[var(--color-danger-wash)] text-[var(--color-danger)]" : "border-[var(--color-warning)] bg-[var(--color-warning-wash)] text-[var(--color-warning)]"}`} title={ev.detail || ""}><span className={`size-2 shrink-0 ${ev.applied ? "rounded-full bg-[var(--color-success)]" : "rotate-45 bg-current"}`}/>{ev.applied ? "Compressed" : REASON_LABELS[ev.reason] || ev.reason}</span></td></tr>)}{(!stats?.recent || stats.recent.length===0)&&<tr><td colSpan={8} className="px-3 py-8 text-center text-[var(--color-text-muted)]">No PXPIPE activity yet</td></tr>}</tbody></table></div>
+    </LedgerBand>
 
-      <Card className="p-4">
-        <h3 className="font-medium mb-3">History</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-text-muted border-b border-border">
-                <th className="py-2 pr-3">Time</th>
-                <th className="py-2 pr-3">Model</th>
-                <th className="py-2 pr-3 text-right">Original</th>
-                <th className="py-2 pr-3 text-right">Compressed</th>
-                <th className="py-2 pr-3 text-right">Saved</th>
-                <th className="py-2 pr-3 text-right">%</th>
-                <th className="py-2 pr-3 text-right">Duration</th>
-                <th className="py-2">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(stats?.recent || []).slice(0, 50).map((ev, i) => (
-                <tr key={`${ev.ts}-${i}`} className="border-b border-border/50">
-                  <td className="py-1.5 pr-3 whitespace-nowrap text-text-muted">
-                    {new Date(ev.ts).toLocaleString()}
-                  </td>
-                  <td className="py-1.5 pr-3 font-mono text-xs">{ev.provider ? `${ev.provider}/${ev.model}` : ev.model || "—"}</td>
-                  <td className="py-1.5 pr-3 text-right font-mono text-xs">
-                    {ev.applied ? fmtTokens(ev.tokensBeforeEst) : "—"}
-                  </td>
-                  <td className="py-1.5 pr-3 text-right font-mono text-xs">
-                    {ev.applied ? fmtTokens(ev.tokensAfterEst) : "—"}
-                  </td>
-                  <td className="py-1.5 pr-3 text-right font-mono text-xs text-success">
-                    {ev.applied ? fmtTokens(ev.tokensSavedEst) : "—"}
-                  </td>
-                  <td className="py-1.5 pr-3 text-right font-mono text-xs">
-                    {ev.applied ? `${ev.savedPct}%` : "—"}
-                  </td>
-                  <td className="py-1.5 pr-3 text-right font-mono text-xs">
-                    {ev.durationMs != null ? `${ev.durationMs}ms` : "—"}
-                  </td>
-                  <td className="py-1.5">
-                    <span
-                      className={`text-xs px-2 py-0.5 rounded ${
-                        ev.applied
-                          ? "bg-success/15 text-success"
-                          : ev.reason === "transform_error" || ev.reason === "timeout"
-                            ? "bg-danger/15 text-danger"
-                            : "bg-warning/15 text-warning"
-                      }`}
-                      title={ev.detail || ""}
-                    >
-                      {ev.applied ? "Compressed" : REASON_LABELS[ev.reason] || ev.reason}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {(!stats?.recent || stats.recent.length === 0) && (
-                <tr>
-                  <td colSpan={8} className="py-6 text-center text-text-muted text-sm">
-                    No PXPIPE activity yet
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      <Card className="p-4" id="logs">
-        <h3 className="font-medium mb-3">PXPIPE Logs</h3>
-        {logs?.installLog ? (
-          <pre className="rounded bg-black/5 dark:bg-white/5 p-3 text-xs font-mono overflow-x-auto max-h-64 overflow-y-auto whitespace-pre-wrap">
-            {logs.installLog}
-          </pre>
-        ) : (
-          <p className="text-sm text-text-muted">No install log yet.</p>
-        )}
-      </Card>
-    </div>
-  );
+    <LedgerBand id="logs" number="05" title="Install log" summary="PXPIPE setup output">
+      <div className="p-4">{logs?.installLog ? <pre className="max-h-64 max-w-full overflow-auto border border-[var(--color-border)] bg-[var(--color-code-bg)] p-3 font-mono text-xs whitespace-pre-wrap break-words">{logs.installLog}</pre> : <p className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]"><CircleDashed size={17}/>No install log yet.</p>}</div>
+    </LedgerBand>
+  </div>;
 }

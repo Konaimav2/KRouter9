@@ -1,20 +1,21 @@
 "use client";
 
 import { Input } from "@/shared/components";
+import { Check, Copy } from "lucide-react";
 
 /** Reusable endpoint row component */
 export default function EndpointRow({ label, url, copyId, copied, onCopy, badge, actions }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className={`text-xs font-mono px-1.5 py-0.5 rounded shrink-0 min-w-[88px] text-center ${
-          (badge === "CF" || badge === "TS") ? "bg-primary/10 text-primary" : "bg-surface-2 text-text-muted"
+    <div className="grid min-w-0 grid-cols-[5.5rem_minmax(0,1fr)_2.75rem] items-center gap-2">
+      <span className={`border-r border-[var(--signal-row-rail)] px-2 py-1 text-center font-mono text-xs ${
+          (badge === "CF" || badge === "TS") ? "text-[var(--color-primary)]" : "text-[var(--color-text-muted)]"
         }`}>{label}</span>
       <Input value={url} readOnly className="flex-1 font-mono text-sm" />
       <button
         onClick={() => onCopy(url, copyId)}
-        className="p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded text-text-muted hover:text-primary transition-colors shrink-0"
+        className="flex size-11 items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-primary)]" aria-label={`Copy ${label} endpoint`}
       >
-        <span className="material-symbols-outlined text-[18px]">{copied === copyId ? "check" : "content_copy"}</span>
+        {copied === copyId ? <Check size={18} /> : <Copy size={18} />}
       </button>
       {actions}
     </div>

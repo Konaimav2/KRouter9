@@ -1,6 +1,8 @@
+/* eslint-disable react-hooks/immutability */
 "use client";
 
 import { useState, useEffect } from "react";
+import { AlertTriangle, Network, ShieldCheck } from "lucide-react";
 import { MITM_TOOLS } from "@/shared/constants/cliTools";
 import { getModelsByProviderId } from "@/shared/constants/models";
 import { isOpenAICompatibleProvider, isAnthropicCompatibleProvider } from "@/shared/constants/providers";
@@ -75,43 +77,33 @@ export default function MitmPageClient() {
   const mitmTools = Object.entries(MITM_TOOLS);
 
   return (
-    <div className="flex w-full flex-col gap-6">
-      <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
-        <span className="material-symbols-outlined text-[16px] text-yellow-500 mt-0.5 shrink-0">warning</span>
-        <p className="text-xs text-red-600 dark:text-yellow-400 leading-relaxed">
-          ⚠️ MITM intercepts HTTPS traffic of IDE tools (Antigravity, GitHub Copilot, Kiro) via local CA to redirect requests to your providers. May violate ToS → account ban. Use at your own risk.
-        </p>
-      </div>
+    <div className="flex min-w-0 max-w-full flex-col gap-8 px-1 sm:px-0">
+      <section className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-warning)] bg-[var(--color-warning-wash)]">
+        <div className="flex items-start gap-3 px-4 py-3">
+          <AlertTriangle size={18} strokeWidth={1.75} className="mt-0.5 shrink-0 text-[var(--color-warning)]" aria-hidden="true" />
+          <div><h2 className="text-sm font-semibold text-[var(--color-warning)]">Traffic interception warning</h2><p className="mt-1 text-xs leading-relaxed text-[var(--color-text)]">MITM intercepts HTTPS traffic from IDE tools through a local certificate authority and redirects requests to your providers. This may violate a tool provider’s terms and can put the associated account at risk. Use only when you understand the impact.</p></div>
+        </div>
+      </section>
 
-      {/* MITM Server Card */}
-      <MitmServerCard
-        apiKeys={apiKeys}
-        cloudEnabled={cloudEnabled}
-        onStatusChange={setMitmStatus}
-      />
+      <LedgerBand number="01" title="Interception server" summary={mitmStatus.running ? "Server running" : "Server stopped"} icon={ShieldCheck}>
+        <div className="p-3 sm:p-4"><MitmServerCard apiKeys={apiKeys} cloudEnabled={cloudEnabled} onStatusChange={setMitmStatus} /></div>
+      </LedgerBand>
 
-      {/* Tool Cards */}
-      <div className="grid gap-3 sm:gap-4">
-        {mitmTools.map(([toolId, tool]) => (
-          <MitmToolCard
-            key={toolId}
-            tool={tool}
-            isExpanded={expandedTool === toolId}
-            onToggle={() => setExpandedTool(expandedTool === toolId ? null : toolId)}
-            serverRunning={mitmStatus.running}
-            dnsActive={mitmStatus.dnsStatus?.[toolId] || false}
-            hasCachedPassword={mitmStatus.hasCachedPassword || false}
-            needsSudoPassword={mitmStatus.needsSudoPassword !== false}
-            isWin={mitmStatus.isWin === true}
-            apiKeys={apiKeys}
-            activeProviders={getActiveProviders()}
-            hasActiveProviders={hasActiveProviders()}
-            modelAliases={modelAliases}
-            cloudEnabled={cloudEnabled}
-            onDnsChange={(data) => setMitmStatus(prev => ({ ...prev, dnsStatus: data.dnsStatus ?? prev.dnsStatus }))}
-          />
-        ))}
-      </div>
+      <LedgerBand number="02" title="Tool routes" summary={`${mitmTools.length} interception target${mitmTools.length === 1 ? "" : "s"}`} icon={Network}>
+        {mitmTools.length === 0 ? <div className="p-8 text-center text-sm text-[var(--color-text-muted)]">No MITM tools are available.</div> : <div className="divide-y divide-[var(--ledger-rule)]">
+          {mitmTools.map(([toolId, tool], index) => (
+            <div key={toolId} className="grid min-w-0 grid-cols-[2.5rem_minmax(0,1fr)] items-start gap-3 p-3 sm:p-4">
+              <span className="mt-3 border-r border-[var(--signal-row-rail)] pr-3 text-center font-mono text-xs tabular-nums text-[var(--color-primary)]">{String(index + 1).padStart(2, "0")}</span>
+              <div className="min-w-0"><MitmToolCard tool={tool} isExpanded={expandedTool === toolId} onToggle={() => setExpandedTool(expandedTool === toolId ? null : toolId)} serverRunning={mitmStatus.running} dnsActive={mitmStatus.dnsStatus?.[toolId] || false} hasCachedPassword={mitmStatus.hasCachedPassword || false} needsSudoPassword={mitmStatus.needsSudoPassword !== false} isWin={mitmStatus.isWin === true} apiKeys={apiKeys} activeProviders={getActiveProviders()} hasActiveProviders={hasActiveProviders()} modelAliases={modelAliases} cloudEnabled={cloudEnabled} onDnsChange={(data) => setMitmStatus(prev => ({ ...prev, dnsStatus: data.dnsStatus ?? prev.dnsStatus }))} /></div>
+            </div>
+          ))}
+        </div>}
+      </LedgerBand>
     </div>
   );
+}
+
+
+function LedgerBand({ number, title, summary, icon: Icon, children }) {
+  return <section className="min-w-0 overflow-hidden rounded-[var(--radius-md)] border border-[var(--ledger-border)] bg-[var(--ledger-bg)]"><header className="flex items-center gap-3 border-b border-[var(--ledger-rule)] bg-[var(--ledger-caption-bg)] px-4 py-3"><span className="font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">{number}</span><Icon size={17} strokeWidth={1.75} className="shrink-0 text-[var(--color-text-muted)]"/><div className="min-w-0"><h2 className="font-semibold">{title}</h2><p className="text-xs text-[var(--color-text-muted)]">{summary}</p></div></header>{children}</section>;
 }
