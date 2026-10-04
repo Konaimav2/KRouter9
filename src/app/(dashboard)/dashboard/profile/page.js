@@ -88,7 +88,7 @@ export default function ProfilePage() {
   const [ssoTypeTab, setSsoTypeTab] = useState("saml");
   const [samlForm, setSamlForm] = useState({
     samlEntryPoint: "",
-    samlIssuer: "urn:9router:sp",
+    samlIssuer: "urn:krouter9:sp",
     samlCert: "",
     samlLoginLabel: "Sign in with SAML SSO",
     samlAttributeEmail: "email",
@@ -142,7 +142,7 @@ export default function ProfilePage() {
         setSsoTypeTab(data?.ssoType || "saml");
         setSamlForm({
           samlEntryPoint: data?.samlEntryPoint || "",
-          samlIssuer: data?.samlIssuer || "urn:9router:sp",
+          samlIssuer: data?.samlIssuer || "urn:krouter9:sp",
           samlCert: data?.samlCert || "",
           samlLoginLabel: data?.samlLoginLabel || "Sign in with SAML SSO",
           samlAttributeEmail: data?.samlAttributeEmail || "email",
@@ -612,7 +612,7 @@ export default function ProfilePage() {
         setSamlForm((prev) => ({
           ...prev,
           samlEntryPoint: ssoUrl || prev.samlEntryPoint,
-          samlIssuer: prev.samlIssuer || "urn:9router:sp",
+          samlIssuer: prev.samlIssuer || "urn:krouter9:sp",
           samlCert: certStr || prev.samlCert,
         }));
 
@@ -659,7 +659,7 @@ export default function ProfilePage() {
         authMode: targetAuthMode,
         ssoType: "saml",
         samlEntryPoint: samlForm.samlEntryPoint.trim(),
-        samlIssuer: samlForm.samlIssuer.trim() || "urn:9router:sp",
+        samlIssuer: samlForm.samlIssuer.trim() || "urn:krouter9:sp",
         samlCert: samlForm.samlCert.trim(),
         samlLoginLabel:
           samlForm.samlLoginLabel.trim() || "Sign in with SAML SSO",
@@ -809,7 +809,7 @@ export default function ProfilePage() {
       const anchor = document.createElement("a");
       const stamp = new Date().toISOString().replace(/[.:]/g, "-");
       anchor.href = url;
-      anchor.download = `9router-backup-${stamp}.json`;
+      anchor.download = `krouter9-backup-${stamp}.json`;
       document.body.appendChild(anchor);
       anchor.click();
       document.body.removeChild(anchor);
@@ -1029,7 +1029,7 @@ export default function ProfilePage() {
               <div className="min-w-0">
                 <p className="font-medium">Database location</p>
                 <code className="data-text block overflow-wrap-anywhere text-xs text-[var(--color-text-muted)]">
-                  ~/.9router/db/data.sqlite
+                  ~/.krouter9/db/data.sqlite
                 </code>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -1335,7 +1335,7 @@ export default function ProfilePage() {
                                 <dt>SP Entity ID / Audience</dt>
                                 <dd>
                                   <code className="data-text block overflow-wrap-anywhere text-[var(--color-text)]">
-                                    {samlForm.samlIssuer || "urn:9router:sp"}
+                                    {samlForm.samlIssuer || "urn:krouter9:sp"}
                                   </code>
                                 </dd>
                               </div>
@@ -1434,7 +1434,7 @@ export default function ProfilePage() {
                       />
                       <Input
                         label="SP Entity ID / Audience (samlIssuer)"
-                        placeholder="urn:9router:sp"
+                        placeholder="urn:krouter9:sp"
                         value={samlForm.samlIssuer}
                         onChange={(e) =>
                           updateSamlForm("samlIssuer", e.target.value)
@@ -1543,7 +1543,7 @@ export default function ProfilePage() {
                           href={samlMetadataUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          download="9router-sp-metadata.xml"
+                          download="krouter9-sp-metadata.xml"
                           className="mt-2 inline-flex min-h-9 items-center gap-2 text-[var(--color-primary)] underline"
                         >
                           <Icon name="download" size={16} />
@@ -1577,7 +1577,7 @@ export default function ProfilePage() {
                     <div className="grid gap-4">
                       <Input
                         label="Issuer URL"
-                        placeholder="https://auth.example.com/application/o/9router/"
+                        placeholder="https://auth.example.com/application/o/krouter9/"
                         value={oidcForm.oidcIssuerUrl}
                         onChange={(e) =>
                           updateOidcForm("oidcIssuerUrl", e.target.value)
@@ -1586,7 +1586,7 @@ export default function ProfilePage() {
                       />
                       <Input
                         label="Client ID"
-                        placeholder="9router-dashboard"
+                        placeholder="krouter9-dashboard"
                         value={oidcForm.oidcClientId}
                         onChange={(e) =>
                           updateOidcForm("oidcClientId", e.target.value)
