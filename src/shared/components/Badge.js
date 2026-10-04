@@ -1,5 +1,6 @@
 "use client";
 
+import Icon from "@/shared/components/Icon";
 import { cn } from "@/shared/utils/cn";
 
 const variants = {
@@ -47,7 +48,7 @@ export default function Badge({
           )}
         />
       )}
-      {icon && <span className="material-symbols-outlined text-[14px]">{icon}</span>}
+      {icon && <Icon name={icon} className="text-[14px]" />}
       {children}
     </span>
   );

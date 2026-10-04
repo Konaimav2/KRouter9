@@ -1,5 +1,6 @@
 "use client";
 
+import Icon from "@/shared/components/Icon";
 import { useEffect, useRef, useState } from "react";
 import PropTypes from "prop-types";
 import { ConfirmModal } from "@/shared/components/Modal";
@@ -111,9 +112,7 @@ export default function MaskedProxyValue({
           className="shrink-0 rounded px-1 py-0.5 text-[10px] text-primary hover:bg-black/5 dark:hover:bg-white/5"
           title="Copy to clipboard"
         >
-          <span className="material-symbols-outlined text-[14px] align-middle">
-            {copied ? "check" : "content_copy"}
-          </span>
+          <Icon name={copied ? "check" : "content_copy"} className="text-[14px] align-middle" />
         </button>
         <button
           type="button"
@@ -121,7 +120,7 @@ export default function MaskedProxyValue({
           className="shrink-0 rounded px-1 py-0.5 text-[10px] text-text-muted hover:bg-black/5 dark:hover:bg-white/5"
           title="Hide again"
         >
-          <span className="material-symbols-outlined text-[14px] align-middle">visibility_off</span>
+          <Icon name="visibility_off" className="text-[14px] align-middle" />
         </button>
       </span>
     );
@@ -145,7 +144,7 @@ export default function MaskedProxyValue({
           className="shrink-0 rounded px-1 py-0.5 text-[10px] text-primary hover:bg-black/5 disabled:opacity-50 dark:hover:bg-white/5"
           title="Reveal full URL (audit-logged)"
         >
-          <span className="material-symbols-outlined text-[14px] align-middle">visibility</span>
+          <Icon name="visibility" className="text-[14px] align-middle" />
         </button>
       )}
       {error && <span className="shrink-0 text-[10px] text-red-500">{error}</span>}

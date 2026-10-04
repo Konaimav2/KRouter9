@@ -1,3 +1,4 @@
+import Icon from "@/shared/components/Icon";
 "use client";
 
 export default function Footer() {
@@ -20,7 +21,7 @@ export default function Footer() {
             </p>
             <div className="flex gap-4">
               <a className="text-gray-400 hover:text-white transition-colors" href="https://github.com/Konaimav2/KRouter9" target="_blank" rel="noopener noreferrer">
-                <span className="material-symbols-outlined">code</span>
+                <Icon name="code" />
               </a>
             </div>
           </div>

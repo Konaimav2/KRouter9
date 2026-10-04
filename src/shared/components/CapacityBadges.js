@@ -1,6 +1,7 @@
 "use client";
 
 import { CAPACITY_META } from "@/shared/constants/models";
+import Icon from "@/shared/components/Icon";
 import Tooltip from "./Tooltip";
 
 // Render small icon badges for a model's capabilities (only those set true).
@@ -15,12 +16,11 @@ export default function CapacityBadges({ caps, className = "", colorOverride, si
     <span className={`inline-flex items-center gap-0.5 ${className}`}>
       {active.map((k) => (
         <Tooltip key={k} text={`${CAPACITY_META[k].label} — ${CAPACITY_META[k].desc}`}>
-          <span
-            className={`material-symbols-outlined leading-none cursor-help ${colorOverride || CAPACITY_META[k].color}`}
-            style={{ fontSize: `${size}px` }}
-          >
-            {CAPACITY_META[k].icon}
-          </span>
+          <Icon
+            name={CAPACITY_META[k].icon}
+            className={`leading-none cursor-help ${colorOverride || CAPACITY_META[k].color}`}
+            size={size}
+          />
         </Tooltip>
       ))}
     </span>

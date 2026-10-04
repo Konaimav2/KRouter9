@@ -590,9 +590,7 @@ export default function ProxyPoolsPage() {
               onClick={() => setShowRelayMenu(!showRelayMenu)}
             >
               Deploy Relay
-              <span className="material-symbols-outlined ml-1 text-[18px]">
-                {showRelayMenu ? "expand_less" : "expand_more"}
-              </span>
+              <Icon name="expand_more" size={18} className={`ml-1 transition-transform ${showRelayMenu ? "rotate-180" : ""}`} />
             </Button>
 
             {showRelayMenu && (
@@ -614,7 +612,7 @@ export default function ProxyPoolsPage() {
                   }}
                   className="flex w-full items-center gap-2 rounded-[var(--radius-sm)] px-3 py-2 text-sm text-text-main hover:bg-surface-2"
                 >
-                  <Icon name="cloud_upload" size={20} />
+                  <Icon name="triangle" size={20} />
                   Vercel Relay
                 </button>
                 <button
@@ -704,7 +702,7 @@ export default function ProxyPoolsPage() {
               value={batchImportText}
               onChange={(e) => setBatchImportText(e.target.value)}
               placeholder={"http://user:pass@127.0.0.1:7897\n127.0.0.1:7897:user:pass"}
-              className="w-full min-h-[180px] py-2 px-3 text-sm text-text-main bg-white dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-md focus:ring-1 focus:ring-primary/30 focus:border-primary/50 focus:outline-none transition-all"
+              className="min-h-[180px] w-full rounded-[var(--input-radius)] border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-text-main transition-all focus:border-[var(--input-border-focus)] focus:outline-none focus:ring-1 focus:ring-primary/30"
             />
             <p className="text-xs text-text-muted mt-1">
               Supported formats: protocol://user:pass@host:port, host:port:user:pass

@@ -1,5 +1,6 @@
 "use client";
 
+import Icon from "@/shared/components/Icon";
 import { useCallback, useEffect, useState } from "react";
 import PropTypes from "prop-types";
 import Card from "./Card";
@@ -80,7 +81,7 @@ export default function NoAuthProxyCard({ providerId }) {
     <Card>
       <div className="flex items-center gap-3 mb-4">
         <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-green-500/10 text-green-500">
-          <span className="material-symbols-outlined text-[20px]">lock_open</span>
+          <Icon name="lock_open" className="text-[20px]" />
         </div>
         <div className="flex-1">
           <p className="text-sm font-medium">No authentication required</p>

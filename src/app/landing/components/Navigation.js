@@ -1,4 +1,5 @@
 "use client";
+import Icon from "@/shared/components/Icon";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -30,7 +31,7 @@ export default function Navigation() {
           <a className="text-gray-300 hover:text-white text-sm font-medium transition-colors" href="#how-it-works">How it Works</a>
           <a className="text-gray-300 hover:text-white text-sm font-medium transition-colors" href="https://github.com/Konaimav2/KRouter9#readme" target="_blank" rel="noopener noreferrer">Docs</a>
           <a className="text-gray-300 hover:text-white text-sm font-medium transition-colors flex items-center gap-1" href="https://github.com/Konaimav2/KRouter9" target="_blank" rel="noopener noreferrer">
-            GitHub <span className="material-symbols-outlined text-[14px]">open_in_new</span>
+            GitHub <Icon name="open_in_new" className="text-[14px]" />
           </a>
         </div>
 
@@ -46,7 +47,7 @@ export default function Navigation() {
             className="md:hidden text-white"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           >
-            <span className="material-symbols-outlined">{mobileMenuOpen ? "close" : "menu"}</span>
+            <Icon name={mobileMenuOpen ? "close" : "menu"} />
           </button>
         </div>
       </div>

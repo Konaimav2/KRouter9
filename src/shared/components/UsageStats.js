@@ -1,5 +1,6 @@
 "use client";
 
+import Icon from "@/shared/components/Icon";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { FREE_PROVIDERS, AI_PROVIDERS } from "@/shared/constants/providers";
@@ -443,7 +444,7 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
 
   const spinner = (
     <div className="flex items-center justify-center py-12 text-text-muted">
-      <span className="material-symbols-outlined text-[32px] animate-spin">progress_activity</span>
+      <Icon name="progress_activity" className="text-[32px] animate-spin" />
     </div>
   );
 
@@ -465,7 +466,7 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
             ))}
           </div>
           {fetching && (
-            <span className="material-symbols-outlined text-[16px] text-text-muted animate-spin">progress_activity</span>
+            <Icon name="progress_activity" className="text-[16px] text-text-muted animate-spin" />
           )}
         </div>
       )}

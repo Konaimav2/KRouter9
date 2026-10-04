@@ -1,5 +1,6 @@
 "use client";
 
+import Icon from "@/shared/components/Icon";
 import { useState, useMemo, useEffect } from "react";
 import PropTypes from "prop-types";
 import Modal from "./Modal";
@@ -503,7 +504,7 @@ export default function ModelSelectModal({
     >
       {/* Info bar */}
       <div className="flex items-center gap-2 mb-3 px-2.5 py-2 bg-primary/8 border border-primary/20 rounded-lg text-xs text-text-muted">
-        <span className="material-symbols-outlined text-primary shrink-0" style={{ fontSize: "14px" }}>info</span>
+        <Icon name="info" size={14} className="text-primary shrink-0" />
         <span>
           Click to add, click again to remove. Changes are saved automatically.
           {includeCombos && capFilter && " Combos are listed for convenience — capability is checked against their members at request time."}
@@ -513,9 +514,7 @@ export default function ModelSelectModal({
       {/* Search - compact */}
       <div className="mb-3">
         <div className="relative">
-          <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted text-[16px]">
-            search
-          </span>
+          <Icon name="search" size={16} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
           <input
             type="text"
             placeholder="Search..."
@@ -532,7 +531,7 @@ export default function ModelSelectModal({
         {filteredCombos.length > 0 && (
           <div>
             <div className="flex items-center gap-1.5 mb-1.5 sticky top-0 bg-surface py-0.5">
-              <span className="material-symbols-outlined text-primary text-[14px]">layers</span>
+              <Icon name="layers" size={14} className="text-primary" />
               <span className="text-xs font-medium text-primary">Combos</span>
               <span className="text-[10px] text-text-muted">({filteredCombos.length})</span>
             </div>
@@ -554,7 +553,7 @@ export default function ModelSelectModal({
                     `}
                   >
                     {addedModelValues.includes(combo.name) && (
-                      <span className="material-symbols-outlined leading-none" style={{ fontSize: "10px" }}>check</span>
+                      <Icon name="check" size={10} className="leading-none" />
                     )}
                     {combo.name}
                   </button>
@@ -607,11 +606,11 @@ export default function ModelSelectModal({
                   >
                     <span className="flex items-center gap-1">
                       {addedModelValues.includes(model.value) && !isPlaceholder && (
-                        <span className="material-symbols-outlined leading-none" style={{ fontSize: "10px" }}>check</span>
+                        <Icon name="check" size={10} className="leading-none" />
                       )}
                       {isPlaceholder ? (
                         <>
-                          <span className="material-symbols-outlined text-[11px]">edit</span>
+                          <Icon name="edit" size={11} />
                           {model.name}
                         </>
                       ) : model.isCustom ? (
@@ -636,9 +635,7 @@ export default function ModelSelectModal({
 
         {Object.keys(filteredGroups).length === 0 && filteredCombos.length === 0 && (
           <div className="text-center py-4 text-text-muted">
-            <span className="material-symbols-outlined text-2xl mb-1 block">
-              search_off
-            </span>
+            <Icon name="search_off" size={24} className="mb-1 block" />
             <p className="text-xs">No models found</p>
           </div>
         )}

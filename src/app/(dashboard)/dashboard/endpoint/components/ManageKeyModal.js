@@ -1,5 +1,6 @@
 "use client";
 
+import Icon from "@/shared/components/Icon";
 import { useState } from "react";
 import PropTypes from "prop-types";
 import { Button, Input, Modal, ModelSelectModal, Select, Toggle } from "@/shared/components";
@@ -103,7 +104,7 @@ export default function ManageKeyModal({ apiKey, onClose, onSaved, onRotated }) 
               className="rounded-xl border border-primary bg-primary px-2 py-1 text-xs font-medium text-white transition-all hover:bg-primary-hover"
             >
               <span className="flex items-center gap-1">
-                <span className="material-symbols-outlined leading-none" style={{ fontSize: "10px" }}>check</span>
+                <Icon name="check" size={10} className="leading-none" />
                 {value}
               </span>
             </button>
