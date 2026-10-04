@@ -53,7 +53,7 @@ function UsageContent() {
   const [mode, setMode] = useState("costs");
 
   const tabFromUrl = searchParams.get("tab");
-  const activeTab = tabFromUrl && ["overview", "logs", "details"].includes(tabFromUrl)
+  const activeTab = tabFromUrl && ["overview", "logs", "details", "keys"].includes(tabFromUrl)
     ? tabFromUrl
     : "overview";
 
@@ -79,12 +79,13 @@ function UsageContent() {
             { value: "overview", label: "Overview" },
             { value: "logs", label: "Logs" },
             { value: "details", label: "Details" },
+            { value: "keys", label: "Keys" },
           ]}
           value={activeTab}
           onChange={handleTabChange}
           className="w-full sm:w-auto"
         />
-        {["overview", "details"].includes(activeTab) && (
+        {["overview", "details", "keys"].includes(activeTab) && (
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
             {activeTab === "overview" && <SegmentedControl options={VALUE_MODES} value={mode} onChange={setMode} size="sm" className="w-full sm:w-auto" />}
             <SegmentedControl options={PERIODS} value={period} onChange={handlePeriodChange} size="sm" className="w-full sm:w-auto" />
@@ -94,7 +95,8 @@ function UsageContent() {
 
       {activeTab === "overview" && <UsageDashboard period={period} mode={mode} />}
       {activeTab === "logs" && <UsageLogs />}
-      {activeTab === "details" && <><PerKeyUsageSection period={period} /><RequestDetailsTab /></>}
+      {activeTab === "details" && <RequestDetailsTab />}
+      {activeTab === "keys" && <PerKeyUsageSection period={period} />}
     </div>
   );
 }
