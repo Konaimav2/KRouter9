@@ -1,5 +1,6 @@
 "use client";
 
+import Icon from "@/shared/components/Icon";
 import { useTheme } from "@/shared/hooks/useTheme";
 import { cn } from "@/shared/utils/cn";
 
@@ -29,14 +30,13 @@ export default function ThemeToggle({ className, variant = "default" }) {
       aria-label={`Switch to ${isDark ? "light" : "dark"} mode`}
       title={`Switch to ${isDark ? "light" : "dark"} mode`}
     >
-      <span
+      <Icon
+        name={isDark ? "sun" : "moon"}
+        size={22}
         className={cn(
-          "material-symbols-outlined text-[22px]",
           variant === "card" && "transition-transform duration-300 group-hover:rotate-12"
         )}
-      >
-        {isDark ? "light_mode" : "dark_mode"}
-      </span>
+      />
     </button>
   );
 }

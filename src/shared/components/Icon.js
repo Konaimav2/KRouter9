@@ -70,26 +70,53 @@ import Cookie from "lucide-react/dist/esm/icons/cookie";
 import FileUp from "lucide-react/dist/esm/icons/file-up";
 import XCircle from "lucide-react/dist/esm/icons/x-circle";
 import ExternalLink from "lucide-react/dist/esm/icons/external-link";
+import Cloud from "lucide-react/dist/esm/icons/cloud";
+import Rocket from "lucide-react/dist/esm/icons/rocket";
+import Triangle from "lucide-react/dist/esm/icons/triangle";
+import AppWindow from "lucide-react/dist/esm/icons/app-window";
+import Ban from "lucide-react/dist/esm/icons/ban";
+import Clock3 from "lucide-react/dist/esm/icons/clock-3";
+import CloudOff from "lucide-react/dist/esm/icons/cloud-off";
+import FilterX from "lucide-react/dist/esm/icons/filter-x";
+import Hourglass from "lucide-react/dist/esm/icons/hourglass";
+import ListChecks from "lucide-react/dist/esm/icons/list-checks";
+import RadioTower from "lucide-react/dist/esm/icons/radio-tower";
+import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw";
+import BadgeCheck from "lucide-react/dist/esm/icons/badge-check";
+import Braces from "lucide-react/dist/esm/icons/braces";
+import Building2 from "lucide-react/dist/esm/icons/building-2";
+import CirclePlay from "lucide-react/dist/esm/icons/circle-play";
+import Code2 from "lucide-react/dist/esm/icons/code-2";
+import Heart from "lucide-react/dist/esm/icons/heart";
+import LockOpen from "lucide-react/dist/esm/icons/lock-open";
+import Monitor from "lucide-react/dist/esm/icons/monitor";
+import Save from "lucide-react/dist/esm/icons/save";
+import ShieldCheck from "lucide-react/dist/esm/icons/shield-check";
+import Star from "lucide-react/dist/esm/icons/star";
 
 
 const ICONS = {
-  add: Plus, api: Link2, account_tree: GitBranch, arrow_downward: ArrowDown,
+  add: Plus, api: Link2, account_circle: User, account_tree: GitBranch, arrow_downward: ArrowDown,
   arrow_upward: ArrowUp, arrow_back: ArrowLeft, arrow_forward: ArrowRight,
-  bar_chart: BarChart3, bolt: Bolt, cancel: XCircle, check: Check, check_circle: CheckCircle2,
+  bar_chart: BarChart3, bolt: Bolt, business: Building2, cancel: XCircle, check: Check, check_circle: CheckCircle2,
   chevron_down: ChevronDown, chevron_left: ChevronLeft, chevron_right: ChevronRight,
-  close: X, content_copy: Copy, copy: Copy, data_usage: Gauge, delete: Trash2,
+  close: X, code: Code2, computer: Monitor, content_copy: Copy, copy: Copy, data_object: Braces, data_usage: Gauge, delete: Trash2,
   cookie: Cookie, description: FileText, dns: Database, edit: Settings, error: AlertCircle,
-  download: Download, expand_more: ChevronDown, extension: Zap, gavel: Gavel, graphic_eq: Activity,
+  download: Download, expand_more: ChevronDown, extension: Zap, file_upload: FileUp, gavel: Gavel, graphic_eq: Activity,
   grid_view: Layers3, history: PanelLeft, image: Image, info: AlertCircle,
-  key: KeyRound, language: Languages, layers: Layers3, lan: Network,
-  link_off: Link2Off, lock: Lock, logout: LogOut, menu: Menu, menu_book: BookOpen, moon: Moon,
+  hub: Network, key: KeyRound, language: Languages, layers: Layers3, lan: Network,
+  link_off: Link2Off, lock: Lock, lock_open: LockOpen, logout: LogOut, menu: Menu, menu_book: BookOpen, moon: Moon,
   monitor_heart: HeartPulse, more_horiz: MoreHorizontal, open_in_new: ExternalLink, pause: Pause, pause_circle: CirclePause,
-  perm_media: Image, person: User, play_arrow: Play, power_settings_new: Power,
-  progress_activity: RefreshCw, query_stats: BarChart3, refresh: RefreshCw,
+  perm_media: Image, person: User, play_arrow: Play, play_circle: CirclePlay, power_settings_new: Power,
+  progress_activity: RefreshCw, query_stats: BarChart3, refresh: RefreshCw, restore: RotateCcw,
   route: Route, savings: Zap, science: Beaker, search: Search, search_off: Search, send: Send, sync_alt: Shuffle,
-  settings: Settings, shield: Shield, stop: Square, terminal: SquareTerminal,
+  save: Save, security: Shield, settings: Settings, shield: Shield, shield_lock: ShieldCheck, star: Star, stop: Square, terminal: SquareTerminal,
   translate: Languages, upload: Upload, upload_file: FileUp, visibility: Eye, visibility_off: EyeOff,
   warning: AlertTriangle, chat: MessageSquare, smart_toy: Bot, sun: Sun,
+  apps: AppWindow, block: Ban, checklist: ListChecks, cloud: Cloud, cloud_off: CloudOff,
+  cloud_upload: Cloud, expand_less: ChevronDown, filter_alt_off: FilterX, health_and_safety: HeartPulse,
+  hourglass_top: Hourglass, restart_alt: RotateCcw, rocket_launch: Rocket, schedule: Clock3,
+  toggle_off: Square, toggle_on: CheckCircle2, triangle: Triangle, verified_user: BadgeCheck, volunteer_activism: Heart, wifi_tethering: RadioTower,
 };
 
 export default function Icon({ name, size = 18, strokeWidth = 1.75, className = "", ...props }) {

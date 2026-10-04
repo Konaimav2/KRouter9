@@ -1,5 +1,6 @@
 "use client";
 
+import Icon from "@/shared/components/Icon";
 import { cn } from "@/shared/utils/cn";
 import Button from "./Button";
 
@@ -83,7 +84,7 @@ export default function Pagination({
               disabled={currentPage === 1}
               className="w-9 px-0"
             >
-              <span className="material-symbols-outlined text-[18px]">chevron_left</span>
+              <Icon name="chevron_left" className="text-[18px]" />
             </Button>
 
             {pageNumbers[0] > 1 && (
@@ -140,7 +141,7 @@ export default function Pagination({
               disabled={currentPage === totalPages}
               className="w-9 px-0"
             >
-              <span className="material-symbols-outlined text-[18px]">chevron_right</span>
+              <Icon name="chevron_right" className="text-[18px]" />
             </Button>
           </div>
         )}

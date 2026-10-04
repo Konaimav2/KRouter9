@@ -1,5 +1,6 @@
 "use client";
 
+import Icon from "@/shared/components/Icon";
 import { useState, useEffect } from "react";
 import { LOCALE_COOKIE, normalizeLocale } from "@/i18n/config";
 import { LOCALE_FLAGS } from "@/shared/constants/locales";
@@ -30,7 +31,7 @@ export default function HeaderLanguage() {
         title="Language"
         data-i18n-skip="true"
       >
-        <span className="material-symbols-outlined text-[20px] leading-none">translate</span>
+        <Icon name="translate" className="text-[20px] leading-none" />
       </button>
 
       <LanguageSwitcher
