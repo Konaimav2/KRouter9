@@ -1,3 +1,27 @@
+# v3.0.0 (2026-10-03) — Switchboard Ledger dashboard + fix pack
+
+## New dashboard
+- Whole-app visual replacement: carbon/mineral + lichen tokens, Atkinson Hyperlegible
+  Next + Commit Mono (self-hosted), Run/Measure/Configure navigation, signal rows and
+  ledger bands, Lucide icons, visible-at-rest controls, focus management, mobile drawer
+- Login rebuilt as a matching instrument panel; Settings, CLI Tools, Skills, Media,
+  Proxy Pools, Token Saver, Console Log, Quota, and Usage overhauled on the same grammar
+
+## Fixes
+- Proxy pool URLs/hosts masked with confirm-to-reveal; usage error excerpts, pool
+  `noProxy`/`lastError`, and console lines redacted (provider prefixes, entropy
+  fallback, JSON credential forms)
+- Model lists unified on one per-connection source: combo-named phantom entries
+  (`grip/gpt-5.6-terra` class) no longer advertised under providers
+- New-Chat creation cooldown (3s) stops session spam; custom providers pin to top with
+  `provider/Name` display slugs
+- Request logs show status code, masked key, and error rows; new per-key usage section
+  with today-to-60d ranges
+- Quota accounts sort globally by expiring reset instead of clustering by provider page
+- Headroom one-click setup status (guidance only); console refresh-spam filter with
+  1000-line buffer; CLI guided setup; 23/23 endpoints gain request/response examples
+- Combos collapsed-by-default with drag reorder; docs section nav without URL hashes
+
 # v2.1.0 (2026-10-02) — smarter combo limits, long tool names, eligibility handling
 
 ## Fixes
