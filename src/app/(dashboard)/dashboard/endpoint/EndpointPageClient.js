@@ -1,5 +1,5 @@
-/* eslint-disable react-hooks/immutability, react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 "use client";
+/* eslint-disable react-hooks/immutability, react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import PropTypes from "prop-types";

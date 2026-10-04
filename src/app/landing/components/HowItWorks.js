@@ -1,5 +1,5 @@
-import Icon from "@/shared/components/Icon";
 "use client";
+import Icon from "@/shared/components/Icon";
 
 export default function HowItWorks() {
   return (

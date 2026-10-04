@@ -1,5 +1,5 @@
-/* eslint-disable react-hooks/immutability */
 "use client";
+/* eslint-disable react-hooks/immutability */
 
 import { useState, useEffect } from "react";
 import { AlertTriangle, Network, ShieldCheck } from "lucide-react";

@@ -1,5 +1,5 @@
-/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect */
 
 import { useState, useEffect, useCallback } from "react";
 import { Activity, ArrowUpRight, CheckCircle2, CircleDashed, Clock3, Gauge, ImageIcon, RefreshCw } from "lucide-react";
