@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { Button, Toggle } from "@/shared/components";
 import { CONSOLE_LOG_CONFIG } from "@/shared/constants/config";
 import { filterTokenRefreshSpam } from "./tokenRefreshSpam";
+import { redactSensitiveText } from "@/lib/proxyMask.js";
 
 const LEVEL_STYLES = {
   ERROR: "text-danger border-danger",
@@ -22,7 +23,7 @@ function renderLine(line) {
       <span className={`w-12 shrink-0 border-r pr-2 text-[0.65rem] font-semibold ${style}`}>
         {level || "LOG"}
       </span>
-      <span className="whitespace-pre-wrap break-words">{line}</span>
+      <span className="whitespace-pre-wrap break-words">{redactSensitiveText(line)}</span>
     </div>
   );
 }
@@ -56,15 +57,15 @@ export default function ConsoleLogClient() {
     es.onmessage = (e) => {
       const msg = JSON.parse(e.data);
       if (msg.type === "init") {
-        setLogs(msg.logs.slice(-CONSOLE_LOG_CONFIG.maxLines));
+        setLogs(msg.logs.map(redactSensitiveText).slice(-CONSOLE_LOG_CONFIG.maxLines));
       } else if (msg.type === "line") {
         setLogs((prev) => {
-          const next = [...prev, msg.line];
+          const next = [...prev, redactSensitiveText(msg.line)];
           return next.length > CONSOLE_LOG_CONFIG.maxLines ? next.slice(-CONSOLE_LOG_CONFIG.maxLines) : next;
         });
       } else if (msg.type === "lines") {
         setLogs((prev) => {
-          const next = [...prev, ...msg.lines];
+          const next = [...prev, ...msg.lines.map(redactSensitiveText)];
           return next.length > CONSOLE_LOG_CONFIG.maxLines ? next.slice(-CONSOLE_LOG_CONFIG.maxLines) : next;
         });
       } else if (msg.type === "clear") {

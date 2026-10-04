@@ -1,5 +1,6 @@
 import { EventEmitter } from "events";
 import { CONSOLE_LOG_CONFIG } from "@/shared/constants/config.js";
+import { redactSensitiveText } from "@/lib/proxyMask.js";
 
 const consoleLevels = ["log", "info", "warn", "error", "debug"];
 
@@ -63,6 +64,7 @@ function formatArg(arg) {
 }
 
 function appendLine(line) {
+  line = redactSensitiveText(line);
   state.logs.push(line);
   const maxLines = CONSOLE_LOG_CONFIG.maxLines;
   if (state.logs.length > maxLines) {
@@ -95,7 +97,7 @@ export function initConsoleLogCapture() {
 }
 
 export function getConsoleLogs() {
-  return state.logs;
+  return state.logs.map(redactSensitiveText);
 }
 
 export function clearConsoleLogs() {

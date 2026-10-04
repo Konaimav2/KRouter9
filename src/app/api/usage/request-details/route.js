@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getRequestDetails } from "@/lib/usageDb";
 import { getApiKeys } from "@/lib/db/repos/apiKeysRepo.js";
-import { buildKeyMap, deriveListFields, LOCAL_KEY_LABEL } from "@/app/(dashboard)/dashboard/usage/components/usageMeta.js";
+import { buildKeyMap, deriveListFields, errorExcerptOf, LOCAL_KEY_LABEL } from "@/app/(dashboard)/dashboard/usage/components/usageMeta.js";
 
 /**
  * GET /api/usage/request-details
@@ -76,7 +76,7 @@ export async function GET(request) {
             const resp = redacted[key];
             redacted[key] = {
               redacted: true,
-              ...(typeof resp.error === "string" ? { error: resp.error.slice(0, 160) } : {}),
+              ...(typeof resp.error === "string" ? { error: errorExcerptOf(resp.error) } : {}),
               ...(Number.isFinite(Number(resp.status)) ? { status: Number(resp.status) } : {}),
             };
           } else {
