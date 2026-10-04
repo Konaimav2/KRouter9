@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Card, Button } from "@/shared/components";
+import { Button } from "@/shared/components";
+import { ArrowRight, Braces, CheckCircle2, ChevronDown, ChevronRight, Clipboard, FileInput, Send } from "lucide-react";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import dynamic from "next/dynamic";
 
@@ -204,100 +205,40 @@ export default function TranslatorPage() {
 
   // Render action button per step
   const getAction = (stepId) => {
-    if (stepId === 1) return <Button size="sm" icon="arrow_forward" loading={loading["toOpenAI"]} onClick={handleToOpenAI}>→ OpenAI</Button>;
-    if (stepId === 3) return <Button size="sm" icon="arrow_forward" loading={loading["toTarget"]} onClick={handleToTarget}>→ Target</Button>;
-    if (stepId === 4) return <Button size="sm" icon="send" loading={loading["send"]} onClick={handleSend}>Send</Button>;
+    if (stepId === 1) return <Button size="sm" loading={loading["toOpenAI"]} onClick={handleToOpenAI}><ArrowRight size={15} />OpenAI</Button>;
+    if (stepId === 3) return <Button size="sm" loading={loading["toTarget"]} onClick={handleToTarget}><ArrowRight size={15} />Target</Button>;
+    if (stepId === 4) return <Button size="sm" loading={loading["send"]} onClick={handleSend}><Send size={15} />Send</Button>;
     return null;
   };
 
   return (
-    <div className="p-8 space-y-3">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-2">
-        <div>
-          <h1 className="text-2xl font-bold text-text-main">Translator Debug</h1>
-          <p className="text-sm text-text-muted mt-1">Replay request flow — matches log files</p>
-        </div>
-        {meta && (
-          <div className="flex items-center gap-2 flex-wrap justify-end">
-            <MetaBadge label="src" value={meta.sourceFormat} color="blue" />
-            <span className="material-symbols-outlined text-text-muted text-[14px]">arrow_forward</span>
-            <MetaBadge label="dst" value={meta.targetFormat} color="orange" />
-            <MetaBadge label="provider" value={meta.provider} color="green" />
-            <MetaBadge label="model" value={meta.model} color="purple" />
-          </div>
-        )}
-      </div>
-
-      {STEPS.map((step) => {
-        const action = getAction(step.id);
-        const isExpanded = !!expanded[step.id];
-        const content = contents[step.id] || "";
-
-        return (
-          <Card key={step.id}>
-            <div className="p-4 space-y-3">
-              {/* Step header */}
-              <div className="flex items-center justify-between">
-                <button onClick={() => toggle(step.id)} className="flex items-center gap-2 flex-1 text-left group">
-                  <span className="material-symbols-outlined text-[20px] text-text-muted group-hover:text-primary transition-colors">
-                    {isExpanded ? "expand_more" : "chevron_right"}
-                  </span>
-                  <span className="text-xs font-mono text-text-muted/60 w-4">{step.id}</span>
-                  <h3 className="text-sm font-semibold text-text-main">{step.label}</h3>
-                  <span className="text-xs text-text-muted/60 font-mono">{step.file}</span>
-                  {content && <span className="text-xs text-green-500">({content.length} chars)</span>}
-                </button>
-                {!isExpanded && (
-                  <div className="flex gap-1 shrink-0">
-                    <Button size="sm" variant="ghost" icon="folder_open" loading={loading[`load-${step.id}`]} onClick={() => handleLoad(step.id)} />
-                    {action}
-                  </div>
-                )}
+    <div className="flex min-w-0 max-w-full flex-col gap-8 px-1 sm:px-0">
+      <section className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--ledger-border)] bg-[var(--ledger-bg)]">
+        <header className="flex flex-col gap-3 border-b border-[var(--ledger-rule)] bg-[var(--ledger-caption-bg)] px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-center gap-3"><span className="font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">01</span><div><h1 className="font-semibold">Translation route</h1><p className="text-xs text-[var(--color-text-muted)]">Replay the seven-stage request and response ledger</p></div></div>
+          {meta && <div className="flex min-w-0 flex-wrap items-center gap-2"><MetaBadge label="src" value={meta.sourceFormat}/><ArrowRight size={14} className="text-[var(--color-text-muted)]"/><MetaBadge label="dst" value={meta.targetFormat}/><MetaBadge label="provider" value={meta.provider}/><MetaBadge label="model" value={meta.model}/></div>}
+        </header>
+        <div className="divide-y divide-[var(--ledger-rule)]">
+          {STEPS.map((step) => {
+            const action = getAction(step.id); const isExpanded = !!expanded[step.id]; const content = contents[step.id] || "";
+            return <section key={step.id} className="min-w-0">
+              <div className="grid min-h-[var(--row-h-default)] grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 px-3 py-3 hover:bg-[var(--signal-row-bg-hover)]">
+                <span className="border-r border-[var(--signal-row-rail)] pr-3 text-center font-mono text-xs tabular-nums text-[var(--color-primary)]">{String(step.id).padStart(2, "0")}</span>
+                <button onClick={() => toggle(step.id)} aria-expanded={isExpanded} className="flex min-w-0 items-center gap-3 text-left"><span className="shrink-0 text-[var(--color-text-muted)]">{isExpanded ? <ChevronDown size={18}/> : <ChevronRight size={18}/>}</span><span className="min-w-0"><span className="block truncate text-sm font-semibold">{step.label}</span><span className="block truncate font-mono text-xs text-[var(--color-text-muted)]">{step.file} · {step.desc}</span></span>{content && <span className="hidden items-center gap-1 text-xs text-[var(--color-success)] sm:inline-flex"><CheckCircle2 size={14}/>{content.length} chars</span>}</button>
+                {!isExpanded && <div className="flex shrink-0 gap-1"><button type="button" onClick={() => handleLoad(step.id)} className="flex size-10 items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]" aria-label={`Load ${step.label}`}><FileInput size={17}/></button>{action}</div>}
               </div>
-
-              {/* Expanded content */}
-              {isExpanded && (
-                <>
-                  <div className="border border-border rounded-lg overflow-hidden">
-                    <Editor
-                      height="400px"
-                      defaultLanguage={step.lang === "text" ? "plaintext" : "json"}
-                      value={content}
-                      onChange={(v) => {
-                        setContent(step.id, v || "");
-                        if (step.id === 1) detectMeta(v || "");
-                      }}
-                      theme="vs-dark"
-                      options={EDITOR_OPTIONS}
-                    />
-                  </div>
-                  <div className="flex gap-2 flex-wrap">
-                    <Button size="sm" variant="outline" icon="folder_open" loading={loading[`load-${step.id}`]} onClick={() => handleLoad(step.id)}>Load</Button>
-                    <Button size="sm" variant="outline" icon="data_object" onClick={() => handleFormat(step.id)}>Format</Button>
-                    <Button size="sm" variant="outline" icon="content_copy" onClick={() => handleCopy(step.id)}>Copy</Button>
-                    {action}
-                  </div>
-                </>
-              )}
-            </div>
-          </Card>
-        );
-      })}
+              {isExpanded && <div className="min-w-0 border-t border-[var(--ledger-rule)] bg-[var(--color-surface-raised)] p-3 sm:p-4">
+                <div className="max-w-full overflow-hidden rounded-[var(--radius-sm)] border border-[var(--input-border)]"><Editor height="400px" defaultLanguage={step.lang === "text" ? "plaintext" : "json"} value={content} onChange={(v) => { setContent(step.id, v || ""); if (step.id === 1) detectMeta(v || ""); }} theme="vs-dark" options={EDITOR_OPTIONS}/></div>
+                <div className="mt-3 flex flex-wrap gap-2"><Button size="sm" variant="outline" loading={loading[`load-${step.id}`]} onClick={() => handleLoad(step.id)}><FileInput size={15}/>Load</Button><Button size="sm" variant="outline" onClick={() => handleFormat(step.id)}><Braces size={15}/>Format</Button><Button size="sm" variant="outline" onClick={() => handleCopy(step.id)}><Clipboard size={15}/>Copy</Button>{action}</div>
+              </div>}
+            </section>;
+          })}
+        </div>
+      </section>
     </div>
   );
 }
 
-function MetaBadge({ label, value, color }) {
-  const colors = {
-    blue: "bg-blue-500/10 text-blue-500",
-    orange: "bg-orange-500/10 text-orange-500",
-    green: "bg-green-500/10 text-green-500",
-    purple: "bg-purple-500/10 text-purple-500",
-  };
-  return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono ${colors[color]}`}>
-      <span className="text-text-muted/70 font-sans text-[10px]">{label}:</span>{value}
-    </span>
-  );
+function MetaBadge({ label, value }) {
+  return <span className="inline-flex max-w-full items-center gap-1 border border-[var(--badge-border)] bg-[var(--badge-bg)] px-2 py-1 font-mono text-xs text-[var(--badge-fg)]"><span className="font-sans text-[10px] text-[var(--color-text-subtle)]">{label}:</span><span className="max-w-52 truncate">{value}</span></span>;
 }
