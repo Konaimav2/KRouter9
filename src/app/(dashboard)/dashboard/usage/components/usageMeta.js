@@ -4,6 +4,8 @@
 // (maskApiKey: first 8 chars + "***"; short keys: first char + "***") and the
 // email censor used by the usage dashboard components. NEVER emits raw keys.
 
+import { redactSensitiveText } from "@/lib/proxyMask.js";
+
 export const LOCAL_KEY_LABEL = "Local (No API Key)";
 export const UNKNOWN_KEY_LABEL = "Unknown key";
 export const ERROR_EXCERPT_MAX = 160;
@@ -53,7 +55,7 @@ export function errorExcerptOf(value, max = ERROR_EXCERPT_MAX) {
   if (value === null || value === undefined) return null;
   const msg = typeof value === "string" ? value : value?.message;
   if (typeof msg !== "string") return null;
-  const oneLine = msg.replace(/[\r\n]+/g, " ").trim().slice(0, max);
+  const oneLine = redactSensitiveText(msg).replace(/[\r\n]+/g, " ").trim().slice(0, max);
   return oneLine.length ? oneLine : null;
 }
 

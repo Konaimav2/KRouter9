@@ -53,6 +53,31 @@ export function censorProxyPoolUrl(url) {
   return String(url).trim() ? "***" : "";
 }
 
+/**
+ * Remove credential material and network locations from text that can cross a
+ * persistence or browser boundary. This helper is deliberately client-safe so
+ * the same policy can be applied defensively by UI consumers.
+ */
+export function redactSensitiveText(value) {
+  if (value === undefined || value === null) return value;
+  let text = String(value);
+
+  // Whole URLs may contain userinfo, tokens, paths, query parameters and hosts.
+  text = text.replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s<>'"`]+/gi, "[REDACTED_URL]");
+  // Common explicit credentials and bearer values.
+  text = text.replace(/\b(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, "$1[REDACTED]");
+  text = text.replace(/\b(api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|authorization|password|passwd|secret|token)\s*[:=]\s*[^\s,;]+/gi, "$1=[REDACTED]");
+  // Well-known key/token shapes, including JWTs and provider-prefixed keys.
+  text = text.replace(/\b(?:sk|pk|rk|gh[oprsu]|xox[baprs])-?[A-Za-z0-9_-]{12,}\b/g, "[REDACTED_KEY]");
+  text = text.replace(/\bAIza[A-Za-z0-9_-]{20,}\b/g, "[REDACTED_KEY]");
+  text = text.replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, "[REDACTED_TOKEN]");
+  // Bare proxy userinfo, IP addresses and hostnames are infrastructure secrets.
+  text = text.replace(/\b[^\s:@/]+:[^\s@/]+@(?:\[[^\]]+\]|[^\s/:]+)(?::\d+)?\b/g, "[REDACTED_PROXY]");
+  text = text.replace(/\b(?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?\b/g, "[REDACTED_IP]");
+  text = text.replace(/\b(?:localhost|(?:[a-z0-9-]+\.)+[a-z]{2,})(?::\d{1,5})?\b/gi, "[REDACTED_HOST]");
+  return text;
+}
+
 export function sanitizeProxyPoolFields(obj) {
   if (!obj || typeof obj !== "object") return obj;
   const out = { ...obj };
@@ -61,6 +86,12 @@ export function sanitizeProxyPoolFields(obj) {
     delete out.proxyUrl;
     out.proxyUrlMasked = censorProxyPoolUrl(raw);
     out.hasProxyAuth = hasProxyAuth(raw);
+  }
+  if (out.noProxy !== undefined) {
+    out.noProxy = String(out.noProxy).trim() ? "***" : "";
+  }
+  if (out.lastError !== undefined) {
+    out.lastError = redactSensitiveText(out.lastError);
   }
   return out;
 }

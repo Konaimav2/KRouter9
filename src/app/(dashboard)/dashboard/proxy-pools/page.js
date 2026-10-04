@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { Button, CardSkeleton, Input, MaskedProxyValue, Modal, Toggle, ConfirmModal } from "@/shared/components";
 import Icon from "@/shared/components/Icon";
 import { useNotificationStore } from "@/store/notificationStore";
+import { redactSensitiveText } from "@/lib/proxyMask.js";
 
 function formatDateTime(value) {
   if (!value) return "Never";
@@ -17,7 +18,7 @@ function normalizeFormData(data = {}, isEdit = false) {
     name: data.name || "",
     // On edit the browser never sees the real secret — leave blank to keep it.
     proxyUrl: isEdit ? "" : data.proxyUrl || "",
-    noProxy: data.noProxy || "",
+    noProxy: isEdit ? "" : data.noProxy || "",
     isActive: data.isActive !== false,
     strictProxy: data.strictProxy === true,
   };
@@ -109,7 +110,7 @@ export default function ProxyPoolsPage() {
       name: formData.name.trim(),
       // Empty on edit = keep existing secret (backend ignores blank/masked).
       ...(formData.proxyUrl.trim() || !isEdit ? { proxyUrl: formData.proxyUrl.trim() } : {}),
-      noProxy: formData.noProxy.trim(),
+      ...(formData.noProxy.trim() || !isEdit ? { noProxy: formData.noProxy.trim() } : {}),
       isActive: formData.isActive === true,
       strictProxy: formData.strictProxy === true,
     };
@@ -678,7 +679,7 @@ export default function ProxyPoolsPage() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1"><p className="truncate text-sm font-medium">{pool.name}</p><span className={`inline-flex items-center gap-1 text-xs ${statusTone}`}><span aria-hidden="true">{statusGlyph}</span>{status}</span><span className={pool.isActive ? "text-success text-xs" : "text-text-muted text-xs"}>{pool.isActive ? "● Active" : "Ⅱ Inactive"}</span></div>
                 <div className="mt-1 text-xs text-text-muted"><MaskedProxyValue masked={pool.proxyUrlMasked || "***"} revealUrl={`/api/proxy-pools/${pool.id}/reveal`} hasAuth={pool.hasProxyAuth === true} /></div>
-                <div className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-text-muted"><span>{pool.noProxy ? `No proxy: ${pool.noProxy}` : "No proxy: none"}</span>{pool.type && <span>{pool.type} relay</span>}<span>{pool.boundConnectionCount || 0} bound</span><span>Last tested: {formatDateTime(pool.lastTestedAt)}</span>{pool.lastError && <span className="text-danger">■ {pool.lastError}</span>}</div>
+                <div className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-text-muted"><span>{pool.noProxy ? "No proxy: configured" : "No proxy: none"}</span>{pool.type && <span>{pool.type} relay</span>}<span>{pool.boundConnectionCount || 0} bound</span><span>Last tested: {formatDateTime(pool.lastTestedAt)}</span>{pool.lastError && <span className="text-danger">■ {redactSensitiveText(pool.lastError)}</span>}</div>
               </div>
               <div className="col-span-3 flex min-h-11 items-center justify-end gap-1 sm:col-span-1">
                 <Toggle size="sm" checked={pool.isActive === true} onChange={() => handleToggleActive(pool)} title={pool.isActive ? "Disable" : "Enable"} />

@@ -1,3 +1,4 @@
+import { redactSensitiveText } from "@/lib/proxyMask.js";
 import { getAdapter } from "../driver.js";
 import { parseJson, stringifyJson } from "../helpers/jsonCol.js";
 import { memoryCap, memoryCapFrom } from "@/lib/memoryCaps.js";
@@ -73,6 +74,17 @@ let writeBufferBytes = 0;
 let flushTimer = null;
 let isFlushing = false;
 
+function redactStoredErrors(value, key = "") {
+  if (typeof value === "string" && /^(?:error|message|lastError)$/i.test(key)) {
+    return redactSensitiveText(value);
+  }
+  if (Array.isArray(value)) return value.map((item) => redactStoredErrors(item));
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([childKey, child]) => [childKey, redactStoredErrors(child, childKey)])
+  );
+}
+
 function maskKeyRef(key) {
   if (!key || typeof key !== "string") return null;
   if (key.length <= 8) return key.charAt(0) + "***";
@@ -146,8 +158,8 @@ async function flushToDatabase() {
             keyName: typeof item.keyName === "string" ? item.keyName : undefined,
             request: truncateField(item.request, config.maxJsonSize),
             providerRequest: truncateField(item.providerRequest, config.maxJsonSize),
-            providerResponse: truncateField(item.providerResponse, config.maxJsonSize),
-            response: truncateField(item.response, config.maxJsonSize),
+            providerResponse: truncateField(redactStoredErrors(item.providerResponse), config.maxJsonSize),
+            response: truncateField(redactStoredErrors(item.response), config.maxJsonSize),
             pxpipe: item.pxpipe || undefined,
             clientIp: item.clientIp || undefined,
             cost: typeof item.cost === "number" ? item.cost : undefined,
@@ -187,8 +199,8 @@ export async function saveRequestDetail(detail) {
     ...detail,
     request: truncateField(detail.request, config.bodyCapBytes),
     providerRequest: truncateField(detail.providerRequest, config.bodyCapBytes),
-    providerResponse: truncateField(detail.providerResponse, config.bodyCapBytes),
-    response: truncateField(detail.response, config.bodyCapBytes),
+    providerResponse: truncateField(redactStoredErrors(detail.providerResponse), config.bodyCapBytes),
+    response: truncateField(redactStoredErrors(detail.response), config.bodyCapBytes),
   };
 
   const approxBytes = JSON.stringify(capped).length;
