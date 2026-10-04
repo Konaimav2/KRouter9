@@ -126,6 +126,7 @@ import p122 from "./xquik.js";
 import p124 from "./agentrouter.js";
 import p125 from "./bai-api.js";
 import p126 from "./tokenharbor.js";
+import p127 from "./jina-reader-free.js";
 
 export default [
   p0,
@@ -253,4 +254,5 @@ export default [
   p124,
   p125,
   p126,
+  p127,
 ];

@@ -26,6 +26,45 @@ import {
 
 const CLOUD_URL = process.env.NEXT_PUBLIC_CLOUD_URL;
 
+const TOOL_COMMANDS = {
+  claude: { install: "npm install -g @anthropic-ai/claude-code", verify: "claude --version" },
+  codex: { install: "npm install -g @openai/codex", verify: "codex --version" },
+  opencode: { install: "npm install -g opencode-ai", verify: "opencode --version" },
+  droid: { install: "curl -fsSL https://app.factory.ai/cli | sh", verify: "droid --version" },
+  openclaw: { install: "npm install -g openclaw", verify: "openclaw --version" },
+  hermes: { install: "pipx install hermes-agent", verify: "hermes --version" },
+  cline: { install: "code --install-extension saoudrizwan.claude-dev", verify: "code --list-extensions | grep saoudrizwan.claude-dev" },
+  kilo: { install: "code --install-extension kilocode.kilo-code", verify: "code --list-extensions | grep kilocode.kilo-code" },
+  "deepseek-tui": { install: "npm install -g deepseek-tui", verify: "deepseek-tui --version" },
+  jcode: { install: "npm install -g @jcode-ai/cli", verify: "jcode --version" },
+  "grok-build": { install: "npm install -g @xai-org/grok-cli", verify: "grok --version" },
+  cowork: { install: "# Install Claude Desktop from the official Anthropic download page", verify: "# Open Claude Desktop and confirm the chat window loads" },
+  copilot: { install: "code --install-extension GitHub.copilot-chat", verify: "code --list-extensions | grep GitHub.copilot-chat" },
+  antigravity: { install: "# Install Antigravity from its official release page", verify: "antigravity --version" },
+  mitm: { install: "python3 -m pip install --user mitmproxy", verify: "mitmproxy --version" },
+};
+
+function CopySetupValue({ label, value }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    await navigator.clipboard.writeText(value);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      className="shrink-0 rounded-[var(--radius-sm)] border border-[var(--button-border)] px-3 py-2 text-xs font-medium text-text-main hover:border-primary hover:text-primary"
+      aria-label={`${label}: ${copied ? "copied" : "copy"}`}
+    >
+      {copied ? "Copied" : "Copy"}
+    </button>
+  );
+}
+
 export default function ToolDetailClient({ toolId, machineId }) {
   const tool = CLI_TOOLS[toolId];
   const [connections, setConnections] = useState([]);
@@ -37,6 +76,7 @@ export default function ToolDetailClient({ toolId, machineId }) {
   const [tailscaleEnabled, setTailscaleEnabled] = useState(false);
   const [tailscaleUrl, setTailscaleUrl] = useState("");
   const [apiKeys, setApiKeys] = useState([]);
+  const [setupKeyId, setSetupKeyId] = useState("");
 
   useEffect(() => {
     let mounted = true;
@@ -162,6 +202,82 @@ export default function ToolDetailClient({ toolId, machineId }) {
     if (cloudEnabled && CLOUD_URL) return CLOUD_URL;
     if (typeof window !== "undefined") return window.location.origin;
     return "http://localhost:20128";
+  };
+
+  const renderSetupLedger = () => {
+    const command = TOOL_COMMANDS[toolId] || {
+      install: `# Install ${tool.name} from its official distribution`,
+      verify: `${toolId} --version`,
+    };
+    const baseUrl = getBaseUrl();
+    const availableModels = getAllAvailableModels();
+    const selectedModel = availableModels[0]?.value || "provider/model-id";
+    const selectedKey = apiKeys.find((key) => String(key.id) === setupKeyId);
+    const steps = [
+      {
+        title: "Install the client",
+        detail: "Run this command yourself in a terminal. KRouter9 never downloads or executes it.",
+        value: command.install,
+      },
+      {
+        title: "Set the base URL",
+        detail: "Use this gateway origin in the client provider or environment settings.",
+        value: baseUrl,
+      },
+      {
+        title: "Choose an API key",
+        detail: "Select an existing KRouter9 key. The secret remains masked; paste the key from its secure source when the client asks for it.",
+        control: (
+          <select
+            value={setupKeyId}
+            onChange={(event) => setSetupKeyId(event.target.value)}
+            className="min-h-10 w-full border border-border bg-background px-3 text-sm text-text-main sm:max-w-md"
+          >
+            <option value="">Select a key ({apiKeys.length} available)</option>
+            {apiKeys.map((key, index) => (
+              <option key={key.id || index} value={String(key.id || index)}>
+                {key.name || key.label || `API key ${index + 1}`}
+              </option>
+            ))}
+          </select>
+        ),
+        value: selectedKey ? selectedKey.name || selectedKey.label || "Selected API key" : "sk-your-krouter9-key",
+      },
+      {
+        title: "Map a model",
+        detail: "Use a slash-qualified route so KRouter9 can send the request to the intended provider.",
+        value: selectedModel,
+      },
+      {
+        title: "Verify the setup",
+        detail: "Run the version or launch check yourself. Expected output: a version number or a successful client launch without an authentication error.",
+        value: command.verify,
+      },
+    ];
+
+    return (
+      <section className="ledger-band">
+        <header className="ledger-caption">
+          <span className="ledger-number">01</span>
+          <h2 className="font-semibold">Manual setup ledger</h2>
+        </header>
+        <ol>
+          {steps.map((step, index) => (
+            <li key={step.title} className="signal-row grid gap-3 px-4 py-4 sm:grid-cols-[2.5rem_minmax(0,1fr)]">
+              <span className="ledger-number">{String(index + 1).padStart(2, "0")}</span>
+              <div className="min-w-0 space-y-2">
+                <div><h3 className="font-medium text-text-main">{step.title}</h3><p className="text-sm leading-6 text-text-muted">{step.detail}</p></div>
+                {step.control}
+                <div className="flex min-w-0 items-center gap-2 border border-border bg-background p-2">
+                  <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre text-xs text-text-main">{step.value}</code>
+                  <CopySetupValue label={step.title} value={step.value} />
+                </div>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </section>
+    );
   };
 
   const renderToolCard = () => {
@@ -350,13 +466,16 @@ export default function ToolDetailClient({ toolId, machineId }) {
           </div>
         </section>
       ) : (
-        <section className="ledger-band">
-          <header className="ledger-caption">
-            <span className="ledger-number">01</span>
-            <h2 className="font-semibold">Configuration</h2>
-          </header>
-          <div className="p-4">{renderToolCard()}</div>
-        </section>
+        <>
+          {renderSetupLedger()}
+          <section className="ledger-band">
+            <header className="ledger-caption">
+              <span className="ledger-number">02</span>
+              <h2 className="font-semibold">Client-specific configuration</h2>
+            </header>
+            <div className="p-4">{renderToolCard()}</div>
+          </section>
+        </>
       )}
     </div>
   );
