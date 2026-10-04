@@ -64,13 +64,34 @@ export function redactSensitiveText(value) {
 
   // Whole URLs may contain userinfo, tokens, paths, query parameters and hosts.
   text = text.replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s<>'"`]+/gi, "[REDACTED_URL]");
-  // Common explicit credentials and bearer values.
+  // Common explicit credentials and bearer values. Quoted JSON properties are
+  // handled separately so their closing quote cannot become part of a secret.
   text = text.replace(/\b(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, "$1[REDACTED]");
-  text = text.replace(/\b(api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|authorization|password|passwd|secret|token)\s*[:=]\s*[^\s,;]+/gi, "$1=[REDACTED]");
-  // Well-known key/token shapes, including JWTs and provider-prefixed keys.
-  text = text.replace(/\b(?:sk|pk|rk|gh[oprsu]|xox[baprs])-?[A-Za-z0-9_-]{12,}\b/g, "[REDACTED_KEY]");
+  text = text.replace(/(["'])(api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|authorization|password|passwd|secret|token|auth|bearer|credential)\1\s*:\s*(["'])[^"']*\3/gi, '$1$2$1:$3[REDACTED]$3');
+  text = text.replace(/\b(api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|authorization|password|passwd|secret|token|auth|bearer|credential)\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;}]+)/gi, "$1=[REDACTED]");
+  // Well-known key/token shapes, including prefixes used by providers in this
+  // registry. Keep this explicit: it catches keys even without contextual words.
+  text = text.replace(/\b(?:(?:sk|pk|rk)-?|gsk_|xai-|tvo-|tp-|pt-|hf_|user_|auth1_|gh[oprsu]-?|xox[baprs]-?)[A-Za-z0-9_-]{12,}\b/gi, "[REDACTED_KEY]");
   text = text.replace(/\bAIza[A-Za-z0-9_-]{20,}\b/g, "[REDACTED_KEY]");
   text = text.replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, "[REDACTED_TOKEN]");
+
+  // Generic fallback for provider formats not yet known to the registry. A
+  // key-ish label permits any long token shape; standalone values additionally
+  // need mixed character classes and high Shannon entropy to avoid prose/model IDs.
+  text = text.replace(/\b(key|token|secret|credential|auth|bearer)\b(\s*(?:is\s+|was\s+)?[:=]?\s+)([A-Za-z0-9_-]{20,})/gi, "$1$2[REDACTED]");
+  text = text.replace(/\b[A-Za-z0-9_-]{20,}\b/g, (candidate) => {
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(candidate)) return candidate;
+    const classes = [/[a-z]/.test(candidate), /[A-Z]/.test(candidate), /\d/.test(candidate), /[_-]/.test(candidate)]
+      .filter(Boolean).length;
+    if (classes < 3) return candidate;
+    const counts = new Map();
+    for (const char of candidate) counts.set(char, (counts.get(char) || 0) + 1);
+    const entropy = [...counts.values()].reduce((sum, count) => {
+      const probability = count / candidate.length;
+      return sum - probability * Math.log2(probability);
+    }, 0);
+    return entropy >= 4 ? "[REDACTED_TOKEN]" : candidate;
+  });
   // Bare proxy userinfo, IP addresses and hostnames are infrastructure secrets.
   text = text.replace(/\b[^\s:@/]+:[^\s@/]+@(?:\[[^\]]+\]|[^\s/:]+)(?::\d+)?\b/g, "[REDACTED_PROXY]");
   text = text.replace(/\b(?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?\b/g, "[REDACTED_IP]");
