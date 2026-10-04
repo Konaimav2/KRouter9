@@ -1,3 +1,18 @@
+# v3.1.0 (2026-10-04) — Ledger completion: leftover surfaces, blue accent, usage depth
+
+## New surfaces
+- Endpoint, MITM, PxPipe, Translator, and dashboard home rebuilt on the route
+- Logo-blue glacier accent replaces lichen green; missing `--color-primary-contrast`
+  defined (washed-out selectors fixed, AA-compliant both themes)
+- Material ligature spans purged repo-wide (405 → 0); Deploy Relay brand icons corrected
+
+## Fixes
+- Usage Breakdown zero-token bug: today/24h aggregation falls back to flat columns
+- Dedicated Keys tab beside Details; request logs show status, masked key, error rows
+- Quota accounts sort globally by expiring reset (pre-pagination, cached)
+- Model lists unified on one curated source (combo-tail phantoms gone)
+- Profile/CLI/MCP rebranded to KRouter9 identity; docs nav hash-free
+
 # v3.0.0 (2026-10-03) — Switchboard Ledger dashboard + fix pack
 
 ## New dashboard
