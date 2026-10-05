@@ -49,7 +49,6 @@ export default function CombosPage() {
   const [combos, setCombos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [editingCombo, setEditingCombo] = useState(null);
   const [activeProviders, setActiveProviders] = useState([]);
   const [comboStrategies, setComboStrategies] = useState({});
   const [capacityAdapter, setCapacityAdapter] = useState(EMPTY_CAPACITY_ADAPTER);
@@ -139,7 +138,6 @@ export default function CombosPage() {
       });
       if (res.ok) {
         await fetchData();
-        setEditingCombo(null);
       } else {
         const err = await res.json();
         alert(err.error || "Failed to update combo");
@@ -255,7 +253,6 @@ export default function CombosPage() {
                 activeProviders={activeProviders}
                 copied={copied}
                 onCopy={copy}
-                onEdit={() => setEditingCombo(combo)}
                 onDelete={() => handleDelete(combo.id, combo.name)}
                 onChangeModels={(models) => handleUpdate(combo.id, { name: combo.name, models })}
                 strategy={comboStrategies[combo.name] || {}}
@@ -277,9 +274,6 @@ export default function CombosPage() {
 
       {showCreateModal && (
         <ComboFormModal key="create" isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} onSave={handleCreate} activeProviders={activeProviders} />
-      )}
-      {editingCombo && (
-        <ComboFormModal key={editingCombo.id} isOpen={!!editingCombo} combo={editingCombo} onClose={() => setEditingCombo(null)} onSave={(data) => handleUpdate(editingCombo.id, data)} activeProviders={activeProviders} />
       )}
       <ConfirmModal isOpen={!!confirmState} onClose={() => setConfirmState(null)} onConfirm={confirmState?.onConfirm} title={confirmState?.title || "Confirm"} message={confirmState?.message} variant="danger" />
     </div>
@@ -310,24 +304,36 @@ const STRATEGY_OPTIONS = [
   { value: "fusion", label: "Fusion — panel + judge", shortLabel: "Fusion" },
 ];
 
-function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onEdit, onDelete, onChangeModels, strategy = {}, onSetStrategy }) {
+function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDelete, onChangeModels, strategy = {}, onSetStrategy }) {
   const [showJudgeSelect, setShowJudgeSelect] = useState(false);
   const [showAddModel, setShowAddModel] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
+  const [draftModels, setDraftModels] = useState(combo.models);
+  const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
   const [announcement, setAnnouncement] = useState("");
   const current = strategy.fallbackStrategy || "fallback";
   const judge = strategy.judgeModel || "";
   const isFusion = current === "fusion";
+  const dirty = draftModels.length !== combo.models.length || draftModels.some((model, index) => model !== combo.models[index]);
 
   const moveModel = (index, delta) => {
     const target = index + delta;
-    if (target < 0 || target >= combo.models.length) return;
-    const next = [...combo.models];
+    if (target < 0 || target >= draftModels.length) return;
+    const next = [...draftModels];
     [next[index], next[target]] = [next[target], next[index]];
-    setAnnouncement(`${combo.models[index]} moved from position ${index + 1} to ${target + 1}`);
-    onChangeModels(next);
+    setAnnouncement(`${draftModels[index]} moved from position ${index + 1} to ${target + 1}`);
+    setDraftModels(next);
+  };
+
+  const saveMembers = async () => {
+    if (!dirty || saving) return;
+    setSaving(true);
+    await onChangeModels(draftModels);
+    setSaving(false);
+    setAnnouncement(`${combo.name} saved with ${draftModels.length} ordered members`);
   };
 
   const testCombo = async () => {
@@ -352,21 +358,19 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onEdi
   return (
     <article>
       <div className="grid min-h-[var(--row-h-comfortable)] gap-3 px-4 py-3 lg:grid-cols-[minmax(240px,1fr)_minmax(300px,auto)_auto] lg:items-center">
-        <button type="button" onClick={() => setExpanded((value) => !value)} className="flex min-w-0 items-center gap-3 text-left" aria-expanded={expanded}>
-          <Icon name={expanded ? "chevron_down" : "chevron_right"} size={18} className="shrink-0 text-[var(--color-text-muted)]" />
+        <div className="flex min-w-0 items-center gap-3 text-left">
+          <Icon name="route" size={18} className="shrink-0 text-[var(--color-primary)]" />
           <span className="flex size-8 shrink-0 items-center justify-center border border-[var(--signal-row-rail)] font-mono text-xs tabular-nums text-[var(--color-primary)]">{String(combo.models.length).padStart(2, "0")}</span>
           <span className="min-w-0"><code className="block truncate font-mono text-sm font-semibold">{combo.name}</code><span className="text-xs text-[var(--color-text-muted)]">{combo.models.length} member{combo.models.length === 1 ? "" : "s"}</span></span>
-        </button>
-        <div className="grid grid-cols-3 overflow-hidden rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-strong)]" aria-label="Routing strategy">
-          {STRATEGY_OPTIONS.map((option) => (
-            <button key={option.value} type="button" aria-pressed={current === option.value} onClick={() => onSetStrategy({ fallbackStrategy: option.value })} className={`min-h-9 px-3 text-xs font-medium transition-colors ${current === option.value ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]" : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]"}`}>{option.shortLabel}</button>
-          ))}
         </div>
-        <div className="grid grid-cols-4 gap-1 sm:flex">
+        <div className="hidden items-center gap-2 lg:flex" aria-label="Ordered route preview">{combo.models.slice(0, 4).map((model, index) => <span key={`${model}-${index}`} className="flex min-w-0 items-center gap-2"><span className="flex size-7 shrink-0 items-center justify-center border border-[var(--route-line)] font-mono text-[10px] text-[var(--color-primary)]">{String(index + 1).padStart(2, "0")}</span><code className="max-w-28 truncate font-mono text-[11px]">{model}</code>{index < Math.min(combo.models.length, 4) - 1 ? <Icon name="arrow_forward" size={14} className="text-[var(--color-text-subtle)]" /> : null}</span>)}</div>
+        <div className="flex items-center justify-end gap-1">
           <ActionButton icon={copied === `combo-${combo.id}` ? "check" : "copy"} label="Copy" onClick={() => onCopy(combo.name, `combo-${combo.id}`)} />
-          <ActionButton icon="edit" label="Edit" onClick={onEdit} />
           <ActionButton icon={testing ? "progress_activity" : "play_arrow"} label={testing ? "Testing" : "Test"} onClick={testCombo} disabled={testing || combo.models.length === 0} spin={testing} />
-          <ActionButton icon="delete" label="Delete" onClick={onDelete} danger />
+          <div className="relative">
+            <ActionButton icon="more_horiz" label="Manage" onClick={() => setCommandOpen((value) => !value)} />
+            {commandOpen ? <div role="menu" className="absolute right-0 top-full z-[var(--z-menu)] mt-1 w-48 border border-[var(--color-border-strong)] bg-[var(--color-surface-raised)] py-1 shadow-[var(--shadow-tray)]"><button type="button" role="menuitem" onClick={() => { setExpanded(true); setCommandOpen(false); }} className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm hover:bg-[var(--color-surface-hover)]"><Icon name="tune" size={16} />Manage route</button><button type="button" role="menuitem" onClick={() => { setCommandOpen(false); onDelete(); }} className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger-wash)]"><Icon name="delete" size={16} />Delete combo</button></div> : null}
+          </div>
         </div>
       </div>
 
@@ -381,7 +385,8 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onEdi
       {expanded && (
         <div className="border-t border-[var(--ledger-rule)] bg-[var(--color-surface-strong)] p-3 sm:p-4">
           <div className="space-y-2">
-            {combo.models.map((model, index) => (
+            <div className="grid grid-cols-3 overflow-hidden border border-[var(--color-border)]" aria-label="Routing strategy">{STRATEGY_OPTIONS.map((option) => <button key={option.value} type="button" aria-pressed={current === option.value} onClick={() => onSetStrategy({ fallbackStrategy: option.value })} className={`min-h-11 px-3 text-xs font-medium ${current === option.value ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]" : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]"}`}>{option.shortLabel}</button>)}</div>
+            {draftModels.map((model, index) => (
               <div
                 key={`${model}-${index}`}
                 draggable
@@ -391,8 +396,8 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onEdi
                   event.preventDefault();
                   const source = Number.parseInt(event.dataTransfer.getData("text/plain"), 10);
                   if (!Number.isInteger(source) || source === index) return;
-                  onChangeModels(arrayMove(combo.models, source, index));
-                  setAnnouncement(`${combo.models[source]} moved from position ${source + 1} to ${index + 1}`);
+                  setDraftModels(arrayMove(draftModels, source, index));
+                  setAnnouncement(`${draftModels[source]} moved from position ${source + 1} to ${index + 1}`);
                 }}
                 className="grid min-h-14 cursor-grab grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 border border-[var(--ledger-rule)] bg-[var(--ledger-bg)] px-3 py-2 active:cursor-grabbing"
               >
@@ -400,12 +405,13 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onEdi
                 <div className="min-w-0"><code className="block break-all font-mono text-xs text-[var(--color-text)]">{model}</code><div className="mt-1 flex flex-wrap items-center gap-2"><span className="inline-flex items-center gap-1 text-[11px] text-[var(--color-text-muted)]"><span className="size-2 rounded-full border border-[var(--color-text-subtle)]" />Not tested</span><CapacityBadges caps={getCaps?.(model)} /></div></div>
                 <div className="flex items-center gap-1">
                   <IconButton icon="arrow_upward" label={`Move ${model} up`} onClick={() => moveModel(index, -1)} disabled={index === 0} />
-                  <IconButton icon="arrow_downward" label={`Move ${model} down`} onClick={() => moveModel(index, 1)} disabled={index === combo.models.length - 1} />
-                  <IconButton icon="close" label={`Remove ${model}`} onClick={() => onChangeModels(combo.models.filter((_, itemIndex) => itemIndex !== index))} danger />
+                  <IconButton icon="arrow_downward" label={`Move ${model} down`} onClick={() => moveModel(index, 1)} disabled={index === draftModels.length - 1} />
+                  <IconButton icon="close" label={`Remove ${model}`} onClick={() => setDraftModels(draftModels.filter((_, itemIndex) => itemIndex !== index))} danger />
                 </div>
               </div>
             ))}
             <button type="button" onClick={() => setShowAddModel(true)} className="flex min-h-12 w-full items-center justify-center gap-2 border border-dashed border-[var(--color-primary-border)] font-medium text-[var(--color-primary)] hover:bg-[var(--color-primary-wash)]"><Icon name="add" size={17} />Add model</button>
+            <div className="flex flex-col gap-2 border-t border-[var(--ledger-rule)] pt-3 sm:flex-row sm:items-center sm:justify-between"><p className="text-xs text-[var(--color-text-muted)]">{dirty ? "Unsaved order changes" : "Route order saved"}</p><div className="flex gap-2"><Button size="sm" variant="secondary" onClick={() => { setDraftModels(combo.models); setExpanded(false); }} disabled={saving}>Cancel</Button><Button size="sm" onClick={saveMembers} loading={saving} disabled={!dirty || saving}>Save route</Button></div></div>
           </div>
         </div>
       )}
@@ -419,7 +425,7 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onEdi
       <span className="sr-only" aria-live="polite">{announcement}</span>
 
       {showJudgeSelect && <ModelSelectModal isOpen={showJudgeSelect} onClose={() => setShowJudgeSelect(false)} onSelect={(model) => { onSetStrategy({ judgeModel: model?.value || "" }); setShowJudgeSelect(false); }} activeProviders={activeProviders} title="Select judge model" addedModelValues={judge ? [judge] : []} closeOnSelect />}
-      {showAddModel && <ModelSelectModal isOpen={showAddModel} onClose={() => setShowAddModel(false)} onSelect={(model) => { if (model?.value && !combo.models.includes(model.value)) onChangeModels([...combo.models, model.value]); }} activeProviders={activeProviders} title={`Add model to ${combo.name}`} addedModelValues={combo.models} includeCombos closeOnSelect={false} />}
+      {showAddModel && <ModelSelectModal isOpen={showAddModel} onClose={() => setShowAddModel(false)} onSelect={(model) => { if (model?.value && !draftModels.includes(model.value)) setDraftModels([...draftModels, model.value]); }} activeProviders={activeProviders} title={`Add model to ${combo.name}`} addedModelValues={draftModels} includeCombos closeOnSelect={false} />}
     </article>
   );
 }
@@ -502,7 +508,7 @@ function CapacityAdapterCap({ cap, entry, onChange, activeProviders, getCaps }) 
   );
 }
 
-function ModelItem({ id, index, model, isFirst, isLast, onEdit, onMoveUp, onMoveDown, onRemove }) {
+function ModelItem({ id, index, model, isFirst, isLast, onRename, onMoveUp, onMoveDown, onRemove }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({ id });
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -510,18 +516,18 @@ function ModelItem({ id, index, model, isFirst, isLast, onEdit, onMoveUp, onMove
     opacity: isDragging ? 0.4 : 1,
     zIndex: isDragging ? 999 : undefined,
   };
-  const [editing, setEditing] = useState(false);
+  const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(model);
   const commit = () => {
     const trimmed = draft.trim();
-    if (trimmed && trimmed !== model) onEdit(trimmed);
+    if (trimmed && trimmed !== model) onRename(trimmed);
     else setDraft(model);
-    setEditing(false);
+    setRenaming(false);
   };
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter") commit();
-    if (e.key === "Escape") { setDraft(model); setEditing(false); }
+    if (e.key === "Escape") { setDraft(model); setRenaming(false); }
   };
 
   return (
@@ -549,7 +555,7 @@ function ModelItem({ id, index, model, isFirst, isLast, onEdit, onMoveUp, onMove
       <span className="text-[10px] font-medium text-text-muted w-3 text-center shrink-0">{index + 1}</span>
 
       {/* Inline editable model value */}
-      {editing ? (
+      {renaming ? (
         <input
           autoFocus
           value={draft}
@@ -561,8 +567,8 @@ function ModelItem({ id, index, model, isFirst, isLast, onEdit, onMoveUp, onMove
       ) : (
         <div
           className="min-w-0 flex-1 cursor-text truncate rounded px-1.5 py-0.5 font-mono text-xs text-text-main hover:bg-black/5 dark:hover:bg-white/5"
-          onClick={() => setEditing(true)}
-          title="Click to edit"
+          onClick={() => setRenaming(true)}
+          title="Click to rename"
         >
           {model}
         </div>
@@ -700,14 +706,13 @@ function ComboFormModal({ isOpen, combo, onClose, onSave, activeProviders, kindF
     setSaving(false);
   };
 
-  const isEdit = !!combo;
 
   return (
     <>
       <Modal
         isOpen={isOpen}
         onClose={onClose}
-        title={isEdit ? "Edit Combo" : "Create Combo"}
+        title="Create Combo"
       >
         <div className="flex flex-col gap-3">
           {/* Name */}
@@ -745,7 +750,7 @@ function ComboFormModal({ isOpen, combo, onClose, onSave, activeProviders, kindF
                       model={model}
                       isFirst={index === 0}
                       isLast={index === modelItems.length - 1}
-                      onEdit={(newVal) => {
+                      onRename={(newVal) => {
                         const updated = [...models];
                         updated[index] = newVal;
                         setModels(updated);
@@ -781,7 +786,7 @@ function ComboFormModal({ isOpen, combo, onClose, onSave, activeProviders, kindF
               size="sm"
               disabled={!name.trim() || !!nameError || saving}
             >
-              {saving ? "Saving..." : isEdit ? "Save" : "Create"}
+              {saving ? "Saving..." : "Create"}
             </Button>
           </div>
         </div>

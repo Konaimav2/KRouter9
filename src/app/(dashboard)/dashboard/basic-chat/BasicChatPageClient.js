@@ -1,6 +1,7 @@
 "use client";
 
 import Icon from "@/shared/components/Icon";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge, Button } from "@/shared/components";
 import { getModelsByProviderId } from "@/shared/constants/models";
@@ -175,6 +176,8 @@ export default function BasicChatPageClient() {
   const [isHydrated, setIsHydrated] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
+  const [pickerScopeId, setPickerScopeId] = useState("");
+  const [searchAllConfigured, setSearchAllConfigured] = useState(false);
   const [thinkingLevel, setThinkingLevel] = useState("auto");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [renamingSessionId, setRenamingSessionId] = useState("");
@@ -204,6 +207,7 @@ export default function BasicChatPageClient() {
   const closeModelMenu = useCallback(() => {
     setModelMenuOpen(false);
     setModelSearch("");
+    setSearchAllConfigured(false);
     restoreFocus(modelTriggerRef);
   }, [restoreFocus]);
   const closeHistory = useCallback(() => {
@@ -492,9 +496,17 @@ export default function BasicChatPageClient() {
     return map;
   }, [providerGroups]);
 
-  const visibleGroups = useMemo(
-    () => filterModelGroups(providerGroups, modelSearch),
-    [providerGroups, modelSearch]
+  const visibleGroups = useMemo(() => {
+    const scopeId = pickerScopeId || activeProviderId || providerGroups[0]?.providerId || "";
+    const scoped = searchAllConfigured
+      ? providerGroups
+      : providerGroups.filter((group) => group.providerId === scopeId);
+    return filterModelGroups(scoped, modelSearch);
+  }, [providerGroups, modelSearch, pickerScopeId, activeProviderId, searchAllConfigured]);
+
+  const pickerScope = useMemo(
+    () => providerGroups.find((group) => group.providerId === (pickerScopeId || activeProviderId)) || providerGroups[0] || null,
+    [providerGroups, pickerScopeId, activeProviderId]
   );
 
   const activeProviderGroup = useMemo(() => {
@@ -1013,12 +1025,16 @@ export default function BasicChatPageClient() {
         <div className="relative flex min-h-0 flex-col lg:col-start-2 lg:row-span-2">
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--ledger-rule)] bg-[var(--color-surface)] px-4 py-3">
             <div ref={modelMenuRef} className="relative min-w-0">
-              <button ref={modelTriggerRef} type="button" aria-haspopup="dialog" aria-expanded={modelMenuOpen} onClick={() => { if (modelMenuOpen) closeModelMenu(); else setModelMenuOpen(true); }} className="flex min-h-11 max-w-[min(62vw,32rem)] items-center gap-3 rounded-[var(--radius-sm)] border border-[var(--button-border)] bg-[var(--button-secondary-bg)] px-3 text-left">
+              <button ref={modelTriggerRef} type="button" aria-haspopup="dialog" aria-expanded={modelMenuOpen} onClick={() => { if (modelMenuOpen) closeModelMenu(); else { setPickerScopeId(activeProviderId || providerGroups[0]?.providerId || ""); setModelMenuOpen(true); } }} className="flex min-h-11 max-w-[min(62vw,32rem)] items-center gap-3 rounded-[var(--radius-sm)] border border-[var(--button-border)] bg-[var(--button-secondary-bg)] px-3 text-left">
                 <Icon name="route" className="text-[18px] text-[var(--color-primary)]" /><span className="min-w-0"><span className="block truncate text-sm font-semibold">{modelLabel}</span><span className="data-text block truncate text-[10px] text-[var(--color-text-muted)]">{modelSubLabel}</span></span><Icon name="expand_more" className="text-[18px]" />
               </button>
-              {modelMenuOpen ? <div ref={modelDialogRef} role="dialog" aria-modal="true" aria-label="Choose a model" className="absolute left-0 top-[calc(100%+8px)] z-[var(--z-menu)] w-[min(540px,calc(100vw-2rem))] overflow-hidden rounded-[var(--dialog-radius)] border border-[var(--dialog-border)] bg-[var(--dialog-bg)] shadow-[var(--shadow-float)]">
-                <div className="border-b border-[var(--ledger-rule)] p-3"><label className="sr-only" htmlFor="playground-model-search">Search models</label><input id="playground-model-search" autoFocus value={modelSearch} onChange={(e) => setModelSearch(e.target.value)} placeholder="Search models" className="h-10 w-full rounded-[var(--input-radius)] border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm outline-none focus:border-[var(--input-border-focus)]" /></div>
-                <div className="max-h-[60vh] overflow-y-auto p-2 custom-scrollbar">{visibleGroups.length === 0 ? <p className="p-4 text-sm text-[var(--color-text-muted)]">No models match this search.</p> : visibleGroups.map((group) => <section key={group.providerId} className="mb-2 border border-[var(--ledger-border)]"><header className="flex items-center justify-between bg-[var(--ledger-caption-bg)] px-3 py-2"><h3 className="text-sm font-semibold">{group.providerName}</h3><span className="data-text text-[10px] text-[var(--color-text-muted)]">{group.models.length} models</span></header>{group.models.map((model, index) => <button key={model.id} type="button" onClick={() => handleSelectModel(model.id)} className={`signal-row flex w-full items-center gap-3 px-3 py-2 text-left ${model.id === activeModelId ? "bg-[var(--signal-row-bg-selected)] before:bg-[var(--signal-row-rail-active)]" : ""}`}><span className="data-text w-6 text-[10px] text-[var(--color-text-subtle)]">{String(index + 1).padStart(2, "0")}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm">{model.name}</span><span className="data-text block truncate text-[10px] text-[var(--color-text-muted)]">{model.requestModel}</span></span>{model.id === activeModelId ? <Icon name="check_circle" className="text-[18px] text-[var(--color-primary)]" /> : null}</button>)}</section>)}</div>
+              {modelMenuOpen ? <div ref={modelDialogRef} role="dialog" aria-modal="true" aria-label="Choose a model" className="fixed inset-4 z-[var(--z-menu)] flex min-h-0 flex-col overflow-hidden border border-[var(--dialog-border)] bg-[var(--dialog-bg)] shadow-[var(--shadow-dialog)] sm:absolute sm:inset-auto sm:left-0 sm:top-[calc(100%+8px)] sm:h-[min(66vh,620px)] sm:w-[min(680px,calc(100vw-2rem))]">
+                <div className="flex items-center gap-2 border-b border-[var(--ledger-rule)] p-3"><label className="sr-only" htmlFor="playground-model-search">Search models</label><input id="playground-model-search" autoFocus value={modelSearch} onChange={(e) => setModelSearch(e.target.value)} placeholder={searchAllConfigured ? "Search all configured models" : `Search ${pickerScope?.providerName || "current scope"}`} className="h-11 min-w-0 flex-1 rounded-[var(--input-radius)] border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm outline-none focus:border-[var(--input-border-focus)]" /><button type="button" onClick={closeModelMenu} className="grid size-11 shrink-0 place-items-center sm:hidden" aria-label="Close model picker"><Icon name="close" /></button></div>
+                <label className="flex min-h-11 items-center gap-2 border-b border-[var(--ledger-rule)] px-3 text-xs text-[var(--color-text-muted)]"><input type="checkbox" checked={searchAllConfigured} onChange={(event) => setSearchAllConfigured(event.target.checked)} />Search all configured</label>
+                <div className="grid min-h-0 flex-1 grid-cols-[minmax(120px,34%)_minmax(0,1fr)]">
+                  <nav aria-label="Model provider scopes" className="overflow-y-auto border-r border-[var(--ledger-rule)] bg-[var(--color-surface-strong)] p-2 custom-scrollbar">{providerGroups.map((group) => <button key={group.providerId} type="button" aria-pressed={pickerScope?.providerId === group.providerId} onClick={() => { setPickerScopeId(group.providerId); setSearchAllConfigured(false); }} className={`mb-1 flex min-h-11 w-full items-center justify-between gap-2 px-2 text-left text-sm ${pickerScope?.providerId === group.providerId && !searchAllConfigured ? "bg-[var(--signal-row-bg-selected)] text-[var(--color-primary)]" : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]"}`}><span className="min-w-0 break-words">{group.providerName}</span><span className="font-mono text-[10px] tabular-nums">{group.models.length}</span></button>)}</nav>
+                  <div className="min-h-0 overflow-y-auto p-2 custom-scrollbar">{loadingData ? <div className="space-y-2" aria-label="Loading models">{Array.from({ length: 5 }, (_, index) => <div key={index} className="h-12 animate-pulse bg-[var(--color-surface-strong)]" />)}</div> : visibleGroups.length === 0 ? <div className="p-4 text-sm text-[var(--color-text-muted)]"><p>{modelSearch ? "No models match this search." : "No picked models in this provider."}</p>{!modelSearch ? <Link href="/dashboard/providers" className="mt-3 inline-flex min-h-11 items-center text-[var(--color-primary)]">Open provider model policy</Link> : null}</div> : visibleGroups.map((group) => <section key={group.providerId} className="mb-3"><header className="flex items-center justify-between border-b border-[var(--ledger-rule)] px-2 py-2"><h3 className="text-sm font-semibold">{group.providerName}</h3><span className="data-text text-[10px] text-[var(--color-text-muted)]">{group.models.length} picked</span></header>{group.models.map((model, index) => <button key={model.id} type="button" onClick={() => handleSelectModel(model.id)} className={`signal-row flex min-h-12 w-full items-center gap-3 px-2 py-2 text-left ${model.id === activeModelId ? "bg-[var(--signal-row-bg-selected)] before:bg-[var(--signal-row-rail-active)]" : ""}`}><span className="data-text w-6 text-[10px] text-[var(--color-text-subtle)]">{String(index + 1).padStart(2, "0")}</span><span className="min-w-0 flex-1"><span className="block break-words text-sm">{model.name}</span><span className="data-text block break-all text-[10px] text-[var(--color-text-muted)]">{model.requestModel}</span></span><span className="text-[10px] text-[var(--color-text-subtle)]">{model.source === "combo" ? "Route" : "Chat"}</span>{model.id === activeModelId ? <Icon name="check_circle" className="text-[18px] text-[var(--color-primary)]" /> : null}</button>)}</section>)}</div>
+                </div>
               </div> : null}
             </div>
             <div className="flex items-center gap-2">{activeThinkingLevels ? <select value={thinkingLevel} onChange={(e) => setThinkingLevel(e.target.value)} aria-label="Thinking level" className="h-11 rounded-[var(--input-radius)] border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm"><option value="auto">Thinking: Auto</option>{activeThinkingLevels.map((level) => <option key={level} value={level}>{level}</option>)}</select> : null}<button ref={historyTriggerRef} type="button" onClick={() => setHistoryOpen(true)} className="grid size-11 place-items-center rounded-[var(--radius-sm)] border border-[var(--button-border)] lg:hidden" aria-label="Open session history"><Icon name="history" /></button><Button variant="secondary" size="sm" icon="add" onClick={handleNewChat} disabled={!activeModel || newChatCooldown > 0} className="hidden sm:flex lg:hidden">{newChatCooldown > 0 ? `New (${newChatCooldown}s)` : "New"}</Button></div>
@@ -1026,10 +1042,10 @@ export default function BasicChatPageClient() {
 
           {historyOpen ? <div className="fixed inset-0 z-[var(--z-drawer)] lg:hidden"><button type="button" aria-label="Close history" onClick={closeHistory} className="absolute inset-0 bg-[var(--color-overlay)]" /><div ref={historyMenuRef} role="dialog" aria-modal="true" aria-label="Session history" className="absolute inset-y-0 left-0 flex w-[min(88vw,320px)] flex-col border-r border-[var(--dialog-border)] bg-[var(--dialog-bg)] shadow-[var(--shadow-float)]"><div className="flex min-h-16 items-center justify-between border-b border-[var(--ledger-rule)] px-4"><h2 className="font-semibold">Sessions</h2><button type="button" aria-label="Close history" onClick={closeHistory} className="grid size-11 place-items-center"><Icon name="close" /></button></div><div className="p-3"><Button fullWidth icon="add" disabled={!activeModel || newChatCooldown > 0} onClick={() => { if (handleNewChat()) closeHistory(); }}>{newChatCooldown > 0 ? `New chat (${newChatCooldown}s)` : "New chat"}</Button></div><div className="flex-1 overflow-y-auto p-2">{sessionItems.map((session) => <div key={session.id} className="signal-row flex items-center gap-2 px-3 py-3"><button type="button" onClick={() => handleSelectSession(session.id)} className="min-w-0 flex-1 text-left"><span className="block truncate text-sm font-medium">{session.title}</span><span className="data-text text-[10px] text-[var(--color-text-muted)]">{formatRelativeTime(session.updatedAt)} · {session.modelName}</span></button><button type="button" onClick={(event) => beginRenameSession(session, event.currentTarget)} aria-label={`Rename ${session.title}`} className="grid size-11 place-items-center"><Icon name="edit" className="text-[18px]" /></button><button type="button" onClick={(event) => { deleteTriggerRef.current = event.currentTarget; setDeleteSessionId(session.id); }} aria-label={`Delete ${session.title}`} className="grid size-11 place-items-center text-[var(--color-danger)]"><Icon name="delete" className="text-[18px]" /></button></div>)}</div></div></div> : null}
         {loadError ? (
-          <div className="mt-4 rounded-[18px] border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-rose-100">
+          <div className="mx-4 mt-4 border border-[var(--color-danger)] bg-[var(--color-danger-wash)] px-4 py-3 text-[var(--color-danger)]">
             <div className="flex items-start gap-3">
               <Icon name="error" className="text-[20px]" />
-              <p className="text-sm leading-6">{loadError}</p>
+              <div><p className="text-sm leading-6">{loadError}</p>{loadError.includes("expired") ? <Link href="/login" className="mt-2 inline-flex min-h-11 items-center font-medium underline">Log in again</Link> : <Link href="/dashboard/providers" className="mt-2 inline-flex min-h-11 items-center font-medium underline">Open providers</Link>}</div>
             </div>
           </div>
         ) : null}
@@ -1122,7 +1138,7 @@ export default function BasicChatPageClient() {
             ) : null}
 
             <div className="mx-auto w-full max-w-3xl px-4 pb-2">
-              <div className="rounded-[26px] bg-[var(--color-surface-strong)] px-3 pt-3 pb-2 border border-[var(--color-border)]">
+              <div className="rounded-[var(--radius-control)] bg-[var(--color-surface-strong)] px-3 pt-3 pb-2 border border-[var(--color-border)]">
                 <textarea
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
@@ -1139,7 +1155,7 @@ export default function BasicChatPageClient() {
                         <Icon name="add" className="text-[20px]" />
                       </button>
                       {attachMenuOpen ? (
-                        <div className="absolute bottom-[calc(100%+8px)] left-0 z-30 w-44 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-raised)] shadow-2xl shadow-black/50">
+                        <div className="absolute bottom-[calc(100%+8px)] left-0 z-30 w-44 overflow-hidden rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-surface-raised)] shadow-2xl shadow-black/50">
                           <button type="button" onClick={() => { setAttachMenuOpen(false); fileInputRef.current?.click(); }} className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-surface-raised)]">
                             <Icon name="image" className="text-[18px]" /> Images
                           </button>
