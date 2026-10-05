@@ -6,7 +6,7 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { restrictToVerticalAxis, restrictToParentElement } from "@dnd-kit/modifiers";
-import { Card, Button, Modal, Input, CardSkeleton, ModelSelectModal, ConfirmModal, CapacityBadges, Toggle } from "@/shared/components";
+import { Button, Modal, Input, CardSkeleton, ModelSelectModal, ConfirmModal, CapacityBadges, Toggle } from "@/shared/components";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import { useModelCaps } from "@/shared/hooks/useModelCaps";
 import { isOpenAICompatibleProvider, isAnthropicCompatibleProvider } from "@/shared/constants/providers";
@@ -202,15 +202,16 @@ export default function CombosPage() {
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-8 px-1 sm:px-0">
-      <LedgerBand number="01" title="Routing model" summary="One alias, three ways to route a request.">
-        <div className="grid gap-px overflow-hidden border border-[var(--ledger-rule)] bg-[var(--ledger-rule)] md:grid-cols-3">
+    <div className="flex min-w-0 flex-col overflow-hidden border border-[var(--color-border-strong)] bg-[var(--color-surface)]" aria-label="Combo routing instrument">
+      <section className="border-b border-[var(--color-border-strong)]" aria-labelledby="route-mode-title">
+        <header className="border-b border-[var(--color-border)] bg-[var(--color-surface-strong)] px-4 py-3"><h2 id="route-mode-title" className="font-semibold">Routing model</h2><p className="text-xs text-[var(--color-text-muted)]">One alias, three ways to route a request.</p></header>
+        <div className="grid gap-px overflow-hidden border border-[var(--color-border)] bg-[var(--color-border)] md:grid-cols-3">
           {[
             ["01", "Fallback", "Try each model in order until one succeeds.", "One successful call"],
             ["02", "Round robin", "Rotate the starting model across requests.", "One successful call"],
             ["03", "Fusion", "Run the panel in parallel, then ask a judge to synthesize.", "Panel calls + judge call"],
           ].map(([step, title, copyText, cost]) => (
-            <div key={title} className="relative bg-[var(--ledger-bg)] p-4">
+            <div key={title} className="relative bg-[var(--color-surface)] p-4">
               <div className="mb-3 flex items-center gap-3">
                 <span className="font-mono text-xs tabular-nums text-[var(--color-primary)]">{step}</span>
                 <span className="h-px flex-1 bg-[var(--route-line)]" />
@@ -222,16 +223,16 @@ export default function CombosPage() {
             </div>
           ))}
         </div>
-      </LedgerBand>
+      </section>
 
-      <LedgerBand
-        number="02"
-        title="Combos"
-        summary={`${combos.length} ordered route${combos.length === 1 ? "" : "s"}`}
-        action={<Button icon="add" onClick={() => setShowCreateModal(true)}>Create combo</Button>}
-      >
+      <section className="border-b border-[var(--color-border-strong)]" aria-labelledby="combo-track-title">
+        <header className="flex flex-col gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-strong)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div><h2 id="combo-track-title" className="font-semibold">Combos</h2><p className="text-xs text-[var(--color-text-muted)]">{combos.length} ordered route{combos.length === 1 ? "" : "s"}</p></div>
+          <Button icon="add" onClick={() => setShowCreateModal(true)}>Create combo</Button>
+        </header>
+
         {fetchError && (
-          <div className="flex flex-col gap-3 border-b border-[var(--ledger-rule)] bg-[var(--color-danger-wash)] p-4 sm:flex-row sm:items-center sm:justify-between" role="alert">
+          <div className="flex flex-col gap-3 border-b border-[var(--color-border)] bg-[var(--color-danger-wash)] p-4 sm:flex-row sm:items-center sm:justify-between" role="alert">
             <span className="flex items-center gap-2 text-sm text-[var(--color-danger)]"><Icon name="error" />{fetchError}</span>
             <Button size="sm" variant="secondary" icon="refresh" onClick={fetchData}>Retry</Button>
           </div>
@@ -244,7 +245,7 @@ export default function CombosPage() {
             <Button icon="add" onClick={() => setShowCreateModal(true)} className="mt-4">Create combo</Button>
           </div>
         ) : (
-          <div className="divide-y divide-[var(--ledger-rule)]">
+          <div className="divide-y divide-[var(--color-border)]">
             {combos.map((combo) => (
               <ComboCard
                 key={combo.id}
@@ -261,40 +262,23 @@ export default function CombosPage() {
             ))}
           </div>
         )}
-      </LedgerBand>
+      </section>
 
-      <LedgerBand number="03" title="Capacity adapters" summary="Capability-specific fallback pools remain independent from combos.">
+      <section  aria-labelledby="capacity-route-title">
+        <header className="border-b border-[var(--color-border)] bg-[var(--color-surface-strong)] px-4 py-3"><h2 id="capacity-route-title" className="font-semibold">Capacity adapters</h2><p className="text-xs text-[var(--color-text-muted)]">Capability-specific fallback pools remain independent from combos.</p></header>
         <CapacityAdapterSection
           capacityAdapter={capacityAdapter}
           onChange={handleSetCapacityAdapter}
           activeProviders={activeProviders}
           getCaps={getCaps}
         />
-      </LedgerBand>
+      </section>
 
       {showCreateModal && (
         <ComboFormModal key="create" isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} onSave={handleCreate} activeProviders={activeProviders} />
       )}
       <ConfirmModal isOpen={!!confirmState} onClose={() => setConfirmState(null)} onConfirm={confirmState?.onConfirm} title={confirmState?.title || "Confirm"} message={confirmState?.message} variant="danger" />
     </div>
-  );
-}
-
-function LedgerBand({ number, title, summary, action, children }) {
-  return (
-    <section className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--ledger-border)] bg-[var(--ledger-bg)]">
-      <header className="flex flex-col gap-3 border-b border-[var(--ledger-rule)] bg-[var(--ledger-caption-bg)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">{number}</span>
-          <div className="min-w-0">
-            <h2 className="font-semibold text-[var(--color-text)]">{title}</h2>
-            {summary && <p className="text-xs text-[var(--color-text-muted)]">{summary}</p>}
-          </div>
-        </div>
-        {action}
-      </header>
-      {children}
-    </section>
   );
 }
 
@@ -356,11 +340,11 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
   };
 
   return (
-    <article>
+    <article >
       <div className="grid min-h-[var(--row-h-comfortable)] gap-3 px-4 py-3 lg:grid-cols-[minmax(240px,1fr)_minmax(300px,auto)_auto] lg:items-center">
         <div className="flex min-w-0 items-center gap-3 text-left">
           <Icon name="route" size={18} className="shrink-0 text-[var(--color-primary)]" />
-          <span className="flex size-8 shrink-0 items-center justify-center border border-[var(--signal-row-rail)] font-mono text-xs tabular-nums text-[var(--color-primary)]">{String(combo.models.length).padStart(2, "0")}</span>
+          <span className="flex size-8 shrink-0 items-center justify-center border border-[var(--color-route-bidirectional)] font-mono text-xs tabular-nums text-[var(--color-primary)]">{String(combo.models.length).padStart(2, "0")}</span>
           <span className="min-w-0"><code className="block truncate font-mono text-sm font-semibold">{combo.name}</code><span className="text-xs text-[var(--color-text-muted)]">{combo.models.length} member{combo.models.length === 1 ? "" : "s"}</span></span>
         </div>
         <div className="hidden items-center gap-2 lg:flex" aria-label="Ordered route preview">{combo.models.slice(0, 4).map((model, index) => <span key={`${model}-${index}`} className="flex min-w-0 items-center gap-2"><span className="flex size-7 shrink-0 items-center justify-center border border-[var(--route-line)] font-mono text-[10px] text-[var(--color-primary)]">{String(index + 1).padStart(2, "0")}</span><code className="max-w-28 truncate font-mono text-[11px]">{model}</code>{index < Math.min(combo.models.length, 4) - 1 ? <Icon name="arrow_forward" size={14} className="text-[var(--color-text-subtle)]" /> : null}</span>)}</div>
@@ -375,7 +359,7 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
       </div>
 
       {isFusion && (
-        <div className="flex flex-wrap items-center gap-2 border-t border-[var(--ledger-rule)] bg-[var(--color-surface-strong)] px-4 py-2 text-xs">
+        <div className="flex flex-wrap items-center gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface-strong)] px-4 py-2 text-xs">
           <Icon name="gavel" size={16} className="text-[var(--color-text-muted)]" /><span className="font-medium">Judge</span>
           <button type="button" onClick={() => setShowJudgeSelect(true)} className="min-h-8 max-w-full truncate border border-dashed border-[var(--color-primary-border)] px-2 font-mono text-[var(--color-primary)]">{judge || `Auto — ${combo.models[0] || "first model"}`}</button>
           {judge && <button type="button" onClick={() => onSetStrategy({ judgeModel: "" })} className="min-h-8 px-2 text-[var(--color-danger)]">Reset</button>}
@@ -383,7 +367,7 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
       )}
 
       {expanded && (
-        <div className="border-t border-[var(--ledger-rule)] bg-[var(--color-surface-strong)] p-3 sm:p-4">
+        <div className="border-t border-[var(--color-border)] bg-[var(--color-surface-strong)] p-3 sm:p-4">
           <div className="space-y-2">
             <div className="grid grid-cols-3 overflow-hidden border border-[var(--color-border)]" aria-label="Routing strategy">{STRATEGY_OPTIONS.map((option) => <button key={option.value} type="button" aria-pressed={current === option.value} onClick={() => onSetStrategy({ fallbackStrategy: option.value })} className={`min-h-11 px-3 text-xs font-medium ${current === option.value ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]" : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]"}`}>{option.shortLabel}</button>)}</div>
             {draftModels.map((model, index) => (
@@ -399,7 +383,7 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
                   setDraftModels(arrayMove(draftModels, source, index));
                   setAnnouncement(`${draftModels[source]} moved from position ${source + 1} to ${index + 1}`);
                 }}
-                className="grid min-h-14 cursor-grab grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 border border-[var(--ledger-rule)] bg-[var(--ledger-bg)] px-3 py-2 active:cursor-grabbing"
+                className="grid min-h-14 cursor-grab grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 active:cursor-grabbing"
               >
                 <div className="flex h-full flex-col items-center justify-center border-r border-[var(--route-line)] pr-3 font-mono text-xs tabular-nums text-[var(--color-primary)]">{String(index + 1).padStart(2, "0")}</div>
                 <div className="min-w-0"><code className="block break-all font-mono text-xs text-[var(--color-text)]">{model}</code><div className="mt-1 flex flex-wrap items-center gap-2"><span className="inline-flex items-center gap-1 text-[11px] text-[var(--color-text-muted)]"><span className="size-2 rounded-full border border-[var(--color-text-subtle)]" />Not tested</span><CapacityBadges caps={getCaps?.(model)} /></div></div>
@@ -411,7 +395,7 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
               </div>
             ))}
             <button type="button" onClick={() => setShowAddModel(true)} className="flex min-h-12 w-full items-center justify-center gap-2 border border-dashed border-[var(--color-primary-border)] font-medium text-[var(--color-primary)] hover:bg-[var(--color-primary-wash)]"><Icon name="add" size={17} />Add model</button>
-            <div className="flex flex-col gap-2 border-t border-[var(--ledger-rule)] pt-3 sm:flex-row sm:items-center sm:justify-between"><p className="text-xs text-[var(--color-text-muted)]">{dirty ? "Unsaved order changes" : "Route order saved"}</p><div className="flex gap-2"><Button size="sm" variant="secondary" onClick={() => { setDraftModels(combo.models); setExpanded(false); }} disabled={saving}>Cancel</Button><Button size="sm" onClick={saveMembers} loading={saving} disabled={!dirty || saving}>Save route</Button></div></div>
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] pt-3 sm:flex-row sm:items-center sm:justify-between"><p className="text-xs text-[var(--color-text-muted)]">{dirty ? "Unsaved order changes" : "Route order saved"}</p><div className="flex gap-2"><Button size="sm" variant="secondary" onClick={() => { setDraftModels(combo.models); setExpanded(false); }} disabled={saving}>Cancel</Button><Button size="sm" onClick={saveMembers} loading={saving} disabled={!dirty || saving}>Save route</Button></div></div>
           </div>
         </div>
       )}
@@ -440,7 +424,7 @@ function IconButton({ icon, label, onClick, disabled = false, danger = false }) 
 
 function CapacityAdapterSection({ capacityAdapter, onChange, activeProviders, getCaps }) {
   return (
-    <div className="divide-y divide-[var(--ledger-rule)]">
+    <div className="divide-y divide-[var(--color-border)]">
       {CAPACITY_ADAPTER_CAPS.map((cap) => (
         <CapacityAdapterCap key={cap.key} cap={cap} entry={capacityAdapter[cap.key] || EMPTY_CAP_ENTRY} onChange={(entry) => onChange({ ...capacityAdapter, [cap.key]: entry })} activeProviders={activeProviders} getCaps={getCaps} />
       ))}
@@ -463,7 +447,7 @@ function CapacityAdapterCap({ cap, entry, onChange, activeProviders, getCaps }) 
       <div className="grid gap-3 px-4 py-4 md:grid-cols-[minmax(220px,1fr)_auto] md:items-center">
         <button type="button" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded} className="flex min-w-0 items-center gap-3 text-left">
           <Icon name={expanded ? "chevron_down" : "chevron_right"} size={18} className="shrink-0 text-[var(--color-text-muted)]" />
-          <span className="flex size-9 shrink-0 items-center justify-center border border-[var(--signal-row-rail)]"><Icon name={cap.icon} size={18} className="text-[var(--color-primary)]" /></span>
+          <span className="flex size-9 shrink-0 items-center justify-center border border-[var(--color-route-bidirectional)]"><Icon name={cap.icon} size={18} className="text-[var(--color-primary)]" /></span>
           <span className="min-w-0"><span className="block font-semibold">{cap.label} pool</span><span className="block text-xs text-[var(--color-text-muted)]">{models.length} model{models.length === 1 ? "" : "s"} · {cap.desc}. Switches when the requested route lacks this capability.</span></span>
         </button>
         <div className="flex flex-wrap items-center gap-3">
@@ -474,7 +458,7 @@ function CapacityAdapterCap({ cap, entry, onChange, activeProviders, getCaps }) 
           </div>
         </div>
       </div>
-      {expanded && <div className="space-y-2 border-t border-[var(--ledger-rule)] bg-[var(--color-surface-strong)] p-3 sm:p-4">
+      {expanded && <div className="space-y-2 border-t border-[var(--color-border)] bg-[var(--color-surface-strong)] p-3 sm:p-4">
         {models.map((model, index) => (
           <div
             key={`${model}-${index}`}
@@ -489,7 +473,7 @@ function CapacityAdapterCap({ cap, entry, onChange, activeProviders, getCaps }) 
               patch({ models: arrayMove(models, source, index) });
               setAnnouncement(`${models[source]} moved from position ${source + 1} to ${index + 1}`);
             }}
-            className={`grid min-h-14 grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 border border-[var(--ledger-rule)] bg-[var(--ledger-bg)] px-3 py-2 ${enabled ? "cursor-grab active:cursor-grabbing" : ""}`}
+            className={`grid min-h-14 grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 ${enabled ? "cursor-grab active:cursor-grabbing" : ""}`}
           >
             <span className="border-r border-[var(--route-line)] pr-3 text-center font-mono text-xs tabular-nums text-[var(--color-primary)]">{String(index + 1).padStart(2, "0")}</span>
             <div className="min-w-0"><code className="block break-all font-mono text-xs">{model}</code><div className="mt-1 flex items-center gap-2"><span className="inline-flex items-center gap-1 text-[11px] text-[var(--color-text-muted)]"><Icon name={cap.icon} size={13} />{cap.desc}</span><CapacityBadges caps={getCaps?.(model)} /></div></div>
