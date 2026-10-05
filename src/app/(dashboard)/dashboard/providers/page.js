@@ -445,41 +445,45 @@ export default function ProvidersPage() {
   }
 
   return (
-    <section className="min-w-0 overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
-      <div className="flex flex-col gap-3 border-b border-[var(--ledger-rule)] bg-[var(--color-surface-strong)] p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div><h1 className="text-xl font-semibold">Provider route matrix</h1><p className="mt-1 text-sm text-[var(--color-text-muted)]">Scan connection evidence, then open a provider lane to manage accounts and picked models.</p></div>
-        <div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" icon="play_arrow" loading={testingMode === "all"} onClick={() => handleBatchTest("all")}>Test all</Button><Button size="sm" icon="add" onClick={() => setShowAddCompatibleModal(true)}>Add endpoint</Button></div>
-      </div>
-      <LedgerBand title="Health evidence" summary={`${connections.length} connection${connections.length === 1 ? "" : "s"} observed`}>
-        <div className="grid gap-px bg-[var(--ledger-rule)] sm:grid-cols-2 xl:grid-cols-6">
+    <section className="min-w-0 overflow-hidden border border-[var(--color-border-strong)] bg-[var(--color-surface)]" aria-label="Provider routing instrument">
+      <header className="border-b border-[var(--color-border-strong)] bg-[var(--color-surface-strong)]">
+        <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <div className="min-w-0"><h2 className="text-xl font-semibold">Connection scope</h2><p className="mt-1 max-w-3xl text-sm text-[var(--color-text-muted)]">Filter the live matrix, inspect evidence, then enter the exact provider lane that needs intervention.</p></div>
+          <div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" icon="play_arrow" loading={testingMode === "all"} onClick={() => handleBatchTest("all")}>Test all lanes</Button><Button size="sm" icon="add" onClick={() => setShowAddCompatibleModal(true)}>Add endpoint</Button></div>
+        </div>
+        <div className="grid gap-px border-y border-[var(--color-border)] bg-[var(--color-border)] sm:grid-cols-2 xl:grid-cols-6" aria-label="Health evidence filters">
           {healthFilters.map(([id, label, count, icon, type]) => {
             const active = id === "connected" || id === "disabled" ? statusFilter === id : errorClassFilter === id;
             return (
-              <button key={id} type="button" aria-pressed={active} onClick={() => { if (id === "connected" || id === "disabled") { setStatusFilter(active ? "all" : id); setErrorClassFilter("all"); } else { setErrorClassFilter(active ? "all" : id); setStatusFilter("all"); } }} className={`grid min-h-16 grid-cols-[auto_minmax(0,1fr)] grid-rows-[1fr_1fr] items-baseline gap-x-3 bg-[var(--ledger-bg)] px-4 py-2 text-left hover:bg-[var(--signal-row-bg-hover)] ${active ? "bg-[var(--signal-row-bg-selected)]" : ""}`}>
+              <button key={id} type="button" aria-pressed={active} onClick={() => { if (id === "connected" || id === "disabled") { setStatusFilter(active ? "all" : id); setErrorClassFilter("all"); } else { setErrorClassFilter(active ? "all" : id); setStatusFilter("all"); } }} className={`grid min-h-16 grid-cols-[auto_minmax(0,1fr)] grid-rows-[1fr_1fr] items-baseline gap-x-3 bg-[var(--color-surface)] px-4 py-2 text-left hover:bg-[var(--color-surface-hover)] ${active ? "bg-[var(--color-primary-wash)]" : ""}`}>
                 <span className="row-span-2 self-center"><StatusGlyph type={type} /></span><span className="self-end font-mono text-lg leading-none tabular-nums">{count}</span><span className="min-w-0 self-start truncate text-sm text-[var(--color-text-muted)]">{label}</span>
               </button>
             );
           })}
         </div>
-      </LedgerBand>
-
-      <LedgerBand title="Pinned custom endpoints" summary="OpenAI- and Anthropic-compatible endpoints">
-        <div className="flex flex-col gap-2 border-b border-[var(--ledger-rule)] p-3 sm:flex-row sm:justify-end"><Button size="sm" icon="add" onClick={() => setShowAddCompatibleModal(true)}>OpenAI compatible</Button><Button size="sm" variant="secondary" icon="add" onClick={() => setShowAddAnthropicCompatibleModal(true)}>Anthropic compatible</Button></div>
-        {compatibleProviders.length === 0 && anthropicCompatibleProviders.length === 0 ? <div className="p-8 text-center"><Icon name="extension" size={26} className="mx-auto text-[var(--color-text-muted)]" /><p className="mt-3 text-sm text-[var(--color-text-muted)]">No custom endpoints configured.</p></div> : <div className="divide-y divide-[var(--ledger-rule)]">{[...compatibleProviders, ...anthropicCompatibleProviders].map((provider, index) => <ApiKeyProviderCard key={provider.id} position={index + 1} providerId={provider.id} provider={provider} stats={getProviderStats(provider.id, "apikey")} authType="compatible" onToggle={(active) => handleToggleProvider(provider.id, "apikey", active)} />)}</div>}
-      </LedgerBand>
-
-      <LedgerBand title="Provider lanes" summary="Connected-first matrix grouped by authentication">
-        <div className="grid gap-3 border-b border-[var(--ledger-rule)] bg-[var(--ledger-caption-bg)] p-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto]">
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="min-h-10 rounded-[var(--radius-sm)] border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm" aria-label="Filter providers by connection status">{STATUS_FILTER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
-          <select value={errorClassFilter} onChange={(event) => setErrorClassFilter(event.target.value)} className="min-h-10 rounded-[var(--radius-sm)] border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm" aria-label="Filter providers by normalized error class"><option value="all">All error classes</option><option value="auth-invalid">Auth invalid</option><option value="refresh-invalid">Refresh invalid</option><option value="ratelimited">Rate limited</option><option value="network">Network</option></select>
+        <div className="grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto]">
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="min-h-10 rounded-[var(--radius-control)] border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm" aria-label="Filter providers by connection status">{STATUS_FILTER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
+          <select value={errorClassFilter} onChange={(event) => setErrorClassFilter(event.target.value)} className="min-h-10 rounded-[var(--radius-control)] border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm" aria-label="Filter providers by normalized error class"><option value="all">All error classes</option><option value="auth-invalid">Auth invalid</option><option value="refresh-invalid">Refresh invalid</option><option value="ratelimited">Rate limited</option><option value="network">Network</option></select>
           <ModelAvailabilityBadge />
         </div>
+      </header>
 
-        {fetchError && <div className="flex flex-col gap-3 bg-[var(--color-danger-wash)] p-4 sm:flex-row sm:items-center sm:justify-between" role="alert"><span className="flex items-center gap-2 text-sm text-[var(--color-danger)]"><Icon name="error" />{fetchError}</span><Button size="sm" variant="secondary" icon="refresh" onClick={fetchProviders}>Retry</Button></div>}
+      {fetchError && <div className="flex flex-col gap-3 border-b border-[var(--color-border)] bg-[var(--color-danger-wash)] p-4 sm:flex-row sm:items-center sm:justify-between" role="alert"><span className="flex items-center gap-2 text-sm text-[var(--color-danger)]"><Icon name="error" />{fetchError}</span><Button size="sm" variant="secondary" icon="refresh" onClick={fetchProviders}>Retry</Button></div>}
+
+      <section className="border-b border-[var(--color-border-strong)]" aria-labelledby="pinned-route-lanes-title">
+        <header className="flex flex-col gap-3 border-b border-[var(--color-border)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div><h2 id="pinned-route-lanes-title" className="font-semibold">Pinned custom endpoints</h2><p className="text-xs text-[var(--color-text-muted)]">OpenAI- and Anthropic-compatible lanes stay above the registry.</p></div>
+          <div className="flex flex-wrap gap-2"><Button size="sm" icon="add" onClick={() => setShowAddCompatibleModal(true)}>OpenAI compatible</Button><Button size="sm" variant="secondary" icon="add" onClick={() => setShowAddAnthropicCompatibleModal(true)}>Anthropic compatible</Button></div>
+        </header>
+        {compatibleProviders.length === 0 && anthropicCompatibleProviders.length === 0 ? <div className="p-8 text-center"><Icon name="extension" size={26} className="mx-auto text-[var(--color-text-muted)]" /><p className="mt-3 text-sm text-[var(--color-text-muted)]">No custom endpoints configured.</p></div> : <div className="divide-y divide-[var(--color-border)]">{[...compatibleProviders, ...anthropicCompatibleProviders].map((provider, index) => <ApiKeyProviderCard key={provider.id} position={index + 1} providerId={provider.id} provider={provider} stats={getProviderStats(provider.id, "apikey")} authType="compatible" onToggle={(active) => handleToggleProvider(provider.id, "apikey", active)} />)}</div>}
+      </section>
+
+      <section aria-labelledby="provider-lanes-title">
+        <header className="border-b border-[var(--color-border)] px-4 py-3"><h2 id="provider-lanes-title" className="font-semibold">Provider lanes</h2><p className="text-xs text-[var(--color-text-muted)]">Connected-first matrix grouped by authentication.</p></header>
         {!hasAnyResult ? (
           <div className="p-8 text-center"><Icon name="search_off" size={28} className="mx-auto text-[var(--color-text-muted)]" /><p className="mt-3 font-semibold">No providers match</p><p className="mt-1 text-sm text-[var(--color-text-muted)]">Clear the active search or status filters to restore the registry.</p><Button variant="secondary" className="mt-4" onClick={() => { setStatusFilter("all"); setErrorClassFilter("all"); }}>Clear filters</Button></div>
         ) : (
-          <div className="divide-y divide-[var(--ledger-rule)]">
+          <div className="divide-y divide-[var(--color-border-strong)]">
             {registryGroups.map((group) => group.entries.length > 0 && (
               <ProviderGroup key={group.id} label={group.label} count={group.id === "apikey" ? apikeyEntries.length : group.entries.length} onTest={() => handleBatchTest(group.id)} testing={testingMode === group.id}>
                 {group.entries.map((entry, index) => (
@@ -490,8 +494,7 @@ export default function ProvidersPage() {
             ))}
           </div>
         )}
-      </LedgerBand>
-
+      </section>
 
       <AddCompatibleModal variant="openai" isOpen={showAddCompatibleModal} onClose={() => setShowAddCompatibleModal(false)} onCreated={(node) => { setProviderNodes((prev) => [...prev, node]); setShowAddCompatibleModal(false); }} />
       <AddCompatibleModal variant="anthropic" isOpen={showAddAnthropicCompatibleModal} onClose={() => setShowAddAnthropicCompatibleModal(false)} onCreated={(node) => { setProviderNodes((prev) => [...prev, node]); setShowAddAnthropicCompatibleModal(false); }} />
@@ -501,13 +504,9 @@ export default function ProvidersPage() {
   );
 }
 
-function LedgerBand({ title, summary, action, children }) {
-  return <section className="border-b border-[var(--ledger-rule)] last:border-b-0"><header className="flex flex-col gap-3 border-b border-[var(--ledger-rule)] bg-[var(--ledger-caption-bg)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><h2 className="font-semibold">{title}</h2>{summary && <p className="text-xs text-[var(--color-text-muted)]">{summary}</p>}</div>{action}</header>{children}</section>;
-}
-
 function ProviderGroup({ label, count, onTest, testing, children }) {
   const [open, setOpen] = useState(true);
-  return <section><header className="flex items-center justify-between gap-3 bg-[var(--color-surface-strong)] px-4 py-2"><button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} className="flex min-h-10 items-center gap-2 text-sm font-semibold"><Icon name={open ? "chevron_down" : "chevron_right"} /><span>{label}</span><span className="font-mono text-xs tabular-nums text-[var(--color-text-muted)]">{count}</span></button><Button size="sm" variant="ghost" icon="play_arrow" loading={testing} onClick={onTest}>Test</Button></header>{open && <div className="divide-y divide-[var(--ledger-rule)]">{children}</div>}</section>;
+  return <section ><header className="flex items-center justify-between gap-3 bg-[var(--color-surface-strong)] px-4 py-2"><button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} className="flex min-h-10 items-center gap-2 text-sm font-semibold"><Icon name={open ? "chevron_down" : "chevron_right"} /><span>{label}</span><span className="font-mono text-xs tabular-nums text-[var(--color-text-muted)]">{count}</span></button><Button size="sm" variant="ghost" icon="play_arrow" loading={testing} onClick={onTest}>Test</Button></header>{open && <div className="divide-y divide-[var(--color-border)]">{children}</div>}</section>;
 }
 
 function StatusGlyph({ type = "unknown" }) {
@@ -516,7 +515,7 @@ function StatusGlyph({ type = "unknown" }) {
 }
 
 function TestResultsDialog({ results, onClose }) {
-  return <div className="fixed inset-0 z-50 flex items-start justify-center px-3 pt-[8vh]" onClick={onClose}><div className="absolute inset-0 bg-[var(--color-overlay)]" /><div role="dialog" aria-modal="true" aria-label="Provider test results" className="relative max-h-[82vh] w-full max-w-[640px] overflow-y-auto rounded-[var(--dialog-radius)] border border-[var(--dialog-border)] bg-[var(--dialog-bg)] shadow-[var(--shadow-float)]" onClick={(event) => event.stopPropagation()}><header className="sticky top-0 flex items-center justify-between border-b border-[var(--ledger-rule)] bg-[var(--dialog-bg)] px-5 py-3"><h3 className="font-semibold">Test results</h3><button type="button" onClick={onClose} className="flex size-11 items-center justify-center" aria-label="Close test results"><Icon name="close" /></button></header><div className="p-5"><ProviderTestResultsView results={results} /></div></div></div>;
+  return <div className="fixed inset-0 z-50 flex items-start justify-center px-3 pt-[8vh]" onClick={onClose}><div className="absolute inset-0 bg-[var(--color-overlay)]" /><div role="dialog" aria-modal="true" aria-label="Provider test results" className="relative max-h-[82vh] w-full max-w-[640px] overflow-y-auto rounded-[var(--dialog-radius)] border border-[var(--dialog-border)] bg-[var(--dialog-bg)] shadow-[var(--shadow-float)]" onClick={(event) => event.stopPropagation()}><header className="sticky top-0 flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--dialog-bg)] px-5 py-3"><h3 className="font-semibold">Test results</h3><button type="button" onClick={onClose} className="flex size-11 items-center justify-center" aria-label="Close test results"><Icon name="close" /></button></header><div className="p-5"><ProviderTestResultsView results={results} /></div></div></div>;
 }
 
 function ProviderCard(props) {
@@ -539,8 +538,8 @@ function ProviderSignalRow({ position, providerId, provider, stats, authType, on
   const authLabel = authType === "oauth" ? "OAuth" : authType === "free" ? "Free tier" : authType === "compatible" ? "Compatible" : "API key";
 
   return (
-    <div className={`grid min-h-[var(--row-h-comfortable)] grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 px-3 py-3 sm:grid-cols-[2.5rem_minmax(180px,1.4fr)_minmax(220px,1fr)_auto] ${allDisabled ? "bg-[var(--color-surface-strong)]" : "hover:bg-[var(--signal-row-bg-hover)]"}`}>
-      <span className="border-r border-[var(--signal-row-rail)] pr-3 text-center font-mono text-xs tabular-nums text-[var(--color-primary)]">{String(position).padStart(2, "0")}</span>
+    <div className={`grid min-h-[var(--row-h-comfortable)] grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 px-3 py-3 sm:grid-cols-[2.5rem_minmax(180px,1.4fr)_minmax(220px,1fr)_auto] ${allDisabled ? "bg-[var(--color-surface-strong)]" : "hover:bg-[var(--color-surface-hover)]"}`}>
+      <span className="border-r border-[var(--color-route-bidirectional)] pr-3 text-center font-mono text-xs tabular-nums text-[var(--color-primary)]">{String(position).padStart(2, "0")}</span>
       <Link href={`/dashboard/providers/${providerId}`} className="flex min-w-0 items-center gap-3 rounded-[var(--radius-xs)] focus-visible:shadow-[var(--focus-ring)]">
         <ProviderIcon src={iconPath} alt={provider.name} size={30} className="size-8 shrink-0 rounded-[var(--radius-sm)] object-contain" fallbackText={provider.textIcon || provider.id.slice(0, 2).toUpperCase()} fallbackColor={provider.color} />
         <span className="min-w-0"><span className="block truncate font-semibold">{provider.name}</span>{provider.displaySlug ? <span className="block break-all font-mono text-xs text-[var(--color-text-muted)]">{provider.displaySlug}</span> : <span className="block text-xs text-[var(--color-text-muted)]">{authLabel}</span>}</span>
