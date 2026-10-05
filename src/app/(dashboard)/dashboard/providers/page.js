@@ -445,8 +445,12 @@ export default function ProvidersPage() {
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-8 px-1 sm:px-0">
-      <LedgerBand number="01" title="Health" summary={`${connections.length} connection${connections.length === 1 ? "" : "s"} observed`} action={<Button size="sm" variant="secondary" icon="play_arrow" loading={testingMode === "all"} onClick={() => handleBatchTest("all")}>Test all</Button>}>
+    <section className="min-w-0 overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
+      <div className="flex flex-col gap-3 border-b border-[var(--ledger-rule)] bg-[var(--color-surface-strong)] p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div><h1 className="text-xl font-semibold">Provider route matrix</h1><p className="mt-1 text-sm text-[var(--color-text-muted)]">Scan connection evidence, then open a provider lane to manage accounts and picked models.</p></div>
+        <div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" icon="play_arrow" loading={testingMode === "all"} onClick={() => handleBatchTest("all")}>Test all</Button><Button size="sm" icon="add" onClick={() => setShowAddCompatibleModal(true)}>Add endpoint</Button></div>
+      </div>
+      <LedgerBand title="Health evidence" summary={`${connections.length} connection${connections.length === 1 ? "" : "s"} observed`}>
         <div className="grid gap-px bg-[var(--ledger-rule)] sm:grid-cols-2 xl:grid-cols-6">
           {healthFilters.map(([id, label, count, icon, type]) => {
             const active = id === "connected" || id === "disabled" ? statusFilter === id : errorClassFilter === id;
@@ -459,12 +463,12 @@ export default function ProvidersPage() {
         </div>
       </LedgerBand>
 
-      <LedgerBand number="02" title="Custom endpoints" summary="OpenAI- and Anthropic-compatible endpoints">
+      <LedgerBand title="Pinned custom endpoints" summary="OpenAI- and Anthropic-compatible endpoints">
         <div className="flex flex-col gap-2 border-b border-[var(--ledger-rule)] p-3 sm:flex-row sm:justify-end"><Button size="sm" icon="add" onClick={() => setShowAddCompatibleModal(true)}>OpenAI compatible</Button><Button size="sm" variant="secondary" icon="add" onClick={() => setShowAddAnthropicCompatibleModal(true)}>Anthropic compatible</Button></div>
         {compatibleProviders.length === 0 && anthropicCompatibleProviders.length === 0 ? <div className="p-8 text-center"><Icon name="extension" size={26} className="mx-auto text-[var(--color-text-muted)]" /><p className="mt-3 text-sm text-[var(--color-text-muted)]">No custom endpoints configured.</p></div> : <div className="divide-y divide-[var(--ledger-rule)]">{[...compatibleProviders, ...anthropicCompatibleProviders].map((provider, index) => <ApiKeyProviderCard key={provider.id} position={index + 1} providerId={provider.id} provider={provider} stats={getProviderStats(provider.id, "apikey")} authType="compatible" onToggle={(active) => handleToggleProvider(provider.id, "apikey", active)} />)}</div>}
       </LedgerBand>
 
-      <LedgerBand number="03" title="Provider registry" summary="Connected-first matrix grouped by authentication" action={<Button size="sm" variant="secondary" icon="play_arrow" loading={testingMode === "all"} onClick={() => handleBatchTest("all")}>Test all</Button>}>
+      <LedgerBand title="Provider lanes" summary="Connected-first matrix grouped by authentication">
         <div className="grid gap-3 border-b border-[var(--ledger-rule)] bg-[var(--ledger-caption-bg)] p-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto]">
           <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="min-h-10 rounded-[var(--radius-sm)] border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm" aria-label="Filter providers by connection status">{STATUS_FILTER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
           <select value={errorClassFilter} onChange={(event) => setErrorClassFilter(event.target.value)} className="min-h-10 rounded-[var(--radius-sm)] border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm" aria-label="Filter providers by normalized error class"><option value="all">All error classes</option><option value="auth-invalid">Auth invalid</option><option value="refresh-invalid">Refresh invalid</option><option value="ratelimited">Rate limited</option><option value="network">Network</option></select>
@@ -493,12 +497,12 @@ export default function ProvidersPage() {
       <AddCompatibleModal variant="anthropic" isOpen={showAddAnthropicCompatibleModal} onClose={() => setShowAddAnthropicCompatibleModal(false)} onCreated={(node) => { setProviderNodes((prev) => [...prev, node]); setShowAddAnthropicCompatibleModal(false); }} />
       {testResults && <TestResultsDialog results={testResults} onClose={() => setTestResults(null)} />}
       <ConfirmModal isOpen={!!pendingToggle} onClose={() => setPendingToggle(null)} onConfirm={() => { const pending = pendingToggle; setPendingToggle(null); if (pending) doToggleProvider(pending.providerId, pending.authTypes, false); }} title="Disable provider connections?" message={`This will disable ${pendingToggle?.count ?? 0} active connection${(pendingToggle?.count ?? 0) === 1 ? "" : "s"}. Disabled accounts stay disabled until you toggle them back.`} confirmText="Disable" cancelText="Cancel" variant="danger" />
-    </div>
+    </section>
   );
 }
 
-function LedgerBand({ number, title, summary, action, children }) {
-  return <section className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--ledger-border)] bg-[var(--ledger-bg)]"><header className="flex flex-col gap-3 border-b border-[var(--ledger-rule)] bg-[var(--ledger-caption-bg)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-center gap-3"><span className="font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">{number}</span><div className="min-w-0"><h2 className="font-semibold">{title}</h2>{summary && <p className="text-xs text-[var(--color-text-muted)]">{summary}</p>}</div></div>{action}</header>{children}</section>;
+function LedgerBand({ title, summary, action, children }) {
+  return <section className="border-b border-[var(--ledger-rule)] last:border-b-0"><header className="flex flex-col gap-3 border-b border-[var(--ledger-rule)] bg-[var(--ledger-caption-bg)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><h2 className="font-semibold">{title}</h2>{summary && <p className="text-xs text-[var(--color-text-muted)]">{summary}</p>}</div>{action}</header>{children}</section>;
 }
 
 function ProviderGroup({ label, count, onTest, testing, children }) {
@@ -539,7 +543,7 @@ function ProviderSignalRow({ position, providerId, provider, stats, authType, on
       <span className="border-r border-[var(--signal-row-rail)] pr-3 text-center font-mono text-xs tabular-nums text-[var(--color-primary)]">{String(position).padStart(2, "0")}</span>
       <Link href={`/dashboard/providers/${providerId}`} className="flex min-w-0 items-center gap-3 rounded-[var(--radius-xs)] focus-visible:shadow-[var(--focus-ring)]">
         <ProviderIcon src={iconPath} alt={provider.name} size={30} className="size-8 shrink-0 rounded-[var(--radius-sm)] object-contain" fallbackText={provider.textIcon || provider.id.slice(0, 2).toUpperCase()} fallbackColor={provider.color} />
-        <span className="min-w-0"><span className="block truncate font-semibold">{provider.name}</span>{provider.displaySlug ? <span className="block truncate font-mono text-xs text-[var(--color-text-muted)]">{provider.displaySlug}</span> : <span className="block text-xs text-[var(--color-text-muted)]">{authLabel}</span>}</span>
+        <span className="min-w-0"><span className="block truncate font-semibold">{provider.name}</span>{provider.displaySlug ? <span className="block break-all font-mono text-xs text-[var(--color-text-muted)]">{provider.displaySlug}</span> : <span className="block text-xs text-[var(--color-text-muted)]">{authLabel}</span>}</span>
       </Link>
       <Link href={`/dashboard/providers/${providerId}`} className="col-span-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 pl-[3.25rem] text-xs sm:col-span-1 sm:pl-0">
         <span className="inline-flex items-center gap-2"><StatusGlyph type={state} /><span>{stateLabel}</span></span>
