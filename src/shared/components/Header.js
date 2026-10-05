@@ -4,13 +4,12 @@ import Icon from "./Icon";
 import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import PropTypes from "prop-types";
-import ProviderIcon from "@/shared/components/ProviderIcon";
 import HeaderMenu from "@/shared/components/HeaderMenu";
 import HeaderLanguage from "@/shared/components/HeaderLanguage";
 import ThemeToggle from "@/shared/components/ThemeToggle";
+import ChangelogModal from "@/shared/components/ChangelogModal";
 import { useHeaderSearchStore } from "@/store/headerSearchStore";
-import { OAUTH_PROVIDERS, APIKEY_PROVIDERS } from "@/shared/constants/config";
+import { APP_CONFIG, OAUTH_PROVIDERS, APIKEY_PROVIDERS } from "@/shared/constants/config";
 import { MEDIA_PROVIDER_KINDS, AI_PROVIDERS } from "@/shared/constants/providers";
 import { getProviderIconSrc } from "@/shared/utils/providerIcon";
 import { translate } from "@/i18n/runtime";
@@ -179,14 +178,17 @@ const getPageInfo = (pathname) => {
   return { title: "", description: "", breadcrumbs: [] };
 };
 
-export default function Header({ onMenuClick, showMenuButton = true, menuButtonRef }) {
+export default function Header() {
   const pathname = usePathname();
   const [displayName, setDisplayName] = useState("");
   const [loginMethod, setLoginMethod] = useState("");
+  const [gatewayState, setGatewayState] = useState("checking");
+  const [lastChecked, setLastChecked] = useState(null);
+  const [changelogOpen, setChangelogOpen] = useState(false);
 
   // Memoize page info to prevent unnecessary recalculations
   const pageInfo = useMemo(() => getPageInfo(pathname), [pathname]);
-  const { title, description, icon, breadcrumbs } = pageInfo;
+  const { title, description, breadcrumbs } = pageInfo;
 
   useEffect(() => {
     let cancelled = false;
@@ -225,37 +227,80 @@ export default function Header({ onMenuClick, showMenuButton = true, menuButtonR
     }
   };
 
+  const checkGateway = async () => {
+    setGatewayState("checking");
+    try {
+      const response = await fetch("/api/health", { cache: "no-store" });
+      setGatewayState(response.ok ? "connected" : "degraded");
+    } catch {
+      setGatewayState("offline");
+    } finally {
+      setLastChecked(new Date());
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/health", { cache: "no-store" })
+      .then((response) => {
+        if (!cancelled) setGatewayState(response.ok ? "connected" : "degraded");
+      })
+      .catch(() => {
+        if (!cancelled) setGatewayState("offline");
+      })
+      .finally(() => {
+        if (!cancelled) setLastChecked(new Date());
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const gatewayLabel = gatewayState === "checking"
+    ? "Checking gateway"
+    : gatewayState === "connected"
+      ? "Local"
+      : gatewayState === "degraded"
+        ? "Degraded"
+        : "Offline";
+
   return (
-    <header className="z-[var(--z-sticky)] flex min-h-[var(--layout-workbar-height)] shrink-0 items-center gap-3 border-b border-[var(--workbar-border)] bg-[var(--workbar-bg)] px-4 lg:px-6">
-      {showMenuButton ? (
-        <button ref={menuButtonRef} type="button" onClick={onMenuClick} aria-label="Open navigation" className="grid size-11 shrink-0 place-items-center rounded-[var(--radius-sm)] border border-[var(--button-border)] text-[var(--color-text-muted)] lg:hidden">
-          <Icon name="menu" />
-        </button>
-      ) : null}
+    <>
+      <header className="route-ribbon" aria-label="Route context">
+        <div className="route-ribbon__context">
+          {breadcrumbs.length > 0 ? (
+            <nav aria-label="Breadcrumb" className="route-breadcrumb">
+              {breadcrumbs.map((crumb, index) => (
+                <div key={`${crumb.label}-${crumb.href || "current"}`} className="flex min-w-0 items-center gap-2">
+                  {index > 0 ? <span aria-hidden="true" className="text-[var(--color-text-subtle)]">/</span> : null}
+                  {crumb.href ? <Link href={crumb.href}>{translate(crumb.label)}</Link> : <h1>{translate(crumb.label)}</h1>}
+                </div>
+              ))}
+            </nav>
+          ) : title ? <h1 className="route-ribbon__title">{translate(title)}</h1> : null}
+          {description ? <span className="sr-only">{translate(description)}</span> : null}
+        </div>
 
-      <div className="min-w-0 flex-1">
-        {breadcrumbs.length > 0 ? (
-          <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-sm">
-            {breadcrumbs.map((crumb, index) => (
-              <div key={`${crumb.label}-${crumb.href || "current"}`} className="flex min-w-0 items-center gap-2">
-                {index > 0 ? <span className="text-[var(--color-text-subtle)]">/</span> : null}
-                {crumb.href ? <Link href={crumb.href} className="text-[var(--color-text-muted)] hover:text-[var(--color-primary)]">{translate(crumb.label)}</Link> : <h1 className="truncate text-[var(--text-lg)] font-semibold">{translate(crumb.label)}</h1>}
-              </div>
-            ))}
-          </nav>
-        ) : title ? <h1 className="truncate text-[var(--text-lg)] font-semibold tracking-[-.01em]">{translate(title)}</h1> : null}
-      </div>
+        <div className={`gateway-state gateway-state--${gatewayState}`} role="status" aria-live="polite">
+          <span className="gateway-state__mark" aria-hidden="true" />
+          <span>{gatewayLabel}</span>
+          <span className="gateway-state__version">v{APP_CONFIG.version}</span>
+          {lastChecked ? <span className="sr-only">Last checked {lastChecked.toLocaleTimeString()}</span> : null}
+          {gatewayState === "offline" || gatewayState === "degraded" ? <button type="button" onClick={checkGateway}>Retry</button> : null}
+        </div>
 
-      <HeaderSearch />
-      <div className="flex shrink-0 items-center gap-1">
-        <Link href="/docs" className="hidden h-10 items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--button-border)] px-3 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)] sm:flex"><Icon name="menu_book" className="text-[18px]" />Docs</Link>
-        {displayName && (loginMethod === "OIDC" || loginMethod === "SAML") ? <div className="data-text hidden max-w-44 truncate rounded-[var(--radius-xs)] border border-[var(--color-border)] px-2 py-1 text-[11px] text-[var(--color-text-muted)] md:block" title={displayName}>{displayName} · {loginMethod}</div> : null}
-        <ThemeToggle />
-        <HeaderLanguage />
-        <HeaderMenu onLogout={handleLogout} />
-      </div>
-    </header>
+        <div className="route-ribbon__actions" aria-label="Page and application actions">
+          <HeaderSearch />
+          <Link href="/docs" className="ribbon-action"><Icon name="menu_book" className="text-[18px]" aria-hidden="true" /><span>Docs</span></Link>
+          <button type="button" onClick={() => setChangelogOpen(true)} className="ribbon-action"><Icon name="history" className="text-[18px]" aria-hidden="true" /><span>Change Log</span></button>
+          {displayName && (loginMethod === "OIDC" || loginMethod === "SAML") ? <div className="data-text hidden max-w-44 truncate border border-[var(--color-border)] px-2 py-1 text-[11px] text-[var(--color-text-muted)] md:block" title={displayName}>{displayName} · {loginMethod}</div> : null}
+          <ThemeToggle className="ribbon-icon-action" />
+          <HeaderLanguage />
+          <HeaderMenu onLogout={handleLogout} />
+        </div>
+      </header>
+      <ChangelogModal isOpen={changelogOpen} onClose={() => setChangelogOpen(false)} />
+    </>
   );
+
 }
 
 function HeaderSearch() {
@@ -291,9 +336,3 @@ function HeaderSearch() {
     </div>
   );
 }
-
-Header.propTypes = {
-  onMenuClick: PropTypes.func,
-  showMenuButton: PropTypes.bool,
-  menuButtonRef: PropTypes.shape({ current: PropTypes.object }),
-};
