@@ -78,6 +78,29 @@ export function normalizeLiveModel(model, connection) {
   };
 }
 
+// Match the disabled-model store's `{ [alias]: modelId[] }` shape. Picker
+// rows are normalized to `{alias}/{modelId}` before this layer, so one pure
+// filter consistently covers static, live, and curated sources. Malformed or
+// unavailable maps fail open.
+export function filterDisabledPickerModels(models, disabledByAlias) {
+  if (!disabledByAlias || typeof disabledByAlias !== "object") {
+    return Array.isArray(models) ? models : [];
+  }
+
+  return (Array.isArray(models) ? models : []).filter((model) => {
+    const requestModel = String(model?.requestModel || model?.id || "");
+    const slash = requestModel.indexOf("/");
+    if (slash <= 0 || slash === requestModel.length - 1) return true;
+    const outputAlias = requestModel.slice(0, slash);
+    const modelId = requestModel.slice(slash + 1);
+    const providerId = model?.providerId || "";
+    const staticAlias = PROVIDER_ID_TO_ALIAS[providerId] || providerId;
+    return ![outputAlias, staticAlias].some(
+      (alias) => alias && Array.isArray(disabledByAlias[alias]) && disabledByAlias[alias].includes(modelId)
+    );
+  });
+}
+
 export function dedupeModels(models) {
   const map = new Map();
   for (const model of models) {
