@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mocks = vi.hoisted(() => ({ saveRequestUsage: vi.fn(async () => {}) }));
 
@@ -11,6 +11,12 @@ vi.mock("@/lib/usageDb.js", () => ({
 }));
 
 const { saveRequestError } = await import("open-sse/handlers/chatCore/requestDetail.js");
+
+// Explicit isolation: each test must see only its own calls regardless of runner
+// mock-clearing defaults (proven runner-dependent: green locally, red on CI box).
+beforeEach(() => {
+  mocks.saveRequestUsage.mockClear();
+});
 
 describe("saveRequestError (W03 failed requests reach the log)", () => {
   it("persists numeric status with zero tokens", async () => {
