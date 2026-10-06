@@ -124,8 +124,8 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
   const errorClass = connection.lastError ? normalizeErrorClass(connection) : null;
 
   return (
-    <div className={`grid min-w-0 grid-cols-[2.5rem_minmax(0,1fr)] gap-3 px-2 py-3 transition-colors hover:bg-[var(--signal-row-bg-hover)] sm:grid-cols-[2.5rem_minmax(0,1fr)_auto] sm:items-center ${connection.isActive === false ? "bg-[var(--color-surface-strong)]" : ""}`}>
-      <span className="flex h-full min-h-12 items-center justify-center border-r border-[var(--signal-row-rail)] font-mono text-xs tabular-nums text-[var(--color-primary)]">{String((connection.priority ?? 0) + 1).padStart(2, "0")}</span>
+    <div className={`grid min-w-0 grid-cols-[2.5rem_minmax(0,1fr)] gap-3 px-2 py-3 transition-colors hover:bg-[var(--color-surface-hover)] sm:grid-cols-[2.5rem_minmax(0,1fr)_auto] sm:items-center ${connection.isActive === false ? "bg-[var(--color-surface-strong)]" : ""}`}>
+      <span className="flex h-full min-h-12 items-center justify-center border-r border-[var(--color-border-strong)] font-mono text-xs tabular-nums text-[var(--color-primary)]">{String((connection.priority ?? 0) + 1).padStart(2, "0")}</span>
       <div className="flex min-w-0 flex-1 items-start gap-2 sm:items-center sm:gap-3">
         {/* Priority arrows */}
         <div className="flex shrink-0 flex-col">
