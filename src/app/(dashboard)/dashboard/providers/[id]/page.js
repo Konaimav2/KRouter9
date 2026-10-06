@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import { resolveCustomProviderId } from "../utils";
 import { getProviderIconSrc, markProviderIconMissing } from "@/shared/utils/providerIcon";
 import { Card, Button, Badge, Input, Modal, CardSkeleton, OAuthModal, KiroOAuthWrapper, CursorAuthModal, IFlowCookieModal, GitLabAuthModal, Toggle, Select, EditConnectionModal, NoAuthProxyCard, ConfirmModal } from "@/shared/components";
 import Icon from "@/shared/components/Icon";
@@ -40,13 +41,19 @@ function sleep(ms) {
 export default function ProviderDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const providerId = params.id;
+  const routeParam = params.id;
+  // F16-routes: custom slugs resolve to the node id once nodes load; legacy
+  // ids pass through, so existing bookmarks never 404.
+  const [providerNodes, setProviderNodes] = useState([]);
+  const providerId = useMemo(
+    () => resolveCustomProviderId(providerNodes, routeParam) || routeParam,
+    [providerNodes, routeParam],
+  );
   const { getCaps } = useModelCaps();
   const [connections, setConnections] = useState([]);
   const [loading, setLoading] = useState(true);
   // P2: incremental render for provider pages with thousands of connections.
   const [visibleCount, setVisibleCount] = useState(50);
-  const [providerNode, setProviderNode] = useState(null);
   const [proxyPools, setProxyPools] = useState([]);
   const [showOAuthModal, setShowOAuthModal] = useState(false);
   const [showIFlowCookieModal, setShowIFlowCookieModal] = useState(false);
@@ -348,7 +355,9 @@ export default function ProviderDetailPage() {
       const apCfg = autoPingSettingsKey ? settingsData[autoPingSettingsKey] || {} : {};
       setAutoPing({ enabled: apCfg.enabled === true, connections: apCfg.connections || {} });
       if (nodesRes.ok) {
-        let node = (nodesData.nodes || []).find((entry) => entry.id === providerId) || null;
+        const allNodes = nodesData.nodes || [];
+        setProviderNodes(allNodes);
+        let node = allNodes.find((entry) => entry.id === providerId) || null;
 
         // Newly created compatible nodes can be briefly unavailable on one worker.
         // Retry a few times before showing "Provider not found".

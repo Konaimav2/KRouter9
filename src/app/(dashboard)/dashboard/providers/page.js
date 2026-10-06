@@ -24,7 +24,7 @@ import { useNotificationStore } from "@/store/notificationStore";
 import { useHeaderSearchStore } from "@/store/headerSearchStore";
 import ModelAvailabilityBadge from "./components/ModelAvailabilityBadge";
 import AddCompatibleModal from "./components/AddCompatibleModal";
-import { buildCustomProviderDisplaySlugs, STATUS_FILTER_OPTIONS, matchesStatusFilter } from "./utils";
+import { buildCustomProviderDisplaySlugs, buildCustomProviderRouteSlugs, STATUS_FILTER_OPTIONS, matchesStatusFilter } from "./utils";
 import { normalizeErrorClass, errorClassLabel } from "@/shared/utils/errorClass";
 
 function getConnectionErrorTag(connection) {
@@ -284,6 +284,7 @@ export default function ProvidersPage() {
   };
 
   const customProviderSlugs = buildCustomProviderDisplaySlugs(providerNodes);
+  const customProviderRouteSlugs = buildCustomProviderRouteSlugs(providerNodes);
 
   const compatibleProviders = providerNodes
     .filter((node) => node.type === "openai-compatible")
@@ -294,6 +295,7 @@ export default function ProvidersPage() {
       textIcon: "OC",
       apiType: node.apiType,
       displaySlug: customProviderSlugs.get(node.id),
+      routeSlug: customProviderRouteSlugs.get(node.id),
     }))
     .filter(
       (p) => matchSearch(p.name) && matchStatus(getProviderStats(p.id, "apikey")),
@@ -307,6 +309,7 @@ export default function ProvidersPage() {
       color: "#D97757",
       textIcon: "AC",
       displaySlug: customProviderSlugs.get(node.id),
+      routeSlug: customProviderRouteSlugs.get(node.id),
     }))
     .filter(
       (p) => matchSearch(p.name) && matchStatus(getProviderStats(p.id, "apikey")),
@@ -528,6 +531,7 @@ function ApiKeyProviderCard(props) {
 
 function ProviderSignalRow({ position, providerId, provider, stats, authType, onToggle, apiKey = false }) {
   const { connected, error, errorCode, errorClass, errorTime, allDisabled, total } = stats;
+  const providerHref = `/dashboard/providers/${provider.routeSlug || providerId}`;
   const isCompatible = providerId.startsWith(OPENAI_COMPATIBLE_PREFIX);
   const isAnthropicCompatible = providerId.startsWith(ANTHROPIC_COMPATIBLE_PREFIX);
   const iconPath = apiKey
@@ -540,11 +544,11 @@ function ProviderSignalRow({ position, providerId, provider, stats, authType, on
   return (
     <div className={`grid min-h-[var(--row-h-comfortable)] grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 px-3 py-3 sm:grid-cols-[2.5rem_minmax(180px,1.4fr)_minmax(220px,1fr)_auto] ${allDisabled ? "bg-[var(--color-surface-strong)]" : "hover:bg-[var(--color-surface-hover)]"}`}>
       <span className="border-r border-[var(--color-route-bidirectional)] pr-3 text-center font-mono text-xs tabular-nums text-[var(--color-primary)]">{String(position).padStart(2, "0")}</span>
-      <Link href={`/dashboard/providers/${providerId}`} className="flex min-w-0 items-center gap-3 rounded-[var(--radius-xs)] focus-visible:shadow-[var(--focus-ring)]">
+      <Link href={providerHref} className="flex min-w-0 items-center gap-3 rounded-[var(--radius-xs)] focus-visible:shadow-[var(--focus-ring)]">
         <ProviderIcon src={iconPath} alt={provider.name} size={30} className="size-8 shrink-0 rounded-[var(--radius-sm)] object-contain" fallbackText={provider.textIcon || provider.id.slice(0, 2).toUpperCase()} fallbackColor={provider.color} />
         <span className="min-w-0"><span className="block truncate font-semibold">{provider.name}</span>{provider.displaySlug ? <span className="block break-all font-mono text-xs text-[var(--color-text-muted)]">{provider.displaySlug}</span> : <span className="block text-xs text-[var(--color-text-muted)]">{authLabel}</span>}</span>
       </Link>
-      <Link href={`/dashboard/providers/${providerId}`} className="col-span-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 pl-[3.25rem] text-xs sm:col-span-1 sm:pl-0">
+      <Link href={providerHref} className="col-span-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 pl-[3.25rem] text-xs sm:col-span-1 sm:pl-0">
         <span className="inline-flex items-center gap-2"><StatusGlyph type={state} /><span>{stateLabel}</span></span>
         <span className="inline-grid grid-flow-col auto-cols-max items-baseline gap-3 text-[var(--color-text-muted)]">
           <span className="inline-grid grid-cols-[auto_auto] items-baseline gap-1"><span className="font-mono tabular-nums text-[var(--color-text)]">{connected}</span><span>ready</span></span>
@@ -558,7 +562,7 @@ function ProviderSignalRow({ position, providerId, provider, stats, authType, on
       </Link>
       <div className="flex items-center justify-end gap-2">
         {total > 0 && <Toggle size="sm" checked={!allDisabled} onChange={(active) => onToggle(active)} title={allDisabled ? "Enable provider" : "Disable provider"} />}
-        <Link href={`/dashboard/providers/${providerId}`} className="flex size-11 items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]" aria-label={`Open ${provider.name}`}><Icon name="chevron_right" /></Link>
+        <Link href={providerHref} className="flex size-11 items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]" aria-label={`Open ${provider.name}`}><Icon name="chevron_right" /></Link>
       </div>
     </div>
   );
@@ -567,7 +571,7 @@ function ProviderSignalRow({ position, providerId, provider, stats, authType, on
 ProviderSignalRow.propTypes = {
   position: PropTypes.number.isRequired,
   providerId: PropTypes.string.isRequired,
-  provider: PropTypes.shape({ id: PropTypes.string.isRequired, name: PropTypes.string.isRequired, color: PropTypes.string, textIcon: PropTypes.string, apiType: PropTypes.string, displaySlug: PropTypes.string, noAuth: PropTypes.bool }).isRequired,
+  provider: PropTypes.shape({ id: PropTypes.string.isRequired, name: PropTypes.string.isRequired, color: PropTypes.string, textIcon: PropTypes.string, apiType: PropTypes.string, displaySlug: PropTypes.string, routeSlug: PropTypes.string, noAuth: PropTypes.bool }).isRequired,
   stats: PropTypes.shape({ connected: PropTypes.number, error: PropTypes.number, total: PropTypes.number, errorCode: PropTypes.string, errorClass: PropTypes.string, errorTime: PropTypes.string, allDisabled: PropTypes.bool }).isRequired,
   authType: PropTypes.string,
   onToggle: PropTypes.func,
