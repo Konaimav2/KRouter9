@@ -2,6 +2,7 @@
 
 import Icon from "../Icon";
 import { usePathname } from "next/navigation";
+import { useEffect } from "react";
 import { useNotificationStore } from "@/store/notificationStore";
 import Sidebar from "../Sidebar";
 import Header from "../Header";
@@ -18,6 +19,14 @@ export default function DashboardLayout({ children }) {
   const notifications = useNotificationStore((state) => state.notifications);
   const removeNotification = useNotificationStore((state) => state.removeNotification);
   const isPlayground = pathname === "/dashboard/basic-chat";
+
+  useEffect(() => {
+    document.documentElement.classList.add("dashboard-scroll-lock");
+
+    return () => {
+      document.documentElement.classList.remove("dashboard-scroll-lock");
+    };
+  }, []);
 
   return (
     <div className="route-shell">

@@ -140,6 +140,7 @@
 }
 
 html { background:var(--color-canvas); scroll-behavior:smooth; }
+html.dashboard-scroll-lock,html.dashboard-scroll-lock body { overflow:hidden; }
 body { margin:0; background:var(--color-canvas); color:var(--color-text); font-family:var(--font-ui); -webkit-font-smoothing:antialiased; }
 code,pre,kbd,samp,.font-mono { font-family:var(--font-data)!important; font-variant-numeric:tabular-nums slashed-zero; }
 ::selection { background:var(--color-primary-border); color:var(--color-text); }
