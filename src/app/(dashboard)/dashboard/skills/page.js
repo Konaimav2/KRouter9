@@ -29,9 +29,9 @@ function SkillRow({ skill, index }) {
   const rawUrl = getSkillRawUrl(skill.id);
   return (
     <div
-      className={`signal-row grid gap-3 border-l-2 px-4 py-3 sm:grid-cols-[2.5rem_minmax(14rem,1fr)_minmax(12rem,1fr)_auto] sm:items-center ${skill.isEntry ? "border-l-[var(--color-primary)]" : "border-l-transparent"}`}
+      className={`border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] grid gap-3 border-l-2 px-4 py-3 sm:grid-cols-[2.5rem_minmax(14rem,1fr)_minmax(12rem,1fr)_auto] sm:items-center ${skill.isEntry ? "border-l-[var(--color-primary)]" : "border-l-transparent"}`}
     >
-      <span className="ledger-number">
+      <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">
         {String(index + 1).padStart(2, "0")}
       </span>
       <div className="flex min-w-0 items-start gap-3">
@@ -88,16 +88,16 @@ export default function SkillsPage() {
   const prompt = `Read this skill and use it: ${entryUrl}`;
   return (
     <div className="mx-auto w-full max-w-[72rem] px-1 sm:px-0">
-      <section className="ledger-band">
-        <header className="ledger-caption">
-          <span className="ledger-number">01</span>
+      <section className="min-w-0 overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
+        <header className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3">
+          <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">01</span>
           <h2 className="font-semibold">Skill registry</h2>
           <span className="data-text ml-auto text-xs text-[var(--color-text-muted)]">
             {SKILLS.length} skills
           </span>
         </header>
-        <div className="signal-row grid gap-3 px-4 py-3 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto] sm:items-center">
-          <span className="ledger-number">AI</span>
+        <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] grid gap-3 px-4 py-3 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto] sm:items-center">
+          <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">AI</span>
           <div className="min-w-0">
             <p className="mb-1 text-xs text-[var(--color-text-muted)]">
               Paste this to your AI
@@ -111,8 +111,8 @@ export default function SkillsPage() {
         {SKILLS.map((skill, index) => (
           <SkillRow key={skill.id} skill={skill} index={index} />
         ))}
-        <div className="signal-row grid gap-3 px-4 py-3 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto] sm:items-center">
-          <span className="ledger-number">
+        <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] grid gap-3 px-4 py-3 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto] sm:items-center">
+          <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">
             {String(SKILLS.length + 1).padStart(2, "0")}
           </span>
           <div>

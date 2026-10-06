@@ -726,7 +726,7 @@ export default function APIPageClient({ machineId }) {
       {/* Endpoint ledger */}
       <LedgerBand number="01" title="API endpoint" summary="Local and remote routes">
         {/* Endpoint rows */}
-        <div className="flex min-w-0 flex-col divide-y divide-[var(--ledger-rule)] p-3">
+        <div className="flex min-w-0 flex-col divide-y divide-[var(--color-border)] p-3">
           {/* Local */}
           <EndpointRow
             label="Local"
@@ -737,7 +737,7 @@ export default function APIPageClient({ machineId }) {
           />
           {/* Cloudflare Tunnel */}
           <div className="flex min-w-0 flex-col gap-2 py-2 sm:flex-row sm:items-center">
-            <span className={`shrink-0 border-r border-[var(--signal-row-rail)] px-2 py-1 text-center font-mono text-xs sm:min-w-[5.5rem] ${tunnelEnabled ? "text-[var(--color-primary)]" : "text-[var(--color-text-muted)]"}`}>Tunnel</span>
+            <span className={`shrink-0 border-r border-[var(--color-border)] px-2 py-1 text-center font-mono text-xs sm:min-w-[5.5rem] ${tunnelEnabled ? "text-[var(--color-primary)]" : "text-[var(--color-text-muted)]"}`}>Tunnel</span>
             {tunnelEnabled && !tunnelLoading && tunnelReachable ? (
               <>
                 <Input value={`${tunnelPublicUrl || tunnelUrl}/v1`} readOnly className="flex-1 font-mono text-sm" />
@@ -827,7 +827,7 @@ export default function APIPageClient({ machineId }) {
           </div>
           {/* Tailscale */}
           <div className="flex min-w-0 flex-col gap-2 py-2 sm:flex-row sm:items-center">
-            <span className={`shrink-0 border-r border-[var(--signal-row-rail)] px-2 py-1 text-center font-mono text-xs sm:min-w-[5.5rem] ${tsEnabled ? "text-[var(--color-primary)]" : "text-[var(--color-text-muted)]"}`}>Tailscale</span>
+            <span className={`shrink-0 border-r border-[var(--color-border)] px-2 py-1 text-center font-mono text-xs sm:min-w-[5.5rem] ${tsEnabled ? "text-[var(--color-primary)]" : "text-[var(--color-text-muted)]"}`}>Tailscale</span>
             {tsEnabled && !tsLoading && tsReachable ? (
               <>
                 <Input value={`${tsUrl}/v1`} readOnly className="flex-1 font-mono text-sm" />
@@ -961,14 +961,14 @@ export default function APIPageClient({ machineId }) {
 
       {/* API Keys */}
       <LedgerBand number="02" title="API keys" summary={`${keys.length} credential${keys.length === 1 ? "" : "s"}`} id="require-api-key">
-        <div className="flex flex-col gap-3 border-b border-[var(--ledger-rule)] p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-b border-[var(--color-border)] p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2"><KeyRound size={18} className="text-[var(--color-primary)]"/><h3 className="font-semibold">Credentials</h3></div>
           <Button icon="add" onClick={() => setShowAddModal(true)}>
             Create Key
           </Button>
         </div>
 
-        <div className="flex items-center justify-between gap-4 border-b border-[var(--ledger-rule)] p-4">
+        <div className="flex items-center justify-between gap-4 border-b border-[var(--color-border)] p-4">
           <div>
             <p className="font-medium">Require API key</p>
             <p className="text-sm text-text-muted">
@@ -1001,9 +1001,9 @@ export default function APIPageClient({ machineId }) {
             {keys.map((key) => (
               <div
                 key={key.id}
-                className={`group grid min-h-[var(--row-h-comfortable)] grid-cols-[2.5rem_minmax(0,1fr)] gap-3 border-b border-[var(--ledger-rule)] px-3 py-3 last:border-b-0 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto] ${key.isActive === false ? "bg-[var(--color-surface-strong)]" : "hover:bg-[var(--signal-row-bg-hover)]"}`}
+                className={`group grid min-h-[var(--row-h-comfortable)] grid-cols-[2.5rem_minmax(0,1fr)] gap-3 border-b border-[var(--color-border)] px-3 py-3 last:border-b-0 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto] ${key.isActive === false ? "bg-[var(--color-surface-strong)]" : "hover:bg-[var(--color-surface-hover)]"}`}
               >
-                <span className="border-r border-[var(--signal-row-rail)] pr-3 text-center font-mono text-xs tabular-nums text-[var(--color-primary)]">{String(keys.indexOf(key) + 1).padStart(2, "0")}</span>
+                <span className="border-r border-[var(--color-border)] pr-3 text-center font-mono text-xs tabular-nums text-[var(--color-primary)]">{String(keys.indexOf(key) + 1).padStart(2, "0")}</span>
                 <div className="min-w-0">
                   <p className="text-sm font-medium">{key.name}</p>
                   <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
@@ -1358,7 +1358,7 @@ export default function APIPageClient({ machineId }) {
 
 
 function LedgerBand({ number, title, summary, action, id, children }) {
-  return <section id={id} className="min-w-0 overflow-hidden rounded-[var(--radius-md)] border border-[var(--ledger-border)] bg-[var(--ledger-bg)]"><header className="flex flex-col gap-3 border-b border-[var(--ledger-rule)] bg-[var(--ledger-caption-bg)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-center gap-3"><span className="font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">{number}</span><div className="min-w-0"><h2 className="font-semibold">{title}</h2>{summary && <p className="text-xs text-[var(--color-text-muted)]">{summary}</p>}</div></div>{action}</header>{children}</section>;
+  return <section id={id} className="min-w-0 overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)]"><header className="flex flex-col gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-center gap-3"><span className="font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">{number}</span><div className="min-w-0"><h2 className="font-semibold">{title}</h2>{summary && <p className="text-xs text-[var(--color-text-muted)]">{summary}</p>}</div></div>{action}</header>{children}</section>;
 }
 
 

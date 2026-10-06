@@ -636,8 +636,8 @@ export default function ProxyPoolsPage() {
         </div>
       </div>
 
-      <section className="ledger-band">
-        <div className="ledger-caption flex flex-wrap items-center justify-between gap-3">
+      <section className="min-w-0 overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
+        <div className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <span>01 Proxy routes</span>
             <span className="data-text">Total {proxyPools.length} · Active {activeCount}</span>
@@ -662,7 +662,7 @@ export default function ProxyPoolsPage() {
         )}
 
         {proxyPools.length === 0 ? (
-          <div className="signal-row flex flex-wrap items-center justify-between gap-3 px-3 py-5">
+          <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] flex flex-wrap items-center justify-between gap-3 px-3 py-5">
             <div><p className="font-medium">No proxy pool entries yet</p><p className="text-sm text-text-muted">Create a proxy pool entry, then assign it to connections.</p></div>
             <Button icon="add" onClick={openCreateModal}>Add Proxy Pool</Button>
           </div>
@@ -671,9 +671,9 @@ export default function ProxyPoolsPage() {
           const statusTone = status === "active" ? "text-success" : status === "error" ? "text-danger" : "text-text-muted";
           const statusGlyph = status === "active" ? "●" : status === "error" ? "■" : "○";
           return (
-            <div key={pool.id} className="signal-row grid grid-cols-[auto_2rem_minmax(0,1fr)] items-start gap-3 px-3 py-3 sm:grid-cols-[auto_2rem_minmax(0,1fr)_auto]">
+            <div key={pool.id} className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] grid grid-cols-[auto_2rem_minmax(0,1fr)] items-start gap-3 px-3 py-3 sm:grid-cols-[auto_2rem_minmax(0,1fr)_auto]">
               <input type="checkbox" checked={selectedIds.includes(pool.id)} onChange={() => toggleSelect(pool.id)} className="mt-1 size-4 border-border" aria-label={`Select ${pool.name}`} />
-              <span className="ledger-number">{String(index + 1).padStart(2, "0")}</span>
+              <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">{String(index + 1).padStart(2, "0")}</span>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1"><p className="truncate text-sm font-medium">{pool.name}</p><span className={`inline-flex items-center gap-1 text-xs ${statusTone}`}><span aria-hidden="true">{statusGlyph}</span>{status}</span><span className={pool.isActive ? "text-success text-xs" : "text-text-muted text-xs"}>{pool.isActive ? "● Active" : "Ⅱ Inactive"}</span></div>
                 <div className="mt-1 text-xs text-text-muted"><MaskedProxyValue masked={pool.proxyUrlMasked || "***"} revealUrl={`/api/proxy-pools/${pool.id}/reveal`} hasAuth={pool.hasProxyAuth === true} /></div>
