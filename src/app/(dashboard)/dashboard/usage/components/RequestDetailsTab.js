@@ -343,6 +343,9 @@ export default function RequestDetailsTab() {
                         {detail.status || "—"}{detail.status !== "success" && (detail.statusCode ?? detail.httpStatus ?? detail.errorCode) ? ` · ${detail.statusCode ?? detail.httpStatus ?? detail.errorCode}` : ""}
                       </span>
                     </td>
+                    <td className="p-4 font-mono text-sm text-text-main">{listFields.statusCode ?? "—"}</td>
+                    <td className="max-w-[180px] p-4 text-sm text-text-main"><span>{listFields.keyName || "—"}</span>{listFields.apiKeyMasked && <span className="mt-1 block font-mono text-xs text-text-muted">{listFields.apiKeyMasked}</span>}</td>
+                    <td className="max-w-[260px] p-4 text-sm text-danger"><span className="line-clamp-2">{listFields.errorExcerpt || "—"}</span></td>
                     <td className="p-4 text-sm text-text-main text-right font-mono">
                       {getInputTokens(detail.tokens).toLocaleString()}
                     </td>

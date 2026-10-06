@@ -125,6 +125,8 @@ export function aggregatePerKey(byApiKey) {
       groups.set(name, {
         keyName: name,
         apiKeyMasked: entry.apiKeyMasked ?? null,
+        providers: [],
+        series: [],
         requests: 0,
         promptTokens: 0,
         cachedTokens: 0,
@@ -136,6 +138,14 @@ export function aggregatePerKey(byApiKey) {
     }
     const g = groups.get(name);
     g.requests += entry.requests || 0;
+    if (entry.provider && !g.providers.includes(entry.provider)) g.providers.push(entry.provider);
+    g.series.push({
+      model: entry.rawModel || "Unknown model",
+      provider: entry.provider || "Unknown provider",
+      requests: entry.requests || 0,
+      totalTokens: (entry.promptTokens || 0) + (entry.completionTokens || 0),
+      lastUsed: entry.lastUsed || null,
+    });
     g.promptTokens += entry.promptTokens || 0;
     g.cachedTokens += entry.cachedTokens || 0;
     g.completionTokens += entry.completionTokens || 0;

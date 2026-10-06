@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Button, Input, Modal, Toggle, ConfirmModal } from "@/shared/components";
+import { Button, Input, Toggle, ConfirmModal } from "@/shared/components";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import { getCurrentLocale, onLocaleChange } from "@/i18n/runtime";
 import {
@@ -21,8 +21,6 @@ export default function TokenSaverClient() {
     python: null,
     loading: true,
   });
-  const [showHeadroomInstallModal, setShowHeadroomInstallModal] =
-    useState(false);
   const [headroomActionLoading, setHeadroomActionLoading] = useState(false);
   const [headroomActionError, setHeadroomActionError] = useState("");
   const [headroomExtras, setHeadroomExtras] = useState({
@@ -480,268 +478,165 @@ export default function TokenSaverClient() {
       ? "bg-success/15 text-success"
       : "bg-warning/15 text-warning";
 
+  const headroomSteps = [
+    {
+      id: "environment",
+      label: "Environment check",
+      state: headroomStatus.loading ? "Checking" : headroomStatus.python ? "Ready" : "Needs attention",
+      body: headroomStatus.python ? `Python ${headroomStatus.python} detected.` : "Python ≥ 3.10 and pip are required for local managed mode.",
+      recovery: !headroomStatus.loading && !headroomStatus.python ? "Install Python and pip for this platform, then re-check." : null,
+    },
+    {
+      id: "install",
+      label: "Install",
+      state: headroomStatus.installed ? "Complete" : "Approval required",
+      body: 'Package source: PyPI package headroom-ai with the proxy extra. Installation never runs on page load.',
+      command: 'pip install "headroom-ai[proxy]"',
+      recovery: !headroomStatus.installed ? "Run the reviewed command externally, then re-check." : null,
+    },
+    {
+      id: "verify",
+      label: "Verify service",
+      state: headroomRunning ? "Reachable" : "Not reachable",
+      body: headroomRunning ? `Service responds at ${headroomUrl}.` : `Start the service at ${headroomUrl}, then verify again.`,
+      recovery: !headroomRunning ? "Check the process and port; external URLs must be started separately." : null,
+    },
+    {
+      id: "enable",
+      label: "Enable",
+      state: headroomEnabled ? "Enabled" : headroomRunning ? "Ready" : "Blocked",
+      body: headroomRunning ? "Route prompts through /v1/compress before provider routing." : "Enable becomes available after the service is reachable.",
+    },
+  ];
+
   return (
-    <div className="space-y-6 p-6">
-      <section id="rtk" className="ledger-band">
-        <div className="ledger-caption flex flex-wrap items-center justify-between gap-3">
-          <span>01 Compression pipeline</span>
-          <span className="data-text">{[rtkEnabled, headroomEnabled, cavemanEnabled, ponytailEnabled].filter(Boolean).length} of 4 stages enabled</span>
+    <div className="space-y-4 p-4 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+        <div role="tablist" aria-label="Token saver workspace" className="inline-flex border border-border bg-surface-2 p-1">
+          <button type="button" role="tab" aria-selected="true" className="min-h-10 bg-primary px-4 text-sm font-semibold text-white">Context</button>
+          <button type="button" role="tab" aria-selected="false" className="min-h-10 px-4 text-sm text-text-muted">Output</button>
         </div>
+        <p className="font-mono text-xs tabular-nums text-text-muted">{[rtkEnabled, headroomEnabled, cavemanEnabled, ponytailEnabled].filter(Boolean).length} / 4 stages enabled</p>
+      </div>
 
-        <div className="signal-row grid gap-3 px-3 py-4 sm:grid-cols-[2rem_minmax(0,1fr)_auto] sm:items-center">
-          <span className="ledger-number">01</span>
-          <div><p className="font-medium">Tool output · <a href="https://github.com/rtk-ai/rtk" target="_blank" rel="noreferrer" className="text-primary underline">RTK</a></p><p className="text-sm text-text-muted">git/grep/ls/tree/logs → 60-90% fewer input tokens</p><p className={rtkEnabled ? "text-xs text-success" : "text-xs text-text-muted"}>{rtkEnabled ? "● Enabled" : "Ⅱ Disabled"}</p></div>
-          <Toggle checked={rtkEnabled} onChange={() => handleRtkEnabled(!rtkEnabled)} />
-        </div>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.7fr)]">
+        <section aria-labelledby="pipeline-title" className="border border-border bg-surface">
+          <header className="border-b border-border bg-surface-2 px-4 py-3">
+            <h2 id="pipeline-title" className="font-semibold">Compression pipeline</h2>
+            <p className="mt-1 text-xs text-text-muted">Input moves through each enabled context stage before routing.</p>
+          </header>
+          {[
+            { index: "01", title: "Tool output · RTK", detail: "git, grep, trees, and logs → 60–90% fewer input tokens", enabled: rtkEnabled, toggle: handleRtkEnabled },
+            { index: "02", title: "Context · Headroom", detail: "Prompt compression through the verified Headroom service", enabled: headroomEnabled, toggle: handleHeadroomEnabled, disabled: !headroomRunning },
+            { index: "03", title: "LLM output · Caveman", detail: "Terse response posture → fewer output tokens", enabled: cavemanEnabled, toggle: handleCavemanEnabled },
+            { index: "04", title: "Coding posture · Ponytail", detail: "YAGNI, reuse, and deletion-over-addition guidance", enabled: ponytailEnabled, toggle: handlePonytailEnabled },
+          ].map((stage) => (
+            <div key={stage.index} className="grid gap-3 border-b border-border p-4 last:border-b-0 sm:grid-cols-[2rem_minmax(0,1fr)_auto] sm:items-center">
+              <span className="font-mono text-xs tabular-nums text-primary">{stage.index}</span>
+              <div><h3 className="font-semibold">{stage.title}</h3><p className="mt-1 text-sm text-text-muted">{stage.detail}</p><p className={`mt-1 text-xs ${stage.enabled ? "text-success" : "text-text-muted"}`}>{stage.enabled ? "Enabled" : stage.disabled ? "Waiting for verification" : "Disabled"}</p></div>
+              <Toggle checked={stage.enabled} disabled={stage.disabled} onChange={() => stage.toggle(!stage.enabled)} />
+            </div>
+          ))}
+        </section>
 
-        <div className="signal-row grid gap-3 px-3 py-4 sm:grid-cols-[2rem_minmax(0,1fr)_auto] sm:items-center">
-          <span className="ledger-number">02</span>
-          <div><div className="flex flex-wrap items-center gap-3"><p className="font-medium">Context · <a href="https://github.com/chopratejas/headroom" target="_blank" rel="noreferrer" className="text-primary underline">Headroom</a></p><span className={`inline-flex items-center gap-1 text-xs ${headroomRunning ? "text-success" : headroomStatus.loading ? "text-text-muted" : "text-warning"}`}>{headroomRunning ? "●" : headroomStatus.loading ? "○" : headroomStatus.installed ? "Ⅱ" : "◇"} {headroomStatusLabel}</span><button type="button" onClick={() => setShowHeadroomInstallModal(true)} className="text-xs text-primary underline">{headroomRunning ? "Manage" : "Setup"}</button></div><p className="text-sm text-text-muted">Compress prompts via /v1/compress before routing to the model</p></div>
-          <Toggle checked={headroomEnabled} onChange={() => handleHeadroomEnabled(!headroomEnabled)} />
-        </div>
+        <aside aria-labelledby="savings-title" className="border border-border bg-surface p-4">
+          <h2 id="savings-title" className="font-semibold">Current savings evidence</h2>
+          <dl className="mt-4 grid grid-cols-2 gap-px bg-border">
+            <div className="bg-surface-2 p-3"><dt className="text-xs text-text-muted">Before</dt><dd className="mt-1 font-mono text-xl tabular-nums">— tokens</dd></div>
+            <div className="bg-surface-2 p-3"><dt className="text-xs text-text-muted">After</dt><dd className="mt-1 font-mono text-xl tabular-nums">— tokens</dd></div>
+            <div className="col-span-2 bg-surface-2 p-3"><dt className="text-xs text-text-muted">Saved</dt><dd className="mt-1 font-mono text-xl tabular-nums">Awaiting measured traffic</dd></div>
+          </dl>
+          <p className="mt-3 text-xs text-text-muted">Evidence appears after a request passes through an enabled saver; estimates are never presented as billing.</p>
+        </aside>
+      </div>
+
+      <section aria-labelledby="headroom-title" className="border border-border bg-surface">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface-2 px-4 py-3">
+          <div><h2 id="headroom-title" className="font-semibold">Headroom setup rail</h2><p className="mt-1 text-xs text-text-muted">Environment check → Install → Verify service → Enable</p></div>
+          <Button size="sm" variant="secondary" onClick={refreshHeadroomStatus} disabled={headroomStatus.loading}>{headroomStatus.loading ? "Checking…" : "Re-check"}</Button>
+        </header>
+        <ol className="relative divide-y divide-border">
+          {headroomSteps.map((step, index) => (
+            <li key={step.id} className="grid gap-3 p-4 sm:grid-cols-[2.5rem_minmax(0,1fr)]">
+              <span className="grid size-9 place-items-center border-2 border-primary font-mono text-sm text-primary">{index + 1}</span>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{step.label}</h3><span className="text-xs font-semibold text-text-muted">{step.state}</span></div>
+                <p className="mt-1 text-sm text-text-muted">{step.body}</p>
+                {step.command && <div className="mt-3 flex flex-col gap-2 sm:flex-row"><pre className="min-w-0 flex-1 overflow-x-auto border border-border bg-[var(--color-code-bg)] p-3 font-mono text-xs">{step.command}</pre><Button size="sm" variant="secondary" onClick={() => copy(step.command)}>{copied ? "Copied" : "Copy command"}</Button></div>}
+                {step.id === "verify" && <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_9rem]"><Input value={headroomUrl} onChange={(event) => setHeadroomUrl(event.target.value)} onBlur={handleHeadroomUrlBlur} aria-label="Headroom proxy URL" /><Input value={String(headroomTimeoutMs)} onChange={(event) => setHeadroomTimeoutMs(event.target.value)} onBlur={handleHeadroomTimeoutBlur} aria-label="Headroom timeout in milliseconds" /></div>}
+                {step.id === "verify" && headroomCanStart && !headroomRunning && <Button className="mt-3" size="sm" onClick={handleHeadroomStart} disabled={headroomActionLoading}>{headroomActionLoading ? "Starting…" : "Start service"}</Button>}
+                {step.id === "verify" && headroomManaged && headroomRunning && <Button className="mt-3" size="sm" variant="secondary" onClick={handleHeadroomStop} disabled={headroomActionLoading}>Stop service</Button>}
+                {step.id === "enable" && <div className="mt-3 flex items-center gap-3"><Toggle checked={headroomEnabled} disabled={!headroomRunning} onChange={() => handleHeadroomEnabled(!headroomEnabled)} /><span className="text-sm">Use Headroom for context compression</span></div>}
+                {step.recovery && <p className="mt-2 border-l-2 border-warning pl-3 text-xs text-warning">Recovery: {step.recovery}</p>}
+              </div>
+            </li>
+          ))}
+        </ol>
         {headroomStatus.installed && (
-          <div className="border-b border-border bg-surface-2 px-3 py-3 sm:pl-14">
+          <div className="border-t border-border bg-surface-2 p-4">
             <p className="mb-2 text-xs text-text-muted">Compression extras{headroomExtras.version ? ` · v${headroomExtras.version}` : ""}</p>
             {headroomExtras.available.map((extra) => {
-              const installed = !!headroomExtras.extras[extra]; const pending = pendingExtras.includes(extra); const active = extra === "code" ? codeAware : kompress;
-              return <div key={extra} className="signal-row flex flex-wrap items-center gap-3 py-2 text-xs"><code className="font-medium">[{extra}]</code><span className={installed ? "text-success" : "text-text-muted"}>{installed ? "● Installed" : "◇ Not installed"}</span>{installed ? <><span>{active ? "● Active" : "Ⅱ Inactive"}</span><Toggle size="sm" checked={active} disabled={restartingProxy} onChange={() => toggleExtraActive(extra, !active)} /><button type="button" onClick={() => handleRemoveExtra(extra)} disabled={removingExtra === extra} className="text-danger underline">{removingExtra === extra ? "Uninstalling…" : "Uninstall"}</button></> : <label className="flex items-center gap-2"><input type="checkbox" checked={pending} onChange={() => togglePendingExtra(extra)} /> Select to install</label>}</div>;
-            })}
-            {pendingExtras.length > 0 && <Button size="sm" onClick={handleInstallExtras} disabled={extrasActionLoading}>{extrasActionLoading ? "Installing…" : `Install [proxy,${pendingExtras.join(",")}]`}</Button>}
-            {extrasActionError && <p className="mt-2 text-xs text-danger">■ {extrasActionError}</p>}{restartingProxy && <p className="mt-2 text-xs text-text-muted">○ Restarting proxy…</p>}
-            {(extrasActionLoading || removingExtra) && installLog && <pre className="mt-2 max-h-32 overflow-auto bg-[var(--color-code-bg)] p-2 text-[10px] leading-tight text-text-muted whitespace-pre-wrap">{installLog}</pre>}
-            <p className="mt-2 text-xs text-text-muted">Installing adds the package; use <code>on</code>/<code>off</code> to activate it (restarts the proxy). Default install is <code>[proxy]</code> only (SmartCrusher for JSON). Adding <code>[code]</code> enables AST compression (Python/JS/TS/Go/Rust/Java/C/C++/Perl). Adding <code>[ml]</code> enables the Kompress-v2 HF model for prose/agentic traces but adds ~1 GB (torch + huggingface-hub).</p>
-          </div>
-        )}
-
-        <div className="signal-row grid gap-3 px-3 py-4 sm:grid-cols-[2rem_minmax(0,1fr)_auto] sm:items-center">
-          <span className="ledger-number">03</span>
-          <div><p className="font-medium">LLM output · <a href="https://github.com/JuliusBrussee/caveman" target="_blank" rel="noreferrer" className="text-primary underline">Caveman</a></p><p className="text-sm text-text-muted">Terse-style system prompt → ~65% fewer output tokens (up to 87%)</p><p className={cavemanEnabled ? "text-xs text-success" : "text-xs text-text-muted"}>{cavemanEnabled ? "● Enabled" : "Ⅱ Disabled"}</p></div><Toggle checked={cavemanEnabled} onChange={() => handleCavemanEnabled(!cavemanEnabled)} />
-        </div>
-        {cavemanEnabled && <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-3 py-3 sm:pl-14"><span className="text-xs font-medium">Level</span>{visibleCavemanLevels.map((lvl) => <button key={lvl.id} onClick={() => handleCavemanLevel(lvl.id)} aria-pressed={cavemanLevel === lvl.id} className={`border px-3 py-2 text-xs font-medium ${cavemanLevel === lvl.id ? "border-primary bg-primary text-white" : "border-border text-text-muted"}`} title={lvl.desc}>{lvl.label}</button>)}<span className="text-xs text-primary">{CAVEMAN_LEVELS.find((lvl) => lvl.id === cavemanLevel)?.desc}</span></div>}
-
-        <div className="signal-row grid gap-3 px-3 py-4 sm:grid-cols-[2rem_minmax(0,1fr)_auto] sm:items-center">
-          <span className="ledger-number">04</span>
-          <div><p className="font-medium">Coding posture · <a href="https://github.com/DietrichGebert/ponytail" target="_blank" rel="noreferrer" className="text-primary underline">Ponytail</a></p><p className="text-sm text-text-muted">Bias the model toward minimal code: YAGNI, reuse stdlib, deletion over addition</p><p className={ponytailEnabled ? "text-xs text-success" : "text-xs text-text-muted"}>{ponytailEnabled ? "● Enabled" : "Ⅱ Disabled"}</p></div><Toggle checked={ponytailEnabled} onChange={() => handlePonytailEnabled(!ponytailEnabled)} />
-        </div>
-        {ponytailEnabled && <div className="flex flex-wrap items-center gap-2 bg-surface-2 px-3 py-3 sm:pl-14"><span className="text-xs font-medium">Level</span>{PONYTAIL_LEVELS.map((lvl) => <button key={lvl.id} onClick={() => handlePonytailLevel(lvl.id)} aria-pressed={ponytailLevel === lvl.id} className={`border px-3 py-2 text-xs font-medium ${ponytailLevel === lvl.id ? "border-primary bg-primary text-white" : "border-border text-text-muted"}`} title={lvl.desc}>{lvl.label}</button>)}<span className="text-xs text-primary">{PONYTAIL_LEVELS.find((lvl) => lvl.id === ponytailLevel)?.desc}</span></div>}
-        {/* PXPIPE remains intentionally hidden while experimental. */}
-      </section>
-
-      <Modal
-        isOpen={showHeadroomInstallModal}
-        title={headroomRunning ? "Headroom" : "Setup Headroom"}
-        operationLabel={headroomRunning ? "MANAGE" : "SETUP"}
-        onClose={() => setShowHeadroomInstallModal(false)}
-        footer={<><Button onClick={() => refreshHeadroomStatus()} variant="secondary">Recheck</Button><Button onClick={() => setShowHeadroomInstallModal(false)}>Done</Button></>}
-      >
-        <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-between text-sm">
-            <span>Status</span>
-            <span
-              className={headroomRunning ? "text-success" : "text-warning"}
-            >
-              {headroomStatusLabel}
-            </span>
-          </div>
-          {headroomRunning && (
-            <a
-              href="/api/headroom/proxy/dashboard"
-              target="_blank"
-              rel="noreferrer"
-              className="w-full rounded border border-border px-4 py-2 text-center text-sm hover:bg-surface-2"
-            >
-              Open Headroom Dashboard
-            </a>
-          )}
-          <div className="flex flex-col gap-1">
-            <p className="text-sm font-medium">Proxy URL</p>
-            <Input
-              value={headroomUrl}
-              onChange={(e) => setHeadroomUrl(e.target.value)}
-              onBlur={handleHeadroomUrlBlur}
-              placeholder="http://localhost:8787"
-              className="font-mono text-sm"
-            />
-            <p className="text-xs text-text-muted">
-              Use a local proxy for Start/Stop, or an external Docker sidecar
-              like http://headroom:8787.
-            </p>
-          </div>
-          <div className="flex flex-col gap-1">
-            <p className="text-sm font-medium">Timeout (ms)</p>
-            <Input
-              value={String(headroomTimeoutMs)}
-              onChange={(e) => setHeadroomTimeoutMs(e.target.value)}
-              onBlur={handleHeadroomTimeoutBlur}
-              placeholder="3000"
-              className="font-mono text-sm"
-            />
-            <p className="text-xs text-text-muted">
-              Request timeout in milliseconds. Defaults to 3000 ms.
-            </p>
-          </div>
-          {headroomManaged ? (
-            <Button
-              onClick={handleHeadroomStop}
-              variant="ghost"
-              fullWidth
-              disabled={headroomActionLoading}
-            >
-              {headroomActionLoading ? "Stopping…" : "Stop Headroom"}
-            </Button>
-          ) : headroomRunning ? (
-            <p className="text-sm text-success">
-              Headroom proxy is reachable. You can enable the token saver.
-            </p>
-          ) : headroomCanStart ? (
-            <Button
-              onClick={handleHeadroomStart}
-              fullWidth
-              disabled={headroomActionLoading}
-            >
-              {headroomActionLoading ? "Starting…" : "Start Headroom"}
-            </Button>
-          ) : !headroomLocalUrl ? (
-            <p className="text-sm text-warning">
-              Start Headroom separately at the configured URL, then recheck.
-            </p>
-          ) : !headroomStatus.python ? (
-            <p className="text-sm text-warning">
-              Python ≥ 3.10 required for local managed mode. Install Python
-              first, or use an external proxy URL.
-            </p>
-          ) : (
-            <div className="flex flex-col gap-1">
-              <p className="text-sm font-medium">Install then click Start:</p>
-              <div className="flex items-center gap-2">
-                <pre className="flex-1 rounded bg-black/5 dark:bg-white/5 p-2 text-xs font-mono overflow-x-auto">
-                  {`pip install "headroom-ai[proxy]"`}
-                </pre>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() =>
-                    copy(`pip install "headroom-ai[proxy]"`)
-                  }
-                >
-                  {copied ? "Copied" : "Copy"}
-                </Button>
-              </div>
-            </div>
-          )}
-          {headroomActionError && (
-            <p className="text-sm text-warning">{headroomActionError}</p>
-          )}
-        </div>
-      </Modal>
-
-      <Modal
-        isOpen={false}
-        title={pxpipeStatus.installed ? "PXPIPE" : "Setup PXPIPE"}
-        onClose={() => setShowPxpipeModal(false)}
-      >
-        <div className="flex flex-col gap-4">
-          <p className="text-sm text-text-muted">
-            Compress prompts using multimodal encoding. Runs in-process — no
-            extra server or environment variables required.
-          </p>
-          <div className="flex items-center justify-between text-sm">
-            <span>Status</span>
-            <span className={pxpipeHealthy || pxpipeStatus.running ? "text-success" : "text-warning"}>
-              {pxpipeStatusLabel}
-              {pxpipeStatus.version ? ` · v${pxpipeStatus.version}` : ""}
-            </span>
-          </div>
-          {pxpipeHealth?.checks?.length > 0 && (
-            <div className="flex flex-col gap-1 rounded border border-border p-3">
-              <p className="text-sm font-medium mb-1">Health check</p>
-              {pxpipeHealth.checks.map((check) => (
-                <div key={check.id} className="flex items-center justify-between text-xs">
-                  <span className={check.ok ? "text-success" : "text-warning"}>
-                    {check.ok ? "●" : "○"} {check.label}
-                  </span>
-                  {check.detail && (
-                    <span className="text-text-muted font-mono truncate max-w-[50%]">{check.detail}</span>
+              const installed = !!headroomExtras.extras[extra];
+              const pending = pendingExtras.includes(extra);
+              const active = extra === "code" ? codeAware : kompress;
+              return (
+                <div key={extra} className="flex flex-wrap items-center gap-3 border-t border-border py-2 text-xs first:border-t-0">
+                  <code className="font-medium">[{extra}]</code>
+                  <span className={installed ? "text-success" : "text-text-muted"}>{installed ? "Installed" : "Not installed"}</span>
+                  {installed ? (
+                    <>
+                      <span>{active ? "Active" : "Inactive"}</span>
+                      <Toggle size="sm" checked={active} disabled={restartingProxy} onChange={() => toggleExtraActive(extra, !active)} />
+                      <button type="button" onClick={() => handleRemoveExtra(extra)} disabled={removingExtra === extra} className="text-danger underline">{removingExtra === extra ? "Uninstalling…" : "Uninstall"}</button>
+                    </>
+                  ) : (
+                    <label className="flex items-center gap-2"><input type="checkbox" checked={pending} onChange={() => togglePendingExtra(extra)} /> Select to install</label>
                   )}
                 </div>
-              ))}
-              {pxpipeHealth.error && (
-                <p className="text-xs text-warning mt-1">{pxpipeHealth.error}</p>
-              )}
-            </div>
-          )}
-          {!pxpipeStatus.installed ? (
-            <div className="flex flex-col gap-2">
-              <p className="text-sm text-warning">PXPIPE is not installed.</p>
-              <Button
-                onClick={() => pxpipeAction("install")}
-                fullWidth
-                disabled={pxpipeActionLoading || pxpipeStatus.installing}
-              >
-                {pxpipeActionLoading || pxpipeStatus.installing ? "Installing…" : "Install"}
-              </Button>
-              <p className="text-xs text-text-muted">
-                Installs the npm package <code className="font-mono">pxpipe-proxy</code> into
-                the KRouter9 data directory. May take a few minutes.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-2">
-              {pxpipeStatus.running ? (
-                <>
-                  <Button onClick={() => pxpipeAction("restart")} variant="ghost" disabled={pxpipeActionLoading}>
-                    Restart
-                  </Button>
-                  <Button onClick={() => pxpipeAction("stop")} variant="ghost" disabled={pxpipeActionLoading}>
-                    Stop
-                  </Button>
-                </>
-              ) : (
-                <Button onClick={() => pxpipeAction("start")} disabled={pxpipeActionLoading}>
-                  {pxpipeActionLoading ? "Starting…" : "Start"}
-                </Button>
-              )}
-              <Button onClick={() => pxpipeAction("install")} variant="ghost" disabled={pxpipeActionLoading}>
-                Repair
-              </Button>
-              <a
-                href="/dashboard/pxpipe#logs"
-                className="col-span-2 rounded border border-border px-4 py-2 text-center text-sm hover:bg-surface-2"
-              >
-                Open Logs
-              </a>
-            </div>
-          )}
-          <div className="flex flex-col gap-1">
-            <p className="text-sm font-medium">Minimum prompt size (chars)</p>
-            <Input
-              value={String(pxpipeMinChars)}
-              onChange={(e) => setPxpipeMinChars(e.target.value)}
-              onBlur={handlePxpipeMinCharsBlur}
-              placeholder="25000"
-              className="font-mono text-sm"
-            />
-            <p className="text-xs text-text-muted">
-              Requests smaller than this bypass PXPIPE and are sent as-is.
-            </p>
+              );
+            })}
+            {pendingExtras.length > 0 && <Button size="sm" onClick={handleInstallExtras} disabled={extrasActionLoading}>{extrasActionLoading ? "Installing…" : `Install [proxy,${pendingExtras.join(",")}]`}</Button>}
+            {extrasActionError && <p className="mt-2 text-xs text-danger">{extrasActionError}</p>}
+            {restartingProxy && <p className="mt-2 text-xs text-text-muted">Restarting proxy…</p>}
+            {(extrasActionLoading || removingExtra) && installLog && <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap bg-[var(--color-code-bg)] p-2 text-[10px] leading-tight text-text-muted">{installLog}</pre>}
+            <p className="mt-2 text-xs text-text-muted">Installing adds the package; activate an installed extra with its toggle. The code extra enables AST compression. The ml extra enables Kompress-v2 and adds about 1 GB.</p>
           </div>
-          {pxpipeActionError && (
-            <p className="text-sm text-warning">{pxpipeActionError}</p>
-          )}
-          <div className="flex gap-2">
-            <Button
-              onClick={() => refreshPxpipeStatus().then(runPxpipeHealth)}
-              variant="ghost"
-              fullWidth
-            >
-              Recheck
-            </Button>
-            <Button onClick={() => setShowPxpipeModal(false)} fullWidth>
-              Done
-            </Button>
+        )}
+        {headroomActionError && <p className="border-t border-danger bg-danger/10 p-3 text-sm text-danger">{headroomActionError}</p>}
+      </section>
+
+      <section aria-labelledby="pxpipe-title" className="border border-border bg-surface">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface-2 px-4 py-3">
+          <div><h2 id="pxpipe-title" className="font-semibold">PXPIPE</h2><p className="mt-1 text-xs text-text-muted">Multimodal prompt encoding for prompts above the configured threshold.</p></div>
+          <span className={`text-xs font-semibold ${pxpipeChipClass}`}>{pxpipeStatusLabel}{pxpipeStatus.version ? ` · v${pxpipeStatus.version}` : ""}</span>
+        </header>
+        <div className="grid gap-4 p-4 lg:grid-cols-2">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3"><span className="text-sm font-medium">Use PXPIPE</span><Toggle checked={pxpipeEnabled} onChange={() => handlePxpipeEnabled(!pxpipeEnabled)} /></div>
+            <label className="grid gap-1 text-sm font-medium">Minimum prompt size (chars)<Input value={String(pxpipeMinChars)} onChange={(event) => setPxpipeMinChars(event.target.value)} onBlur={handlePxpipeMinCharsBlur} aria-label="PXPIPE minimum prompt size in characters" /></label>
+            <div className="flex flex-wrap gap-2">
+              {!pxpipeStatus.installed ? <Button size="sm" onClick={() => pxpipeAction("install")} disabled={pxpipeActionLoading || pxpipeStatus.installing}>{pxpipeActionLoading || pxpipeStatus.installing ? "Installing…" : "Install"}</Button> : pxpipeStatus.running ? <><Button size="sm" variant="secondary" onClick={() => pxpipeAction("restart")} disabled={pxpipeActionLoading}>Restart</Button><Button size="sm" variant="secondary" onClick={() => pxpipeAction("stop")} disabled={pxpipeActionLoading}>Stop</Button></> : <Button size="sm" onClick={() => pxpipeAction("start")} disabled={pxpipeActionLoading}>{pxpipeActionLoading ? "Starting…" : "Start"}</Button>}
+              {pxpipeStatus.installed && <Button size="sm" variant="secondary" onClick={() => pxpipeAction("install")} disabled={pxpipeActionLoading}>Repair</Button>}
+              <Button size="sm" variant="secondary" onClick={() => refreshPxpipeStatus().then(runPxpipeHealth)}>Re-check</Button>
+              <a href="/dashboard/pxpipe#logs" className="inline-flex min-h-9 items-center border border-border px-3 text-sm">Open logs</a>
+            </div>
+            {pxpipeActionError && <p className="text-sm text-danger">{pxpipeActionError}</p>}
+          </div>
+          <div className="border border-border p-3">
+            <p className="mb-2 text-sm font-medium">Health check</p>
+            {pxpipeHealth?.checks?.length > 0 ? pxpipeHealth.checks.map((check) => <div key={check.id} className="flex items-center justify-between gap-3 py-1 text-xs"><span className={check.ok ? "text-success" : "text-warning"}>{check.ok ? "Ready" : "Needs attention"} · {check.label}</span>{check.detail && <span className="max-w-[50%] truncate font-mono text-text-muted">{check.detail}</span>}</div>) : <p className="text-xs text-text-muted">No health result yet.</p>}
+            {pxpipeHealth?.error && <p className="mt-2 text-xs text-danger">{pxpipeHealth.error}</p>}
           </div>
         </div>
-      </Modal>
+      </section>
+
+      <section aria-labelledby="output-title" className="border border-border bg-surface">
+        <header className="border-b border-border bg-surface-2 px-4 py-3"><h2 id="output-title" className="font-semibold">Output compression</h2></header>
+        <div className="grid gap-4 p-4 lg:grid-cols-2">
+          <div className="border-l-2 border-primary pl-3"><div className="flex items-center justify-between gap-3"><div><h3 className="font-semibold">Caveman</h3><p className="text-sm text-text-muted">Choose response terseness.</p></div><Toggle checked={cavemanEnabled} onChange={() => handleCavemanEnabled(!cavemanEnabled)} /></div>{cavemanEnabled && <div className="mt-3 flex flex-wrap gap-2">{visibleCavemanLevels.map((level) => <button key={level.id} type="button" onClick={() => handleCavemanLevel(level.id)} className={`border px-3 py-2 text-xs ${cavemanLevel === level.id ? "border-primary text-primary" : "border-border"}`}>{level.label}</button>)}</div>}</div>
+          <div className="border-l-2 border-primary pl-3"><div className="flex items-center justify-between gap-3"><div><h3 className="font-semibold">Ponytail</h3><p className="text-sm text-text-muted">Choose coding restraint.</p></div><Toggle checked={ponytailEnabled} onChange={() => handlePonytailEnabled(!ponytailEnabled)} /></div>{ponytailEnabled && <div className="mt-3 flex flex-wrap gap-2">{PONYTAIL_LEVELS.map((level) => <button key={level.id} type="button" onClick={() => handlePonytailLevel(level.id)} className={`border px-3 py-2 text-xs ${ponytailLevel === level.id ? "border-primary text-primary" : "border-border"}`}>{level.label}</button>)}</div>}</div>
+        </div>
+      </section>
 
       <ConfirmModal
         isOpen={!!extrasConfirm}

@@ -11,7 +11,6 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import Card from "@/shared/components/Card";
 
 const fmtTokens = (n) => {
   if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
@@ -50,7 +49,7 @@ export default function UsageChart({ period = "7d", viewMode = "tokens" }) {
   const hasData = data.some((d) => d.tokens > 0 || d.cost > 0);
 
   return (
-    <Card className="flex min-w-0 flex-col gap-3 p-3 sm:p-4">
+    <div className="flex min-w-0 flex-col gap-3 p-3 sm:p-4">
       {loading ? (
         <div className="space-y-3 py-3" aria-label="Loading usage trend">
           {Array.from({ length: 5 }, (_, index) => <div key={index} className="h-7 animate-pulse bg-[var(--color-surface-strong)]" />)}
@@ -120,7 +119,12 @@ export default function UsageChart({ period = "7d", viewMode = "tokens" }) {
           </AreaChart>
         </ResponsiveContainer>
       )}
-    </Card>
+    {!loading && hasData && (
+        <div className="overflow-x-auto border-t border-border pt-3" tabIndex={0} role="region" aria-label="Usage trend data table">
+          <table className="w-full min-w-[420px] text-xs"><thead><tr><th className="p-2 text-left">Period</th><th className="p-2 text-right">{chartMode === "tokens" ? "Tokens" : "Cost (USD)"}</th></tr></thead><tbody>{data.map((point, index) => <tr key={`${point.label}-${index}`} className="border-t border-border"><td className="p-2">{point.label}</td><td className="p-2 text-right font-mono tabular-nums">{chartMode === "tokens" ? fmtTokens(point.tokens) : fmtCost(point.cost)}</td></tr>)}</tbody></table>
+        </div>
+      )}
+    </div>
   );
 }
 

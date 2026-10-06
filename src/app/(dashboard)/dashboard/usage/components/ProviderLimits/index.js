@@ -1047,15 +1047,16 @@ export default function ProviderLimits({ sort } = {}) {
         </div>
       </div>
 
-      {/* Provider cards: 2 columns, compact */}
+      <div className="flex items-center gap-3 border-b border-border pb-3 text-xs text-text-muted"><span className="h-2 w-2 bg-primary" aria-hidden="true" /><span>Earlier reset</span><span className="ml-auto">Later or unknown reset</span></div>
+
+      {/* Global reset runway */}
       {expiringFirst && (
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-          Expiring-first currently reorders accounts inside the current page.
-          Cross-page ordering still follows backend pagination.
+        <div className="border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-primary">
+          Expiring-first is active. Ordering is requested from the server before this page is rendered.
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="relative space-y-0 border-l-2 border-primary/50 pl-4">
         {sortedConnections.map((conn) => {
           const quota = quotaData[conn.id];
           const isLoading = loading[conn.id];
@@ -1077,11 +1078,11 @@ export default function ProviderLimits({ sort } = {}) {
           });
 
           return (
-            <Card
+            <div
               key={conn.id}
-              padding="none"
-              className={`min-w-0 ${isInactive ? "opacity-60" : ""}`}
+              className={`relative min-w-0 border-b border-border bg-surface ${isInactive ? "opacity-60" : ""}`}
             >
+              <span className="absolute -left-[1.32rem] top-5 size-2.5 border-2 border-primary bg-surface" aria-hidden="true" />
               <div className="px-3 py-2 border-b border-black/10 dark:border-white/10">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
@@ -1327,7 +1328,7 @@ export default function ProviderLimits({ sort } = {}) {
                   </div>
                 )}
               </div>
-            </Card>
+            </div>
           );
         })}
       </div>
