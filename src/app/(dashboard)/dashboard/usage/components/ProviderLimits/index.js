@@ -72,6 +72,31 @@ const AUTO_PING_TOOLTIPS = {
   codex: "Auto-starts the next 5h Codex window after reset by sending a tiny gpt-5.5 request. Consumes a small amount of quota.",
 };
 
+export async function fetchConnectionsPage(
+  { targetPage, pageSize, accountFilter, providerFilter, expiringFirst },
+  fetchImpl = fetch,
+) {
+  const params = new URLSearchParams({
+    page: String(targetPage),
+    pageSize: String(pageSize),
+    accountStatus: accountFilter,
+    sort: expiringFirst ? "expiring" : "priority",
+  });
+
+  if (providerFilter !== "all") {
+    params.set("provider", providerFilter);
+  }
+
+  const response = await fetchImpl(`/api/providers/client?${params.toString()}`);
+  if (!response.ok) throw new Error("Failed to fetch connections");
+  return response.json();
+}
+
+export function toggleExpiringSort(setPage, setExpiringFirst) {
+  setPage(1);
+  setExpiringFirst((previous) => !previous);
+}
+
 function kiroMethodLabel(conn) {
   const m = conn.providerSpecificData?.authMethod;
   if (m && KIRO_METHOD_LABELS[m]) return KIRO_METHOD_LABELS[m];
@@ -131,7 +156,7 @@ function formatTimeRemaining(value) {
   return days > 0 ? `${days}d ${hours}h` : `${hours}h`;
 }
 
-export default function ProviderLimits() {
+export default function ProviderLimits({ sort } = {}) {
   const { copied, copy } = useCopyToClipboard();
   const [connections, setConnections] = useState([]);
   const [quotaData, setQuotaData] = useState({});
@@ -160,7 +185,7 @@ export default function ProviderLimits() {
   const [accountFilter, setAccountFilter] = useState("all");
   const [quotaSortMode, setQuotaSortMode] = useState("default");
   const [quotaVisibility, setQuotaVisibility] = useState({});
-  const [expiringFirst, setExpiringFirst] = useState(false);
+  const [expiringFirst, setExpiringFirst] = useState(sort === "expiring");
   const [providerMenuOpen, setProviderMenuOpen] = useState(false);
   const [bulkToggling, setBulkToggling] = useState(false);
   const [page, setPage] = useState(1);
@@ -186,23 +211,13 @@ export default function ProviderLimits() {
   const fetchConnections = useCallback(
     async (targetPage = page) => {
       try {
-        const params = new URLSearchParams({
-          page: String(targetPage),
-          pageSize: String(pageSize),
-          accountStatus: accountFilter,
-          sort: "priority",
+        const data = await fetchConnectionsPage({
+          targetPage,
+          pageSize,
+          accountFilter,
+          providerFilter,
+          expiringFirst,
         });
-
-        if (providerFilter !== "all") {
-          params.set("provider", providerFilter);
-        }
-
-        const response = await fetch(
-          `/api/providers/client?${params.toString()}`,
-        );
-        if (!response.ok) throw new Error("Failed to fetch connections");
-
-        const data = await response.json();
         const connectionList = data.connections || [];
         const nextPagination = getSafePagination(data.pagination, pageSize);
         const nextTotals = getSafeTotals(data.totals, connectionList.length);
@@ -968,7 +983,7 @@ export default function ProviderLimits() {
 
           <button
             type="button"
-            onClick={() => setExpiringFirst((prev) => !prev)}
+            onClick={() => toggleExpiringSort(setPage, setExpiringFirst)}
             aria-pressed={expiringFirst}
             className={`flex h-8 shrink-0 items-center gap-1 rounded-lg border px-2 text-xs transition-colors ${expiringFirst ? "border-amber-500/40 bg-amber-500/10 text-amber-500" : "border-black/10 text-text-primary hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"}`}
             title="Sort accounts by earliest quota reset time"
