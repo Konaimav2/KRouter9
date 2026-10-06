@@ -9,8 +9,8 @@ const ALL_STATUSES_URL = "/api/cli-tools/all-statuses";
 
 function RowSkeleton({ number }) {
   return (
-    <div className="signal-row grid animate-pulse gap-3 px-4 py-3 sm:grid-cols-[2.5rem_minmax(12rem,1fr)_minmax(12rem,1fr)_auto] sm:items-center">
-      <span className="ledger-number">{String(number).padStart(2, "0")}</span>
+    <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] grid animate-pulse gap-3 px-4 py-3 sm:grid-cols-[2.5rem_minmax(12rem,1fr)_minmax(12rem,1fr)_auto] sm:items-center">
+      <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">{String(number).padStart(2, "0")}</span>
       <span className="h-8 bg-[var(--color-surface-raised)]" />
       <span className="h-5 bg-[var(--color-surface-raised)]" />
       <span className="h-10 w-24 bg-[var(--color-surface-raised)]" />
@@ -44,9 +44,9 @@ export default function CLIToolsPageClient({ machineId }) {
 
   return (
     <div className="mx-auto flex w-full max-w-[72rem] flex-col gap-6 px-1 sm:px-0">
-      <section className="ledger-band">
-        <header className="ledger-caption">
-          <span className="ledger-number">01</span>
+      <section className="min-w-0 overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
+        <header className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3">
+          <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">01</span>
           <h2 className="font-semibold">Installed clients</h2>
           <span className="data-text ml-auto text-xs text-[var(--color-text-muted)]">
             {regularTools.length} registered
@@ -68,9 +68,9 @@ export default function CLIToolsPageClient({ machineId }) {
               />
             ))}
       </section>
-      <section className="ledger-band">
-        <header className="ledger-caption">
-          <span className="ledger-number">02</span>
+      <section className="min-w-0 overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
+        <header className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3">
+          <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">02</span>
           <h2 className="font-semibold">Interception tools</h2>
           <span className="data-text ml-auto text-xs text-[var(--color-text-muted)]">
             {mitmTools.length} registered

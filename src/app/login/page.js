@@ -131,17 +131,17 @@ export default function LoginPage() {
 
   return (
     <main className="flex min-h-[100dvh] items-center justify-center bg-[var(--color-canvas)] p-4 md:p-8">
-      <section className="ledger-band w-full max-w-[52rem]" aria-labelledby="login-title">
-        <header className="ledger-caption flex min-h-12 flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-2 sm:px-5">
+      <section className="min-w-0 overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)] w-full max-w-[52rem]" aria-labelledby="login-title">
+        <header className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3 flex min-h-12 flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-2 sm:px-5">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="ledger-number">A0</span>
+            <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">A0</span>
             <img src="/krouter9.png" alt="" className="size-8 shrink-0 object-contain" />
             <span className="font-medium">KRouter9</span>
           </div>
           <span className="data-text text-xs uppercase tracking-[0.12em] text-[var(--color-text-muted)]">Access control</span>
         </header>
 
-        <div className="grid gap-4 border-b border-[var(--ledger-rule)] px-5 py-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-7">
+        <div className="grid gap-4 border-b border-[var(--color-border)] px-5 py-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-7">
           <div className="flex min-w-0 items-start gap-3">
             <Icon name="shield" className="mt-0.5 shrink-0 text-[20px] text-[var(--color-primary)]" />
             <div>
@@ -158,7 +158,7 @@ export default function LoginPage() {
         <div className="grid md:grid-cols-[minmax(0,28rem)_minmax(12rem,1fr)]">
           <div className="min-w-0 p-5 sm:p-7">
             {hasPassword === null ? (
-              <div className="flex min-h-36 items-center gap-3 border-y border-[var(--ledger-rule)] py-4 text-sm text-[var(--color-text-muted)]">
+              <div className="flex min-h-36 items-center gap-3 border-y border-[var(--color-border)] py-4 text-sm text-[var(--color-text-muted)]">
                 <span className="size-3 rounded-full border border-current" aria-hidden="true" />
                 <span>Checking access…</span>
               </div>
@@ -188,7 +188,7 @@ export default function LoginPage() {
                       {samlAvailable ? <Button type="button" fullWidth onClick={() => { window.location.href = "/api/auth/saml/start"; }}>{samlLoginLabel}</Button> : null}
                       {oidcAvailable ? <Button type="button" fullWidth onClick={() => { window.location.href = "/api/auth/oidc/start"; }}>{oidcLoginLabel}</Button> : null}
                     </div>
-                    {ssoAvailable && passwordAvailable ? <div className="flex items-center gap-3 text-xs text-[var(--color-text-muted)]"><span className="h-px flex-1 bg-[var(--ledger-rule)]"/><span>or use password</span><span className="h-px flex-1 bg-[var(--ledger-rule)]"/></div> : null}
+                    {ssoAvailable && passwordAvailable ? <div className="flex items-center gap-3 text-xs text-[var(--color-text-muted)]"><span className="h-px flex-1 bg-[var(--color-border)]"/><span>or use password</span><span className="h-px flex-1 bg-[var(--color-border)]"/></div> : null}
                     {passwordAvailable ? (
                       <form onSubmit={handleLogin} className="space-y-4">
                         {isSsoEnabled && !ssoAvailable ? (
@@ -199,7 +199,7 @@ export default function LoginPage() {
                         ) : null}
                         <Input label="Password" type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} required autoFocus={!ssoAvailable} aria-describedby={error ? "login-error" : undefined} inputClassName="pr-12" button={<button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword} className="absolute inset-y-0 right-0 grid min-h-[var(--touch-min)] w-11 place-items-center text-[var(--color-text-muted)] hover:text-[var(--color-text)]"><Icon name={showPassword ? "visibility_off" : "visibility"}/></button>} />
                         {retryAfter > 0 ? <p className="data-text text-sm text-[var(--color-warning)]" aria-live="off">Locked · retry in {retryAfter}s</p> : null}
-                        {resetHint ? <p className="border-y border-[var(--ledger-rule)] py-3 text-sm text-[var(--color-text-muted)]">Open the local KRouter9 CLI, then use Settings → Reset password.</p> : null}
+                        {resetHint ? <p className="border-y border-[var(--color-border)] py-3 text-sm text-[var(--color-text-muted)]">Open the local KRouter9 CLI, then use Settings → Reset password.</p> : null}
                         <div className="flex sm:justify-end">
                           <Button type="submit" fullWidth loading={loading} disabled={retryAfter > 0}>{retryAfter > 0 ? "Locked" : "Login"}</Button>
                         </div>
@@ -217,8 +217,8 @@ export default function LoginPage() {
             )}
           </div>
 
-          <aside className="border-t border-[var(--ledger-rule)] bg-[var(--color-surface-strong)] p-5 md:border-l md:border-t-0 md:p-6">
-            <p className="ledger-caption text-xs">Access instruction</p>
+          <aside className="border-t border-[var(--color-border)] bg-[var(--color-surface-strong)] p-5 md:border-l md:border-t-0 md:p-6">
+            <p className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3 text-xs">Access instruction</p>
             <p className="mt-3 text-sm leading-6 text-[var(--color-text-muted)]">Authenticate to open the local control surface.</p>
           </aside>
         </div>

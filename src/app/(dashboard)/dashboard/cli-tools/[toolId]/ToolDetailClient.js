@@ -256,15 +256,15 @@ export default function ToolDetailClient({ toolId, machineId }) {
     ];
 
     return (
-      <section className="ledger-band">
-        <header className="ledger-caption">
-          <span className="ledger-number">01</span>
+      <section className="min-w-0 overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
+        <header className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3">
+          <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">01</span>
           <h2 className="font-semibold">Manual setup ledger</h2>
         </header>
         <ol>
           {steps.map((step, index) => (
-            <li key={step.title} className="signal-row grid gap-3 px-4 py-4 sm:grid-cols-[2.5rem_minmax(0,1fr)]">
-              <span className="ledger-number">{String(index + 1).padStart(2, "0")}</span>
+            <li key={step.title} className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] grid gap-3 px-4 py-4 sm:grid-cols-[2.5rem_minmax(0,1fr)]">
+              <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">{String(index + 1).padStart(2, "0")}</span>
               <div className="min-w-0 space-y-2">
                 <div><h3 className="font-medium text-text-main">{step.title}</h3><p className="text-sm leading-6 text-text-muted">{step.detail}</p></div>
                 {step.control}
@@ -454,13 +454,13 @@ export default function ToolDetailClient({ toolId, machineId }) {
         <p className="text-sm text-text-muted">{tool.description}</p>
       </div>
       {loading ? (
-        <section className="ledger-band">
-          <header className="ledger-caption">
-            <span className="ledger-number">01</span>
+        <section className="min-w-0 overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
+          <header className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3">
+            <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">01</span>
             <h2 className="font-semibold">Configuration</h2>
           </header>
-          <div className="signal-row grid animate-pulse gap-3 px-4 py-4 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto]">
-            <span className="ledger-number">01</span>
+          <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] grid animate-pulse gap-3 px-4 py-4 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto]">
+            <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">01</span>
             <span className="h-8 bg-[var(--color-surface-raised)]" />
             <span className="h-10 w-24 bg-[var(--color-surface-raised)]" />
           </div>
@@ -468,9 +468,9 @@ export default function ToolDetailClient({ toolId, machineId }) {
       ) : (
         <>
           {renderSetupLedger()}
-          <section className="ledger-band">
-            <header className="ledger-caption">
-              <span className="ledger-number">02</span>
+          <section className="min-w-0 overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
+            <header className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3">
+              <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">02</span>
               <h2 className="font-semibold">Client-specific configuration</h2>
             </header>
             <div className="p-4">{renderToolCard()}</div>

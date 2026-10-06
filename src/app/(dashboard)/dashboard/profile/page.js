@@ -25,7 +25,7 @@ function StatusMessage({ status }) {
   return (
     <div
       role="status"
-      className={`flex items-start gap-2 border-t border-[var(--ledger-rule)] px-4 py-3 text-sm ${isError ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}
+      className={`flex items-start gap-2 border-t border-[var(--color-border)] px-4 py-3 text-sm ${isError ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}
     >
       <Icon
         name={isError ? "error" : "check_circle"}
@@ -950,19 +950,19 @@ export default function ProfilePage() {
       <div className="grid items-start gap-6 lg:grid-cols-[12rem_minmax(0,1fr)]">
         <nav
           aria-label="Settings sections"
-          className="sticky top-20 hidden ledger-band lg:block"
+          className="sticky top-20 hidden min-w-0 overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)] lg:block"
         >
-          <div className="ledger-caption">
-            <span className="ledger-number">INDEX</span>
+          <div className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3">
+            <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">INDEX</span>
             <span className="font-semibold">Settings</span>
           </div>
           {sections.map(([id, number, label]) => (
             <a
               key={id}
               href={`#${id}`}
-              className="signal-row flex min-h-11 items-center gap-3 px-3 py-2 text-sm hover:text-[var(--color-primary)]"
+              className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] flex min-h-11 items-center gap-3 px-3 py-2 text-sm hover:text-[var(--color-primary)]"
             >
-              <span className="ledger-number">{number}</span>
+              <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">{number}</span>
               <span>{label}</span>
             </a>
           ))}
@@ -972,13 +972,13 @@ export default function ProfilePage() {
           <section
             id="system"
             tabIndex={-1}
-            className="ledger-band scroll-mt-24"
+            className="min-w-0 overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)] scroll-mt-24"
           >
-            <header className="ledger-caption">
-              <span className="ledger-number">01</span>
+            <header className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3">
+              <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">01</span>
               <h2 className="font-semibold">System</h2>
             </header>
-            <div className="signal-row grid gap-4 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+            <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] grid gap-4 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
               <div className="flex min-w-0 items-start gap-3">
                 <Icon name="terminal" className="mt-0.5 shrink-0" />
                 <div>
@@ -1025,7 +1025,7 @@ export default function ProfilePage() {
                 ))}
               </div>
             </div>
-            <div className="signal-row grid gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+            <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] grid gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
               <div className="min-w-0">
                 <p className="font-medium">Database location</p>
                 <code className="data-text block overflow-wrap-anywhere text-xs text-[var(--color-text-muted)]">
@@ -1064,7 +1064,7 @@ export default function ProfilePage() {
             <button
               type="button"
               onClick={() => setLangOpen(true)}
-              className="signal-row flex min-h-14 w-full items-center justify-between gap-4 px-4 py-3 text-left"
+              className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] flex min-h-14 w-full items-center justify-between gap-4 px-4 py-3 text-left"
               data-i18n-skip="true"
             >
               <span className="flex items-center gap-3">
@@ -1085,13 +1085,13 @@ export default function ProfilePage() {
           <section
             id="access"
             tabIndex={-1}
-            className="ledger-band scroll-mt-24"
+            className="min-w-0 overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)] scroll-mt-24"
           >
-            <header className="ledger-caption">
-              <span className="ledger-number">02</span>
+            <header className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3">
+              <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">02</span>
               <h2 className="font-semibold">Access</h2>
             </header>
-            <div className="signal-row flex items-start justify-between gap-4 px-4 py-4">
+            <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] flex items-start justify-between gap-4 px-4 py-4">
               <div>
                 <p className="font-medium">Require login</p>
                 <p className="text-sm text-[var(--color-text-muted)]">
@@ -1107,7 +1107,7 @@ export default function ProfilePage() {
             {settings.requireLogin === true && (
               <form
                 onSubmit={handlePasswordChange}
-                className="border-b border-[var(--ledger-rule)] p-4"
+                className="border-b border-[var(--color-border)] p-4"
               >
                 <div className="grid gap-4 sm:grid-cols-2">
                   {settings.hasPassword && (
@@ -1161,7 +1161,7 @@ export default function ProfilePage() {
               type="button"
               onClick={() => setOidcExpanded((value) => !value)}
               aria-expanded={oidcExpanded}
-              className="signal-row flex min-h-14 w-full items-center gap-3 px-4 py-3 text-left"
+              className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] flex min-h-14 w-full items-center gap-3 px-4 py-3 text-left"
             >
               <Icon name="lock" />
               <span className="min-w-0 flex-1">
@@ -1186,7 +1186,7 @@ export default function ProfilePage() {
             </button>
 
             {oidcExpanded && (
-              <div className="space-y-5 border-b border-[var(--ledger-rule)] p-4">
+              <div className="space-y-5 border-b border-[var(--color-border)] p-4">
                 <p className="text-sm text-[var(--color-text-muted)]">
                   Configure enterprise dashboard access without changing
                   password-login behavior until settings are saved.
@@ -1290,8 +1290,8 @@ export default function ProfilePage() {
                 </div>
 
                 {ssoTypeTab === "saml" ? (
-                  <div className="space-y-5 border-t border-[var(--ledger-rule)] pt-5">
-                    <div className="border-y border-[var(--ledger-rule)]">
+                  <div className="space-y-5 border-t border-[var(--color-border)] pt-5">
+                    <div className="border-y border-[var(--color-border)]">
                       <button
                         type="button"
                         onClick={() => setShowSamlGuide((value) => !value)}
@@ -1317,7 +1317,7 @@ export default function ProfilePage() {
                         />
                       </button>
                       {showSamlGuide && (
-                        <div className="space-y-4 border-t border-[var(--ledger-rule)] py-4 text-xs text-[var(--color-text-muted)]">
+                        <div className="space-y-4 border-t border-[var(--color-border)] py-4 text-xs text-[var(--color-text-muted)]">
                           <div>
                             <p className="font-medium text-[var(--color-text)]">
                               Required service-provider values
@@ -1381,7 +1381,7 @@ export default function ProfilePage() {
                           ].map((provider) => (
                             <section
                               key={provider.name}
-                              className="border-t border-[var(--ledger-rule)] pt-3"
+                              className="border-t border-[var(--color-border)] pt-3"
                             >
                               <h3 className="font-medium text-[var(--color-text)]">
                                 {provider.name}
@@ -1396,7 +1396,7 @@ export default function ProfilePage() {
                         </div>
                       )}
                     </div>
-                    <div className="signal-row flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <p className="text-sm font-medium">
                           IdP metadata XML import
@@ -1511,7 +1511,7 @@ export default function ProfilePage() {
                         />
                       </div>
                     </div>
-                    <div className="grid gap-3 border-y border-[var(--ledger-rule)] py-3 text-xs sm:grid-cols-2">
+                    <div className="grid gap-3 border-y border-[var(--color-border)] py-3 text-xs sm:grid-cols-2">
                       <div className="min-w-0">
                         <p className="font-medium">ACS callback URL</p>
                         <code className="data-text block overflow-wrap-anywhere text-[var(--color-text-muted)]">
@@ -1573,7 +1573,7 @@ export default function ProfilePage() {
                     <StatusMessage status={samlStatus} />
                   </div>
                 ) : (
-                  <div className="space-y-5 border-t border-[var(--ledger-rule)] pt-5">
+                  <div className="space-y-5 border-t border-[var(--color-border)] pt-5">
                     <div className="grid gap-4">
                       <Input
                         label="Issuer URL"
@@ -1621,7 +1621,7 @@ export default function ProfilePage() {
                         disabled={loading || oidcLoading}
                       />
                     </div>
-                    <div className="border-y border-[var(--ledger-rule)] py-3">
+                    <div className="border-y border-[var(--color-border)] py-3">
                       <p className="text-sm font-medium">Redirect URI</p>
                       <code className="data-text block overflow-wrap-anywhere text-xs text-[var(--color-text-muted)]">
                         {oidcRedirectUri}
@@ -1651,7 +1651,7 @@ export default function ProfilePage() {
                 )}
                 {(["oidc", "saml", "sso"].includes(settings.authMode) ||
                   settings.authMode === "both") && (
-                  <div className="flex items-start gap-2 border-t border-[var(--ledger-rule)] pt-3 text-sm text-[var(--color-warning)]">
+                  <div className="flex items-start gap-2 border-t border-[var(--color-border)] pt-3 text-sm text-[var(--color-warning)]">
                     <Icon
                       name="warning"
                       size={17}
@@ -1671,13 +1671,13 @@ export default function ProfilePage() {
           <section
             id="routing"
             tabIndex={-1}
-            className="ledger-band scroll-mt-24"
+            className="min-w-0 overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)] scroll-mt-24"
           >
-            <header className="ledger-caption">
-              <span className="ledger-number">03</span>
+            <header className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3">
+              <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">03</span>
               <h2 className="font-semibold">Routing</h2>
             </header>
-            <div className="signal-row grid gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+            <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] grid gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
               <div>
                 <p className="font-medium">Account strategy</p>
                 <p className="text-sm text-[var(--color-text-muted)]">
@@ -1712,7 +1712,7 @@ export default function ProfilePage() {
               </div>
             </div>
             {settings.fallbackStrategy === "round-robin" && (
-              <div className="signal-row flex items-center justify-between gap-4 px-4 py-3">
+              <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] flex items-center justify-between gap-4 px-4 py-3">
                 <div>
                   <p className="font-medium">Account sticky limit</p>
                   <p className="text-sm text-[var(--color-text-muted)]">
@@ -1731,7 +1731,7 @@ export default function ProfilePage() {
                 />
               </div>
             )}
-            <div className="signal-row grid gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+            <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] grid gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
               <div>
                 <p className="font-medium">Combo strategy</p>
                 <p className="text-sm text-[var(--color-text-muted)]">
@@ -1768,7 +1768,7 @@ export default function ProfilePage() {
               </div>
             </div>
             {settings.comboStrategy === "round-robin" && (
-              <div className="signal-row flex items-center justify-between gap-4 px-4 py-3">
+              <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] flex items-center justify-between gap-4 px-4 py-3">
                 <div>
                   <p className="font-medium">Combo sticky limit</p>
                   <p className="text-sm text-[var(--color-text-muted)]">
@@ -1801,13 +1801,13 @@ export default function ProfilePage() {
           <section
             id="network"
             tabIndex={-1}
-            className="ledger-band scroll-mt-24"
+            className="min-w-0 overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)] scroll-mt-24"
           >
-            <header className="ledger-caption">
-              <span className="ledger-number">04</span>
+            <header className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3">
+              <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">04</span>
               <h2 className="font-semibold">Network</h2>
             </header>
-            <div className="signal-row flex items-start justify-between gap-4 px-4 py-4">
+            <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] flex items-start justify-between gap-4 px-4 py-4">
               <div>
                 <p className="font-medium">Outbound proxy</p>
                 <p className="text-sm text-[var(--color-text-muted)]">
@@ -1827,7 +1827,7 @@ export default function ProfilePage() {
             {settings.outboundProxyEnabled === true && (
               <form onSubmit={updateOutboundProxy} className="space-y-4 p-4">
                 {settings.hasOutboundProxyAuth && (
-                  <div className="border-y border-[var(--ledger-rule)] py-3">
+                  <div className="border-y border-[var(--color-border)] py-3">
                     <p className="text-sm font-medium">Configured proxy</p>
                     <code className="data-text block overflow-wrap-anywhere text-xs text-[var(--color-text-muted)]">
                       {settings.outboundProxyUrlMasked || "hidden"}
@@ -1869,7 +1869,7 @@ export default function ProfilePage() {
                   disabled={loading || proxyLoading}
                   hint="Comma-separated hostnames or domains that bypass the proxy."
                 />
-                <div className="flex flex-col gap-2 border-t border-[var(--ledger-rule)] pt-4 sm:flex-row">
+                <div className="flex flex-col gap-2 border-t border-[var(--color-border)] pt-4 sm:flex-row">
                   <Button
                     type="button"
                     variant="secondary"
@@ -1895,13 +1895,13 @@ export default function ProfilePage() {
           <section
             id="observability"
             tabIndex={-1}
-            className="ledger-band scroll-mt-24"
+            className="min-w-0 overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)] scroll-mt-24"
           >
-            <header className="ledger-caption">
-              <span className="ledger-number">05</span>
+            <header className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3">
+              <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">05</span>
               <h2 className="font-semibold">Observability</h2>
             </header>
-            <div className="signal-row flex items-start justify-between gap-4 px-4 py-4">
+            <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] flex items-start justify-between gap-4 px-4 py-4">
               <div>
                 <p className="font-medium">Request observability</p>
                 <p className="text-sm text-[var(--color-text-muted)]">
@@ -1970,13 +1970,13 @@ export default function ProfilePage() {
           <section
             id="session"
             tabIndex={-1}
-            className="ledger-band scroll-mt-24"
+            className="min-w-0 overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)] scroll-mt-24"
           >
-            <header className="ledger-caption">
-              <span className="ledger-number">06</span>
+            <header className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3">
+              <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">06</span>
               <h2 className="font-semibold">Session</h2>
             </header>
-            <div className="signal-row grid gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+            <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] grid gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
               <div>
                 <p className="font-medium">Current session</p>
                 <p className="text-sm text-[var(--color-text-muted)]">
@@ -1987,7 +1987,7 @@ export default function ProfilePage() {
                 Logout
               </Button>
             </div>
-            <div className="signal-row grid gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+            <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] grid gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
               <div>
                 <p className="font-medium text-[var(--color-danger)]">
                   Shutdown gateway

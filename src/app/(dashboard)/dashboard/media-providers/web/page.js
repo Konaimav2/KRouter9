@@ -31,7 +31,7 @@ function ProviderRow({ provider, kind, connections }) {
   else if (providerConns.length > 0) label = `${providerConns.length} Added`;
 
   return (
-    <Link href={`/dashboard/media-providers/${kind}/${provider.id}`} className="signal-row group flex min-h-11 items-center gap-3 px-3 py-3">
+    <Link href={`/dashboard/media-providers/${kind}/${provider.id}`} className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] group flex min-h-11 items-center gap-3 px-3 py-3">
       <ProviderIcon src={`/providers/${provider.id}.png`} alt={provider.name} size={30} className="size-[30px] shrink-0 object-contain" fallbackText={provider.textIcon || provider.id.slice(0, 2).toUpperCase()} fallbackColor={provider.color} />
       <span className="min-w-0 flex-1 font-medium">{provider.name}</span>
       {isNoAuth && <span className="category-label">No key required</span>}
@@ -43,7 +43,7 @@ function ProviderRow({ provider, kind, connections }) {
 
 function ComboRows({ combos }) {
   return combos.map((combo) => (
-    <Link key={combo.id} href={`/dashboard/media-providers/combo/${combo.id}`} className="signal-row flex min-h-11 items-center gap-3 px-3 py-3">
+    <Link key={combo.id} href={`/dashboard/media-providers/combo/${combo.id}`} className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] flex min-h-11 items-center gap-3 px-3 py-3">
       <Icon name="layers" size={18} className="text-primary" />
       <code className="min-w-0 flex-1 truncate text-sm font-medium">{combo.name}</code>
       <span className="data-text">{combo.models.length} routes</span>
@@ -56,16 +56,16 @@ function Section({ number, title, kind, providers, connections, combos, onCreate
   const noAuth = providers.filter((p) => AI_PROVIDERS[p.id]?.noAuth === true);
   const requiresConnections = providers.filter((p) => AI_PROVIDERS[p.id]?.noAuth !== true);
   return (
-    <section className="ledger-band">
-      <div className="ledger-caption flex flex-wrap items-center justify-between gap-3">
+    <section className="min-w-0 overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
+      <div className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3 flex flex-wrap items-center justify-between gap-3">
         <span>{number} {title}</span>
         <div className="flex items-center gap-3"><span className="data-text">{providers.length} providers · {combos.length} combos</span><Button size="sm" icon="add" onClick={onCreateCombo}>Create Combo</Button></div>
       </div>
-      {combos.length > 0 && <div className="border-b border-border"><div className="ledger-caption">Route chains</div><ComboRows combos={combos} /></div>}
-      {noAuth.length > 0 && <div><div className="ledger-caption">Ready without credentials</div>{noAuth.map((p) => <ProviderRow key={p.id} provider={p} kind={kind} connections={connections} />)}</div>}
+      {combos.length > 0 && <div className="border-b border-border"><div className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3">Route chains</div><ComboRows combos={combos} /></div>}
+      {noAuth.length > 0 && <div><div className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3">Ready without credentials</div>{noAuth.map((p) => <ProviderRow key={p.id} provider={p} kind={kind} connections={connections} />)}</div>}
       <div>
-        <div className="ledger-caption">Connections required</div>
-        {requiresConnections.length > 0 ? requiresConnections.map((p) => <ProviderRow key={p.id} provider={p} kind={kind} connections={connections} />) : <div className="signal-row px-3 py-4 text-sm text-text-muted">No providers.</div>}
+        <div className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3">Connections required</div>
+        {requiresConnections.length > 0 ? requiresConnections.map((p) => <ProviderRow key={p.id} provider={p} kind={kind} connections={connections} />) : <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] px-3 py-4 text-sm text-text-muted">No providers.</div>}
       </div>
     </section>
   );
