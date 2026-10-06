@@ -16,6 +16,7 @@ import {
   selectConnectionCuratedIds,
   isComboShadowed,
   dedupeModels,
+  filterDisabledPickerModels,
   buildComboGroup,
   filterModelGroups,
 } from "@/shared/utils/playgroundModels.js";
@@ -268,6 +269,17 @@ export default function BasicChatPageClient() {
           return;
         }
 
+        let disabledByAlias = {};
+        try {
+          const disabledRes = await fetch("/api/models/disabled", { cache: "no-store" });
+          const disabledData = await disabledRes.json().catch(() => ({}));
+          if (disabledRes.ok && disabledData.disabled && typeof disabledData.disabled === "object") {
+            disabledByAlias = disabledData.disabled;
+          }
+        } catch {
+          // Disabled-map unavailable: fail open so the picker remains usable.
+        }
+
         const providerMap = new Map();
 
         for (const connection of connections) {
@@ -359,7 +371,8 @@ export default function BasicChatPageClient() {
 
         const normalized = Array.from(providerMap.values())
           .map((group) => {
-            const models = dedupeModels(group.models).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+            const models = dedupeModels(filterDisabledPickerModels(group.models, disabledByAlias))
+              .sort((a, b) => String(a.name).localeCompare(String(b.name)));
             // Stamp the provider label on every model so no per-key name leaks
             // through normalize* helpers (U1).
             for (const model of models) model.providerName = group.providerName;
