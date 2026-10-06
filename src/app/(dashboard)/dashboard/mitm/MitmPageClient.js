@@ -90,10 +90,10 @@ export default function MitmPageClient() {
       </LedgerBand>
 
       <LedgerBand number="02" title="Tool routes" summary={`${mitmTools.length} interception target${mitmTools.length === 1 ? "" : "s"}`} icon={Network}>
-        {mitmTools.length === 0 ? <div className="p-8 text-center text-sm text-[var(--color-text-muted)]">No MITM tools are available.</div> : <div className="divide-y divide-[var(--ledger-rule)]">
+        {mitmTools.length === 0 ? <div className="p-8 text-center text-sm text-[var(--color-text-muted)]">No MITM tools are available.</div> : <div className="divide-y divide-[var(--color-border-subtle)]">
           {mitmTools.map(([toolId, tool], index) => (
             <div key={toolId} className="grid min-w-0 grid-cols-[2.5rem_minmax(0,1fr)] items-start gap-3 p-3 sm:p-4">
-              <span className="mt-3 border-r border-[var(--signal-row-rail)] pr-3 text-center font-mono text-xs tabular-nums text-[var(--color-primary)]">{String(index + 1).padStart(2, "0")}</span>
+              <span className="mt-3 border-r border-[var(--color-border-strong)] pr-3 text-center font-mono text-xs tabular-nums text-[var(--color-primary)]">{String(index + 1).padStart(2, "0")}</span>
               <div className="min-w-0"><MitmToolCard tool={tool} isExpanded={expandedTool === toolId} onToggle={() => setExpandedTool(expandedTool === toolId ? null : toolId)} serverRunning={mitmStatus.running} dnsActive={mitmStatus.dnsStatus?.[toolId] || false} hasCachedPassword={mitmStatus.hasCachedPassword || false} needsSudoPassword={mitmStatus.needsSudoPassword !== false} isWin={mitmStatus.isWin === true} apiKeys={apiKeys} activeProviders={getActiveProviders()} hasActiveProviders={hasActiveProviders()} modelAliases={modelAliases} cloudEnabled={cloudEnabled} onDnsChange={(data) => setMitmStatus(prev => ({ ...prev, dnsStatus: data.dnsStatus ?? prev.dnsStatus }))} /></div>
             </div>
           ))}
@@ -105,5 +105,5 @@ export default function MitmPageClient() {
 
 
 function LedgerBand({ number, title, summary, icon: Icon, children }) {
-  return <section className="min-w-0 overflow-hidden rounded-[var(--radius-md)] border border-[var(--ledger-border)] bg-[var(--ledger-bg)]"><header className="flex items-center gap-3 border-b border-[var(--ledger-rule)] bg-[var(--ledger-caption-bg)] px-4 py-3"><span className="font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">{number}</span><Icon size={17} strokeWidth={1.75} className="shrink-0 text-[var(--color-text-muted)]"/><div className="min-w-0"><h2 className="font-semibold">{title}</h2><p className="text-xs text-[var(--color-text-muted)]">{summary}</p></div></header>{children}</section>;
+  return <section className="min-w-0 overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border-strong)] bg-[var(--color-surface)]"><header className="flex items-center gap-3 border-b border-[var(--color-border-subtle)] bg-[var(--color-surface-strong)] px-4 py-3"><span className="font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">{number}</span><Icon size={17} strokeWidth={1.75} className="shrink-0 text-[var(--color-text-muted)]"/><div className="min-w-0"><h2 className="font-semibold">{title}</h2><p className="text-xs text-[var(--color-text-muted)]">{summary}</p></div></header>{children}</section>;
 }

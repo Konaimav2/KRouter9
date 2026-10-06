@@ -213,21 +213,21 @@ export default function TranslatorPage() {
 
   return (
     <div className="flex min-w-0 max-w-full flex-col gap-8 px-1 sm:px-0">
-      <section className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--ledger-border)] bg-[var(--ledger-bg)]">
-        <header className="flex flex-col gap-3 border-b border-[var(--ledger-rule)] bg-[var(--ledger-caption-bg)] px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+      <section className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border-strong)] bg-[var(--color-surface)]">
+        <header className="flex flex-col gap-3 border-b border-[var(--color-border-subtle)] bg-[var(--color-surface-strong)] px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-center gap-3"><span className="font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">01</span><div><h1 className="font-semibold">Translation route</h1><p className="text-xs text-[var(--color-text-muted)]">Replay the seven-stage request and response ledger</p></div></div>
           {meta && <div className="flex min-w-0 flex-wrap items-center gap-2"><MetaBadge label="src" value={meta.sourceFormat}/><ArrowRight size={14} className="text-[var(--color-text-muted)]"/><MetaBadge label="dst" value={meta.targetFormat}/><MetaBadge label="provider" value={meta.provider}/><MetaBadge label="model" value={meta.model}/></div>}
         </header>
-        <div className="divide-y divide-[var(--ledger-rule)]">
+        <div className="divide-y divide-[var(--color-border-subtle)]">
           {STEPS.map((step) => {
             const action = getAction(step.id); const isExpanded = !!expanded[step.id]; const content = contents[step.id] || "";
             return <section key={step.id} className="min-w-0">
-              <div className="grid min-h-[var(--row-h-default)] grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 px-3 py-3 hover:bg-[var(--signal-row-bg-hover)]">
-                <span className="border-r border-[var(--signal-row-rail)] pr-3 text-center font-mono text-xs tabular-nums text-[var(--color-primary)]">{String(step.id).padStart(2, "0")}</span>
+              <div className="grid min-h-[var(--row-h-default)] grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 px-3 py-3 hover:bg-[var(--color-surface-hover)]">
+                <span className="border-r border-[var(--color-border-strong)] pr-3 text-center font-mono text-xs tabular-nums text-[var(--color-primary)]">{String(step.id).padStart(2, "0")}</span>
                 <button onClick={() => toggle(step.id)} aria-expanded={isExpanded} className="flex min-w-0 items-center gap-3 text-left"><span className="shrink-0 text-[var(--color-text-muted)]">{isExpanded ? <ChevronDown size={18}/> : <ChevronRight size={18}/>}</span><span className="min-w-0"><span className="block truncate text-sm font-semibold">{step.label}</span><span className="block truncate font-mono text-xs text-[var(--color-text-muted)]">{step.file} · {step.desc}</span></span>{content && <span className="hidden items-center gap-1 text-xs text-[var(--color-success)] sm:inline-flex"><CheckCircle2 size={14}/>{content.length} chars</span>}</button>
                 {!isExpanded && <div className="flex shrink-0 gap-1"><button type="button" onClick={() => handleLoad(step.id)} className="flex size-10 items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]" aria-label={`Load ${step.label}`}><FileInput size={17}/></button>{action}</div>}
               </div>
-              {isExpanded && <div className="min-w-0 border-t border-[var(--ledger-rule)] bg-[var(--color-surface-raised)] p-3 sm:p-4">
+              {isExpanded && <div className="min-w-0 border-t border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] p-3 sm:p-4">
                 <div className="max-w-full overflow-hidden rounded-[var(--radius-sm)] border border-[var(--input-border)]"><Editor height="400px" defaultLanguage={step.lang === "text" ? "plaintext" : "json"} value={content} onChange={(v) => { setContent(step.id, v || ""); if (step.id === 1) detectMeta(v || ""); }} theme="vs-dark" options={EDITOR_OPTIONS}/></div>
                 <div className="mt-3 flex flex-wrap gap-2"><Button size="sm" variant="outline" loading={loading[`load-${step.id}`]} onClick={() => handleLoad(step.id)}><FileInput size={15}/>Load</Button><Button size="sm" variant="outline" onClick={() => handleFormat(step.id)}><Braces size={15}/>Format</Button><Button size="sm" variant="outline" onClick={() => handleCopy(step.id)}><Clipboard size={15}/>Copy</Button>{action}</div>
               </div>}
