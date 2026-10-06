@@ -5,12 +5,8 @@ import { aggregatePerKey, sortPerKeyRows } from "./usageMeta.js";
 
 const COLUMNS = [
   { key: "keyName", label: "API key", align: "left" },
-  { key: "apiKeyMasked", label: "Masked key", align: "left" },
   { key: "requests", label: "Requests", align: "right" },
-  { key: "promptTokens", label: "Input", align: "right" },
-  { key: "cachedTokens", label: "Cached", align: "right" },
-  { key: "completionTokens", label: "Output", align: "right" },
-  { key: "totalTokens", label: "Total tokens", align: "right" },
+  { key: "totalTokens", label: "Tokens", align: "right" },
   { key: "cost", label: "Cost", align: "right" },
   { key: "lastUsed", label: "Last used", align: "right" },
 ];
@@ -24,6 +20,7 @@ export default function PerKeyUsageSection({ period }) {
   const [sortOrder, setSortOrder] = useState("desc");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [expandedKey, setExpandedKey] = useState(null);
 
   const fetchRows = useCallback(async (signal) => {
     setLoading(true);
@@ -57,56 +54,75 @@ export default function PerKeyUsageSection({ period }) {
     if (sortBy === field) setSortOrder((order) => order === "asc" ? "desc" : "asc");
     else {
       setSortBy(field);
-      setSortOrder(field === "keyName" || field === "apiKeyMasked" ? "asc" : "desc");
+      setSortOrder(field === "keyName" ? "asc" : "desc");
     }
   };
 
+  const maxRequests = Math.max(1, ...sortedRows.map((row) => row.requests || 0));
+
   return (
-    <section className="ledger-band min-w-0">
-      <header className="ledger-caption">
-        <span className="ledger-number">01</span>
+    <section className="min-w-0 border border-border bg-surface">
+      <header className="flex min-h-11 items-center gap-3 border-b border-border bg-surface-2 px-4 py-3">
+        <span className="font-mono text-xs tabular-nums text-text-muted">KEYS</span>
         <h2 className="font-semibold">Usage by API key</h2>
-        <span className="ml-auto text-xs text-[var(--color-text-muted)]">{period}</span>
+        <span className="ml-auto text-xs text-text-muted">{period}</span>
       </header>
       {error && (
-        <div className="border-b border-[var(--ledger-rule)] p-3 text-sm text-[var(--color-danger)]">
+        <div className="border-b border-danger bg-danger/10 p-3 text-sm text-danger">
           {error} <button type="button" onClick={() => fetchRows(new AbortController().signal)} className="font-semibold underline">Retry</button>
         </div>
       )}
-      <div className="max-w-full overflow-x-auto overscroll-x-contain" role="region" aria-label="Per-key usage table; scroll horizontally for additional columns" tabIndex={0}>
-        <table className="w-full min-w-[1040px]">
-          <thead>
-            <tr className="border-b border-[var(--ledger-rule)]">
-              {COLUMNS.map((column) => (
-                <th key={column.key} className={`px-4 py-3 text-${column.align} text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]`}>
-                  <button type="button" onClick={() => toggleSort(column.key)} className="inline-flex items-center gap-1 hover:text-[var(--color-text)]" aria-label={`Sort by ${column.label}`}>
-                    {column.label}
-                    {sortBy === column.key && <span aria-hidden="true">{sortOrder === "asc" ? "↑" : "↓"}</span>}
-                  </button>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              Array.from({ length: 3 }, (_, index) => <tr key={index} aria-hidden="true"><td colSpan={COLUMNS.length} className="h-12 animate-pulse border-b border-[var(--ledger-rule)] bg-[var(--color-surface-strong)]" /></tr>)
-            ) : sortedRows.length === 0 ? (
-              <tr><td colSpan={COLUMNS.length} className="p-8 text-center text-sm text-[var(--color-text-muted)]">No API key usage recorded for this period.</td></tr>
-            ) : sortedRows.map((row) => (
-              <tr key={`${row.keyName}:${row.apiKeyMasked || "local"}`} className="border-b border-[var(--ledger-rule)] last:border-b-0">
-                <td className="px-4 py-3 text-sm font-medium">{row.keyName || "Unknown key"}</td>
-                <td className="px-4 py-3 font-mono text-sm text-[var(--color-text-muted)]">{row.apiKeyMasked || "—"}</td>
-                <td className="px-4 py-3 text-right font-mono text-sm">{fmt(row.requests)}</td>
-                <td className="px-4 py-3 text-right font-mono text-sm">{fmt(row.promptTokens)}</td>
-                <td className="px-4 py-3 text-right font-mono text-sm">{fmt(row.cachedTokens)}</td>
-                <td className="px-4 py-3 text-right font-mono text-sm">{fmt(row.completionTokens)}</td>
-                <td className="px-4 py-3 text-right font-mono text-sm">{fmt(row.totalTokens)}</td>
-                <td className="px-4 py-3 text-right font-mono text-sm">${(Number(row.cost) || 0).toFixed(4)}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-[var(--color-text-muted)]">{fmtTime(row.lastUsed)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {loading ? (
+        <div className="space-y-px bg-border" aria-label="Loading per-key usage">
+          {Array.from({ length: 3 }, (_, index) => <div key={index} className="h-28 animate-pulse bg-surface" />)}
+        </div>
+      ) : sortedRows.length === 0 ? (
+        <p className="p-8 text-center text-sm text-text-muted">No API key usage recorded for this period.</p>
+      ) : (
+        <div className="divide-y divide-border">
+          {sortedRows.map((row) => {
+            const open = expandedKey === row.keyName;
+            return (
+              <article key={`${row.keyName}:${row.apiKeyMasked || "local"}`} className="grid gap-4 p-4 lg:grid-cols-[minmax(180px,1fr)_minmax(280px,2fr)_auto] lg:items-center">
+                <div className="min-w-0">
+                  <h3 className="break-words font-semibold">{row.keyName || "Unknown key"}</h3>
+                  <p className="mt-1 font-mono text-xs text-text-muted">{row.apiKeyMasked || "Local request"}</p>
+                  <p className="mt-2 text-xs text-text-muted">{row.providers.length ? row.providers.join(" · ") : "Provider unavailable"}</p>
+                </div>
+                <div className="min-w-0">
+                  <div className="mb-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
+                    <span><b className="font-mono tabular-nums">{fmt(row.requests)}</b> requests</span>
+                    <span><b className="font-mono tabular-nums">{fmt(row.totalTokens)}</b> tokens</span>
+                    <span><b className="font-mono tabular-nums">${(Number(row.cost) || 0).toFixed(4)}</b></span>
+                    <span className="text-text-muted">{fmtTime(row.lastUsed)}</span>
+                  </div>
+                  <div className="h-10 border border-border bg-surface-2 p-1" role="img" aria-label={`${fmt(row.requests)} requests for ${row.keyName}`}>
+                    <div className="h-full bg-primary/20 border-r-2 border-primary" style={{ width: `${Math.max(3, (row.requests / maxRequests) * 100)}%` }} />
+                  </div>
+                </div>
+                <button type="button" className="min-h-11 border border-border px-3 text-sm font-semibold text-primary hover:bg-primary/10" aria-expanded={open} onClick={() => setExpandedKey(open ? null : row.keyName)}>
+                  {open ? "Close details" : "Open details"}
+                </button>
+                {open && (
+                  <div className="border-t border-border pt-4 lg:col-span-3">
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {row.series.map((point, index) => (
+                        <div key={`${point.provider}:${point.model}:${index}`} className="border-l-2 border-primary px-3 py-2">
+                          <p className="break-words font-mono text-xs">{point.model}</p>
+                          <p className="mt-1 text-xs text-text-muted">{point.provider} · {fmt(point.requests)} requests · {fmt(point.totalTokens)} tokens</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      )}
+      <div className="sr-only" aria-live="polite">Sorted by {COLUMNS.find((column) => column.key === sortBy)?.label}, {sortOrder === "asc" ? "ascending" : "descending"}.</div>
+      <div className="flex flex-wrap gap-2 border-t border-border bg-surface-2 p-3" aria-label="Sort API keys">
+        {COLUMNS.map((column) => <button key={column.key} type="button" onClick={() => toggleSort(column.key)} className={`min-h-9 border px-3 text-xs ${sortBy === column.key ? "border-primary text-primary" : "border-border text-text-muted"}`}>{column.label}{sortBy === column.key ? (sortOrder === "asc" ? " ↑" : " ↓") : ""}</button>)}
       </div>
     </section>
   );
