@@ -50,7 +50,8 @@ function UsageContent() {
   const [period, setPeriodState] = useState(
     PERIODS.some(({ value }) => value === periodFromUrl) ? periodFromUrl : "today"
   );
-  const [mode, setMode] = useState("costs");
+  const modeFromUrl = searchParams.get("mode");
+  const mode = VALUE_MODES.some(({ value }) => value === modeFromUrl) ? modeFromUrl : "costs";
 
   const tabFromUrl = searchParams.get("tab");
   const activeTab = tabFromUrl && ["overview", "logs", "details", "keys"].includes(tabFromUrl)
@@ -64,6 +65,12 @@ function UsageContent() {
     router.push(`/dashboard/usage?${params.toString()}`, { scroll: false });
   };
 
+  const handleModeChange = (value) => {
+    const params = new URLSearchParams(searchParams);
+    params.set("mode", value);
+    router.push(`/dashboard/usage?${params.toString()}`, { scroll: false });
+  };
+
   const handleTabChange = (value) => {
     if (value === activeTab) return;
     const params = new URLSearchParams(searchParams);
@@ -72,14 +79,15 @@ function UsageContent() {
   };
 
   return (
-    <div className="flex min-w-0 flex-col gap-6 px-1 sm:px-0">
+    <main className="flex min-w-0 flex-col gap-[var(--space-6)] px-1 sm:px-0">
+      <header className="flex flex-wrap items-center justify-between gap-[var(--space-3)]"><div><h1 className="text-[length:var(--text-xl)] font-semibold">Usage</h1><p className="text-sm text-[var(--text-muted)]">Live updates</p></div><button type="button" className="min-h-[var(--touch-h)] rounded-[var(--radius-control)] border border-[color-mix(in_srgb,currentColor_36%,transparent)] bg-[var(--surface)] px-3 text-sm hover:bg-[var(--surface-hover)]">Export CSV</button></header>
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <SegmentedControl
           options={[
             { value: "overview", label: "Overview" },
             { value: "logs", label: "Logs" },
             { value: "details", label: "Details" },
-            { value: "keys", label: "Keys" },
+            { value: "keys", label: "API keys" },
           ]}
           value={activeTab}
           onChange={handleTabChange}
@@ -87,7 +95,7 @@ function UsageContent() {
         />
         {["overview", "details", "keys"].includes(activeTab) && (
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end" aria-label="Usage scope controls">
-            {activeTab === "overview" && <SegmentedControl options={VALUE_MODES} value={mode} onChange={setMode} size="sm" className="w-full sm:w-auto" />}
+            {activeTab === "overview" && <SegmentedControl options={VALUE_MODES} value={mode} onChange={handleModeChange} size="sm" className="w-full sm:w-auto" />}
             <SegmentedControl options={PERIODS} value={period} onChange={handlePeriodChange} size="sm" className="w-full sm:w-auto" />
           </div>
         )}
@@ -97,6 +105,6 @@ function UsageContent() {
       {activeTab === "logs" && <UsageLogs />}
       {activeTab === "details" && <RequestDetailsTab />}
       {activeTab === "keys" && <PerKeyUsageSection period={period} />}
-    </div>
+    </main>
   );
 }

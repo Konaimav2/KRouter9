@@ -1,43 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CircleCheck, CircleDashed, CircleX } from "lucide-react";
 import Toggle from "@/shared/components/Toggle";
 
-function maskAccount(value) {
-  const text = String(value || "").trim();
-  const at = text.indexOf("@");
-  if (at <= 0 || at === text.length - 1) return text;
-  const domain = text.slice(at + 1);
-  const dot = domain.lastIndexOf(".");
-  const domainName = dot > 0 ? domain.slice(0, dot) : domain;
-  const suffix = dot > 0 ? domain.slice(dot) : "";
-  return `${text[0]}***@${domainName[0]}***${suffix}`;
-}
-
+const classify = (status) => { const value = status.toLowerCase(); if (/401|403|auth/.test(value)) return "auth-invalid"; if (/refresh/.test(value)) return "refresh-invalid"; if (/429|rate/.test(value)) return "ratelimited"; if (/network|timeout|connect/.test(value)) return "network"; return "unknown"; };
+function parseLog(log, index) { const parts = String(log).split(" | "); if (parts.length < 7) return null; const status = parts.slice(6).join(" | "); const code = status.match(/\b[1-5]\d\d\b/)?.[0] || (status.includes("FAILED") ? classify(status) : "200"); return { id: index, time: parts[0], model: parts[1], provider: parts[2], input: parts[4], output: parts[5], status, code, pending: status.includes("PENDING"), failed: status.includes("FAILED") || /^[45]/.test(code) }; }
 export default function UsageLogs() {
-  const [logs, setLogs] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [autoRefresh, setAutoRefresh] = useState(true);
-  const fetchLogs = useCallback(async (initial = false) => {
-    if (initial) setLoading(true);
-    setError("");
-    try {
-      const response = await fetch("/api/usage/request-logs");
-      if (!response.ok) throw new Error(`Logs failed (${response.status})`);
-      setLogs(await response.json());
-    } catch (fetchError) { setError(fetchError.message || "Failed to fetch logs."); }
-    finally { if (initial) setLoading(false); }
-  }, []);
+  const [logs, setLogs] = useState([]); const [loading, setLoading] = useState(true); const [error, setError] = useState(""); const [autoRefresh, setAutoRefresh] = useState(true); const [query, setQuery] = useState(""); const [statusFilter, setStatusFilter] = useState("all"); const [provider, setProvider] = useState("all");
+  const fetchLogs = useCallback(async (initial = false) => { if (initial) setLoading(true); setError(""); try { const response = await fetch("/api/usage/request-logs"); if (!response.ok) throw new Error(`Logs failed (${response.status})`); setLogs(await response.json()); } catch { setError("Request logs could not be refreshed."); } finally { if (initial) setLoading(false); } }, []);
   useEffect(() => {
-    // Initial log loading is intentionally initiated when the tab mounts.
+    // Initial loading intentionally starts when this tab mounts.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchLogs(true);
-  }, [fetchLogs]);
-  useEffect(() => { if (!autoRefresh) return undefined; const timer = setInterval(() => fetchLogs(false), 3000); return () => clearInterval(timer); }, [autoRefresh, fetchLogs]);
-  return <section className="border border-border bg-surface"><header className="flex min-h-11 items-center gap-3 border-b border-border bg-surface-2 px-4 py-3 flex-wrap"><span className="font-mono text-xs tabular-nums text-text-muted">LOG</span><h2 className="font-semibold">Request logs</h2><Toggle className="ml-auto" size="sm" checked={autoRefresh} onChange={setAutoRefresh} label="Auto-refresh" description="Every 3s" /></header>
-    {error && <div className="border-b border-[var(--color-danger)] bg-[var(--color-danger-wash)] p-3 text-sm text-[var(--color-danger)]">{error} <button type="button" onClick={() => fetchLogs(true)} className="font-semibold underline">Retry</button></div>}
-    <div className="max-h-[640px] overflow-auto custom-scrollbar"><table className="w-full min-w-[760px] border-collapse text-left text-xs"><thead className="sticky top-0 z-10 bg-[var(--table-header-bg)] text-[var(--color-text-muted)]"><tr>{["Date / time", "Model", "Provider", "Account", "Key", "In", "Out", "Status", "Error"].map((label) => <th key={label} className="border-b border-[var(--ledger-rule)] px-3 py-2 font-semibold">{label}</th>)}</tr></thead><tbody>{loading && !logs.length ? Array.from({ length: 6 }, (_, index) => <tr key={index}><td colSpan={9} className="h-10 animate-pulse border-b border-[var(--ledger-rule)] bg-[var(--color-surface-strong)]" /></tr>) : logs.length === 0 ? <tr><td colSpan={9} className="p-8 text-center text-[var(--color-text-muted)]">No data yet — send a request through <code>/v1</code>.</td></tr> : logs.map((log, index) => { const parts = String(log).split(" | "); if (parts.length < 7) return null; const status = parts.slice(6).join(" | "); const pending = status.includes("PENDING"); const failed = status.includes("FAILED") || /\b[45]\d\d\b/.test(status); return <tr key={`${parts[0]}-${index}`} className="border-b border-[var(--ledger-rule)] hover:bg-[var(--table-row-hover)]"><td className="font-mono tabular-nums px-3 py-2 text-[var(--color-text-muted)]">{parts[0]}</td><td className="font-mono tabular-nums px-3 py-2">{parts[1]}</td><td className="px-3 py-2">{parts[2]}</td><td className="max-w-[180px] truncate px-3 py-2">{maskAccount(parts[3])}</td><td className="px-3 py-2 font-mono text-text-muted">—</td><td className="font-mono tabular-nums px-3 py-2 text-right">{parts[4]}</td><td className="font-mono tabular-nums px-3 py-2 text-right">{parts[5]}</td><td className={`px-3 py-2 font-semibold ${pending ? "text-[var(--color-info)]" : failed ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}><span className="inline-flex items-center gap-1.5">{pending ? <CircleDashed aria-hidden="true" size={14} /> : failed ? <CircleX aria-hidden="true" size={14} /> : <CircleCheck aria-hidden="true" size={14} />} {status}</span></td><td className="max-w-[220px] truncate px-3 py-2 text-danger">{failed ? status : "—"}</td></tr>; })}</tbody></table></div>
+    fetchLogs(true); }, [fetchLogs]); useEffect(() => { if (!autoRefresh) return undefined; const timer = setInterval(() => fetchLogs(false), 3000); return () => clearInterval(timer); }, [autoRefresh, fetchLogs]);
+  const rows = useMemo(() => logs.map(parseLog).filter(Boolean), [logs]); const providers = [...new Set(rows.map((row) => row.provider))]; const visible = rows.filter((row) => (statusFilter === "all" || (statusFilter === "error" ? row.failed : !row.failed)) && (provider === "all" || row.provider === provider) && `${row.time} ${row.model} ${row.provider} ${row.status}`.toLowerCase().includes(query.toLowerCase()));
+  return <section className="rounded-[var(--radius-field)] border border-[color-mix(in_srgb,currentColor_18%,transparent)] bg-[var(--surface)]"><header className="flex flex-wrap items-center gap-[var(--space-3)] border-b p-[var(--space-4)]"><h2 className="font-semibold">Request logs</h2><label className="sr-only" htmlFor="request-search">Search requests</label><input id="request-search" type="search" placeholder="Search requests" value={query} onChange={(event)=>setQuery(event.target.value)} className="h-[var(--control-h)] min-w-48 flex-1 rounded-[var(--radius-control)] border bg-[var(--surface)] px-3"/><label className="sr-only" htmlFor="status-filter">Status</label><select id="status-filter" value={statusFilter} onChange={(event)=>setStatusFilter(event.target.value)} className="h-[var(--control-h)] rounded-[var(--radius-control)] border bg-[var(--surface)] px-3"><option value="all">All status</option><option value="success">Success</option><option value="error">Errors</option></select><label className="sr-only" htmlFor="provider-filter">Provider</label><select id="provider-filter" value={provider} onChange={(event)=>setProvider(event.target.value)} className="h-[var(--control-h)] rounded-[var(--radius-control)] border bg-[var(--surface)] px-3"><option value="all">All providers</option>{providers.map((item)=><option key={item}>{item}</option>)}</select><Toggle size="sm" checked={autoRefresh} onChange={setAutoRefresh} label="Auto-refresh" description="Every 3s"/><button type="button" disabled={!visible.length} className="min-h-[var(--touch-h)] rounded-[var(--radius-control)] border px-3 disabled:text-[var(--disabled-text)]">Export visible logs</button></header>
+    {error && <div className="border-b bg-[var(--danger-wash)] p-3 text-sm text-[var(--danger)]">{error} Existing rows are still shown. <button onClick={()=>fetchLogs(true)} className="font-semibold underline">Retry</button></div>}
+    <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead className="text-xs text-[var(--text-muted)]"><tr>{["Time","Status","Route","Model","Token In","Token Out","Action"].map((label)=><th key={label} className="border-b p-3">{label}</th>)}</tr></thead><tbody>{loading && !rows.length ? <tr><td colSpan={7} className="h-40 animate-pulse bg-[var(--surface-hover)]"/></tr> : visible.length ? visible.map((row)=><tr key={row.id} className="border-b hover:bg-[var(--surface-hover)]"><td className="p-3 font-mono">{row.time}</td><td className={`p-3 ${row.failed?"text-[var(--danger)]":row.pending?"text-[var(--info)]":"text-[var(--success)]"}`}><span className="inline-flex items-center gap-1">{row.failed?<CircleX size={14}/>:row.pending?<CircleDashed size={14}/>:<CircleCheck size={14}/>} {row.code}</span>{row.failed && <span className="ml-2 text-xs">{classify(row.status)}</span>}</td><td className="p-3 font-mono">/v1</td><td className="p-3"><code>{row.model}</code><span className="block text-xs text-[var(--text-muted)]">{row.provider}</span></td><td className="p-3 font-mono text-[var(--success)]">← {row.input}</td><td className="p-3 font-mono text-[var(--danger)]">{row.output} →</td><td className="p-3"><button type="button" className="text-[var(--primary)]">Open</button></td></tr>) : <tr><td colSpan={7} className="p-8 text-center text-[var(--text-muted)]">{query || statusFilter!=="all" || provider!=="all" ? "No requests match these filters." : "No request logs yet. Send a request through /v1 to create a log."}</td></tr>}</tbody></table></div>
   </section>;
 }
