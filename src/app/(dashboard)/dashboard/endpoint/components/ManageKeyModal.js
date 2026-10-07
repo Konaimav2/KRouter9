@@ -3,7 +3,8 @@
 import Icon from "@/shared/components/Icon";
 import { useState } from "react";
 import PropTypes from "prop-types";
-import { Button, Input, Modal, ModelSelectModal, Select, Toggle } from "@/shared/components";
+import { Button, Input, Select, Toggle } from "@/shared/components";
+import { ConfirmDialog, Dialog } from "@/shared/components/overlays";
 
 const POLICY_OPTIONS = [
   { value: "off", label: "Off — all models allowed" },
@@ -45,6 +46,16 @@ export default function ManageKeyModal({ apiKey, onClose, onSaved, onRotated }) 
   const [saving, setSaving] = useState(false);
   const [rotating, setRotating] = useState(false);
   const [error, setError] = useState(null);
+  const [discardOpen, setDiscardOpen] = useState(false);
+
+  const initial = {
+    name: apiKey?.name || "", isActive: apiKey?.isActive ?? true,
+    rpmLimit: apiKey?.rpmLimit ? String(apiKey.rpmLimit) : "", tpmLimit: apiKey?.tpmLimit ? String(apiKey.tpmLimit) : "",
+    modelPolicy: apiKey?.modelPolicy || "off", allowedList: parseList(asText(apiKey?.allowedModels)), blockedList: parseList(asText(apiKey?.blockedModels)),
+    creditLimit: apiKey?.creditLimit ? String(apiKey.creditLimit) : "", quotaLimit: apiKey?.quotaLimit ? String(apiKey.quotaLimit) : "",
+  };
+  const dirty = name !== initial.name || isActive !== initial.isActive || rpmLimit !== initial.rpmLimit || tpmLimit !== initial.tpmLimit || modelPolicy !== initial.modelPolicy || creditLimit !== initial.creditLimit || quotaLimit !== initial.quotaLimit || JSON.stringify(allowedList) !== JSON.stringify(initial.allowedList) || JSON.stringify(blockedList) !== JSON.stringify(initial.blockedList);
+  const requestClose = () => dirty ? setDiscardOpen(true) : onClose();
 
   const openPicker = async (which) => {
     setPickerFor(which);
@@ -177,115 +188,38 @@ export default function ManageKeyModal({ apiKey, onClose, onSaved, onRotated }) 
     }
   };
 
+  const pickerList = pickerFor === "blocked" ? blockedList : allowedList;
+  const catalogModels = pickerProviders.flatMap((provider) => {
+    const prefix = provider.provider || provider.name || "provider";
+    const models = provider.models || provider.availableModels || [];
+    return models.map((model) => typeof model === "string" ? `${prefix}/${model}` : model.value || model.name).filter(Boolean);
+  });
+
   return (
-    <Modal isOpen={!!apiKey} title={apiKey ? `Manage key "${apiKey.name}"` : "Manage key"} onClose={onClose}>
-      <div className="flex flex-col gap-4">
-        <Input
-          label="Key name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Production Key"
-        />
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="font-medium text-sm">Active</p>
-            <p className="text-xs text-text-muted">Paused keys are rejected immediately.</p>
+    <>
+      <Dialog open={!!apiKey} title={apiKey ? `Manage key “${apiKey.name}”` : "Manage key"} description="Configuration only. Usage analytics remain on the Usage page." onDismiss={requestClose} width="wide" dismissOnScrim={false} footer={pickerFor ? <div className="flex w-full justify-between"><Button variant="secondary" onClick={() => setPickerFor(null)}>Back to key</Button><span className="self-center text-xs text-text-muted">{pickerList.length} selected</span></div> : <div className="flex w-full flex-wrap justify-between gap-2"><Button onClick={handleRotate} variant="secondary" disabled={rotating}>{rotating ? "Rotating..." : "Rotate key"}</Button><div className="flex gap-2"><Button onClick={requestClose} variant="ghost">Cancel</Button><Button onClick={handleSave} disabled={!name.trim() || saving}>{saving ? "Saving..." : "Save changes"}</Button></div></div>}>
+        {pickerFor ? (
+          <div className="space-y-4">
+            <div><h3 className="font-semibold">{pickerFor === "blocked" ? "Block models for this key" : "Allow models for this key"}</h3><p className="mt-1 text-sm text-text-muted">The picker replaces this dialog body so your draft stays in one shell.</p></div>
+            <div className="flex gap-2"><Input value={manualEntry} onChange={(event) => setManualEntry(event.target.value)} placeholder="provider/model-id" onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addManualEntry(pickerFor); } }} /><Button variant="secondary" onClick={() => addManualEntry(pickerFor)} disabled={!manualEntry.trim()}>Add</Button></div>
+            <div className="max-h-[22rem] overflow-y-auto rounded-[var(--radius-field)] border border-border">
+              {[...new Set([...catalogModels, ...pickerList])].length ? [...new Set([...catalogModels, ...pickerList])].map((model) => <label key={model} className="flex min-h-11 items-center gap-3 border-b border-border px-3 last:border-b-0 hover:bg-surface-hover"><input type="checkbox" checked={pickerList.includes(model)} onChange={(event) => togglePickerModel(model, !event.target.checked)} /><code className="break-anywhere font-[var(--font-data)] text-xs">{model}</code></label>) : <p className="p-6 text-center text-sm text-text-muted">No catalog models reported. Add a model ID manually.</p>}
+            </div>
           </div>
-          <Toggle checked={isActive} onChange={setIsActive} size="sm" />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Input
-            label="RPM limit"
-            type="number"
-            min="0"
-            value={rpmLimit}
-            onChange={(e) => setRpmLimit(e.target.value)}
-            placeholder="0 = unlimited"
-            hint="Requests per minute."
-          />
-          <Input
-            label="TPM limit"
-            type="number"
-            min="0"
-            value={tpmLimit}
-            onChange={(e) => setTpmLimit(e.target.value)}
-            placeholder="0 = unlimited"
-            hint="Tokens per minute (est.)."
-          />
-        </div>
-        <div className="rounded-md border border-border bg-surface-2 p-3 text-sm">
-          <p className="mb-1 font-medium text-text-primary">Usage</p>
-          <p className="text-text-muted">
-            Cost spent: <span className="text-text-primary">${(Number(apiKey?.usageCost) || 0).toFixed(6)}</span>
-            {" · "}
-            Tokens used: <span className="text-text-primary">{(Number(apiKey?.usageTokens) || 0).toLocaleString()}</span>
-            {" · "}
-            <a href="/dashboard/usage?table=apiKey" target="_blank" rel="noreferrer" className="text-primary hover:underline">
-              Per-key breakdown
-            </a>
-          </p>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Input
-            label="Credit limit"
-            type="number"
-            min="0"
-            step="0.000001"
-            value={creditLimit}
-            onChange={(e) => setCreditLimit(e.target.value)}
-            placeholder="0 = unlimited"
-            hint="Max cost (USD). Requests rejected once spent."
-          />
-          <Input
-            label="Token quota"
-            type="number"
-            min="0"
-            value={quotaLimit}
-            onChange={(e) => setQuotaLimit(e.target.value)}
-            placeholder="0 = unlimited"
-            hint="Max lifetime tokens. Requests rejected once used."
-          />
-        </div>
-        <Select
-          label="Model policy"
-          options={POLICY_OPTIONS}
-          value={modelPolicy}
-          onChange={(e) => setModelPolicy(e.target.value)}
-        />
-        {modelPolicy === "whitelist" && renderModelListEditor("allowed", allowedList, setAllowedList)}
-        {modelPolicy === "blacklist" && renderModelListEditor("blocked", blockedList, setBlockedList)}
-        {pickerFor && (
-          <ModelSelectModal
-            isOpen={!!pickerFor}
-            onClose={() => setPickerFor(null)}
-            onSelect={(m) => togglePickerModel(m, false)}
-            onDeselect={(m) => togglePickerModel(m, true)}
-            activeProviders={pickerProviders}
-            modelAliases={pickerAliases}
-            title={pickerFor === "blocked" ? "Block models for this key" : "Allow models for this key"}
-            addedModelValues={pickerFor === "blocked" ? blockedList : allowedList}
-            closeOnSelect={false}
-          />
+        ) : (
+          <div className="space-y-5">
+            <Input label="Key name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Production Key" />
+            <div className="flex items-center justify-between gap-4 border-y border-border py-3"><div><p className="text-sm font-medium">Active</p><p className="text-xs text-text-muted">Paused keys are rejected immediately.</p></div><Toggle checked={isActive} onChange={setIsActive} size="sm" /></div>
+            <div><h3 className="mb-3 font-semibold">Rate limits</h3><div className="grid gap-3 sm:grid-cols-2"><Input label="RPM limit" type="number" min="0" value={rpmLimit} onChange={(event) => setRpmLimit(event.target.value)} placeholder="0 = unlimited" hint="Requests per minute."/><Input label="TPM limit" type="number" min="0" value={tpmLimit} onChange={(event) => setTpmLimit(event.target.value)} placeholder="0 = unlimited" hint="Tokens per minute (estimated)."/></div></div>
+            <div><h3 className="mb-3 font-semibold">Lifetime limits</h3><div className="grid gap-3 sm:grid-cols-2"><Input label="Credit limit" type="number" min="0" step="0.000001" value={creditLimit} onChange={(event) => setCreditLimit(event.target.value)} placeholder="0 = unlimited" hint="Maximum cost in USD."/><Input label="Token quota" type="number" min="0" value={quotaLimit} onChange={(event) => setQuotaLimit(event.target.value)} placeholder="0 = unlimited" hint="Maximum lifetime tokens."/></div></div>
+            <div><h3 className="mb-3 font-semibold">Model policy</h3><Select label="Policy" options={POLICY_OPTIONS} value={modelPolicy} onChange={(event) => setModelPolicy(event.target.value)} />{modelPolicy === "whitelist" && renderModelListEditor("allowed", allowedList, setAllowedList)}{modelPolicy === "blacklist" && renderModelListEditor("blocked", blockedList, setBlockedList)}</div>
+            {error && <p className="rounded-[var(--radius-control)] bg-danger-wash p-3 text-sm text-danger" role="alert">{error}</p>}
+            <p className="border-t border-border pt-3 text-xs text-text-muted">Rotate issues a fresh key string. The old string stops working immediately.</p>
+          </div>
         )}
-        {error && <p className="text-xs text-error">{error}</p>}
-        <div className="flex gap-2">
-          <Button onClick={handleSave} fullWidth disabled={!name.trim() || saving}>
-            {saving ? "Saving..." : "Save"}
-          </Button>
-          <Button onClick={onClose} variant="ghost" fullWidth>
-            Cancel
-          </Button>
-        </div>
-        <div className="border-t border-border pt-3">
-          <p className="text-xs text-text-muted mb-2">
-            Rotate issues a fresh key string. The old string stops working immediately.
-          </p>
-          <Button onClick={handleRotate} variant="secondary" fullWidth disabled={rotating}>
-            {rotating ? "Rotating..." : "Rotate key"}
-          </Button>
-        </div>
-      </div>
-    </Modal>
+      </Dialog>
+      <ConfirmDialog open={discardOpen} onCancel={() => setDiscardOpen(false)} onConfirm={onClose} title="Discard unsaved key changes?" description="Your edits will be lost." actionLabel="Discard changes" cancelLabel="Keep editing" destructive />
+    </>
   );
 }
 
@@ -300,8 +234,6 @@ ManageKeyModal.propTypes = {
     allowedModels: PropTypes.oneOfType([PropTypes.string, PropTypes.array]),
     blockedModels: PropTypes.oneOfType([PropTypes.string, PropTypes.array]),
     creditLimit: PropTypes.number,
-    usageCost: PropTypes.number,
-    usageTokens: PropTypes.number,
     quotaLimit: PropTypes.number,
   }),
   onClose: PropTypes.func.isRequired,

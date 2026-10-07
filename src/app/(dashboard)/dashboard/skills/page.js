@@ -1,136 +1,47 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import Icon from "@/shared/components/Icon";
+import { PopoverMenu } from "@/shared/components/overlays";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
-import {
-  SKILLS,
-  SKILLS_REPO_URL,
-  getSkillRawUrl,
-  getSkillBlobUrl,
-} from "@/shared/constants/skills";
+import { SKILLS, SKILLS_REPO_URL, getSkillRawUrl, getSkillBlobUrl } from "@/shared/constants/skills";
 
-function CopyButton({ value, label = "Copy link" }) {
+const secondary = "inline-flex min-h-[var(--touch-h)] items-center justify-center gap-2 rounded-[var(--radius-control)] border border-[color-mix(in_srgb,currentColor_36%,transparent)] bg-[var(--surface)] px-3 text-sm text-[var(--text)] hover:bg-[var(--surface-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]";
+
+function CopyButton({ value, label, copiedLabel = "Link copied" }) {
   const { copied, copy } = useCopyToClipboard(2000);
-  return (
-    <button
-      type="button"
-      onClick={() => copy(value)}
-      className="inline-flex min-h-11 items-center justify-center gap-2 border border-[var(--color-border)] px-3 text-xs font-medium hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
-      aria-label={label}
-      title={label}
-    >
-      <Icon name={copied ? "check" : "content_copy"} size={15} />
-      {copied ? "Copied!" : label}
-    </button>
-  );
+  return <button type="button" onClick={() => copy(value)} className={secondary} aria-label={label}><Icon name={copied ? "check" : "content_copy"} size={15} />{copied ? copiedLabel : label}</button>;
 }
 
-function SkillRow({ skill, index }) {
+function ActionMenu({ skill, sourceUrl }) {
+  const [open, setOpen] = useState(false);
+  return <div className="relative"><button type="button" className={secondary} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(true)}>Actions</button><PopoverMenu open={open} onDismiss={() => setOpen(false)} label={`Actions for ${skill.name}`}><a role="menuitem" className="block min-h-[var(--touch-h)] px-3 py-2" href={sourceUrl} target="_blank" rel="noopener noreferrer">Open source <span className="sr-only">(opens in a new tab)</span></a><a role="menuitem" className="block min-h-[var(--touch-h)] px-3 py-2" href={`${SKILLS_REPO_URL}/tree/master/skills`} target="_blank" rel="noopener noreferrer">View repository <span className="sr-only">(opens in a new tab)</span></a></PopoverMenu></div>;
+}
+
+function SkillRow({ skill }) {
+  const [expanded, setExpanded] = useState(false);
   const rawUrl = getSkillRawUrl(skill.id);
-  return (
-    <div
-      className={`border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] grid gap-3 border-l-2 px-4 py-3 sm:grid-cols-[2.5rem_minmax(14rem,1fr)_minmax(12rem,1fr)_auto] sm:items-center ${skill.isEntry ? "border-l-[var(--color-primary)]" : "border-l-transparent"}`}
-    >
-      <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">
-        {String(index + 1).padStart(2, "0")}
-      </span>
-      <div className="flex min-w-0 items-start gap-3">
-        <Icon name={skill.icon} className="mt-0.5 shrink-0" />
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-sm font-semibold">{skill.name}</h3>
-            {skill.isEntry && (
-              <span className="text-xs font-medium text-[var(--color-primary)]">
-                Start here
-              </span>
-            )}
-          </div>
-          <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
-            {skill.description}
-          </p>
-        </div>
-      </div>
-      <div className="min-w-0">
-        {skill.endpoint && (
-          <code className="inline-flex border border-[var(--badge-border)] bg-[var(--badge-bg)] px-2 py-1 text-[10px] text-[var(--badge-fg)]">
-            {skill.endpoint}
-          </code>
-        )}
-        <a
-          href={getSkillBlobUrl(skill.id)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="data-text mt-1 flex items-start gap-1 overflow-wrap-anywhere text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-primary)]"
-        >
-          <span>{rawUrl}</span>
-          <Icon name="open_in_new" size={13} className="mt-0.5 shrink-0" />
-        </a>
-      </div>
-      <div className="flex flex-wrap gap-2 sm:justify-end">
-        <CopyButton value={rawUrl} />
-        <a
-          href={getSkillBlobUrl(skill.id)}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label={`Open ${skill.name} source`}
-          title={`Open ${skill.name} source`}
-          className="inline-flex min-h-11 items-center justify-center gap-2 border border-[var(--color-border)] px-3 text-xs hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
-        >
-          Open <Icon name="open_in_new" size={15} />
-        </a>
-      </div>
-    </div>
-  );
+  const sourceUrl = getSkillBlobUrl(skill.id);
+  const longPurpose = skill.description.length > 110;
+  return <article className="grid gap-[var(--space-3)] border-b border-[color-mix(in_srgb,currentColor_18%,transparent)] bg-[var(--surface)] p-[var(--space-4)] last:border-b-0 hover:bg-[var(--surface-hover)] sm:grid-cols-[minmax(10rem,0.8fr)_minmax(16rem,1.5fr)_minmax(9rem,0.6fr)_auto] sm:items-start">
+    <div className="min-w-0"><h2 className="text-sm font-semibold text-[var(--text)]">{skill.name}</h2>{skill.isEntry && <span className="text-xs text-[var(--primary)]">Start here</span>}</div>
+    <div className="min-w-0"><p className={`text-sm text-[var(--text-muted)] ${!expanded && longPurpose ? "line-clamp-2" : ""}`}>{skill.description}</p>{longPurpose && <button type="button" className="mt-1 text-xs text-[var(--primary)] hover:bg-[var(--surface-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>{expanded ? "Collapse purpose" : "Show full purpose"}</button>}</div>
+    <code className="break-all font-mono text-xs text-[var(--text-muted)]">{skill.endpoint || "—"}</code>
+    <div className="flex flex-wrap gap-[var(--space-2)] sm:justify-end"><CopyButton value={rawUrl} label={`Copy link for ${skill.name}`} /><ActionMenu skill={skill} sourceUrl={sourceUrl} /></div>
+  </article>;
 }
 
 export default function SkillsPage() {
+  const [query, setQuery] = useState("");
   const entryUrl = getSkillRawUrl("krouter9");
   const prompt = `Read this skill and use it: ${entryUrl}`;
-  return (
-    <div className="mx-auto w-full max-w-[72rem] px-1 sm:px-0">
-      <section className="min-w-0 overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
-        <header className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3">
-          <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">01</span>
-          <h2 className="font-semibold">Skill registry</h2>
-          <span className="data-text ml-auto text-xs text-[var(--color-text-muted)]">
-            {SKILLS.length} skills
-          </span>
-        </header>
-        <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] grid gap-3 px-4 py-3 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto] sm:items-center">
-          <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">AI</span>
-          <div className="min-w-0">
-            <p className="mb-1 text-xs text-[var(--color-text-muted)]">
-              Paste this to your AI
-            </p>
-            <code className="data-text block overflow-wrap-anywhere border border-[var(--color-border)] bg-[var(--color-code-bg)] px-3 py-2 text-xs text-[var(--p-carbon-100)]">
-              {prompt}
-            </code>
-          </div>
-          <CopyButton value={prompt} label="Copy prompt" />
-        </div>
-        {SKILLS.map((skill, index) => (
-          <SkillRow key={skill.id} skill={skill} index={index} />
-        ))}
-        <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] grid gap-3 px-4 py-3 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto] sm:items-center">
-          <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">
-            {String(SKILLS.length + 1).padStart(2, "0")}
-          </span>
-          <div>
-            <h3 className="text-sm font-semibold">More on GitHub</h3>
-            <p className="text-xs text-[var(--color-text-muted)]">
-              Browse source, README, and examples.
-            </p>
-          </div>
-          <a
-            href={`${SKILLS_REPO_URL}/tree/master/skills`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex min-h-11 items-center justify-center gap-2 border border-[var(--color-border)] px-3 text-sm hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
-          >
-            View on GitHub <Icon name="open_in_new" size={16} />
-          </a>
-        </div>
-      </section>
-    </div>
-  );
+  const filtered = useMemo(() => SKILLS.filter((skill) => `${skill.name} ${skill.description} ${skill.endpoint || ""}`.toLowerCase().includes(query.trim().toLowerCase())), [query]);
+  return <main className="mx-auto w-full max-w-[72rem] space-y-[var(--space-6)] px-1 sm:px-0">
+    <header className="flex flex-wrap items-start justify-between gap-[var(--space-4)]"><div><h1 className="text-[length:var(--text-xl)] font-semibold text-[var(--text)]">Skills</h1><p className="mt-[var(--space-1)] text-sm text-[var(--text-muted)]">Install a focused capability into your coding agent.</p></div><a className={secondary} href={`${SKILLS_REPO_URL}/tree/master/skills`} target="_blank" rel="noopener noreferrer">View repository <span className="sr-only">(opens in a new tab)</span><Icon name="open_in_new" size={15} /></a></header>
+    <section className="border border-[color-mix(in_srgb,currentColor_18%,transparent)] bg-[var(--surface)] p-[var(--space-4)]"><p className="text-xs font-semibold uppercase tracking-wide text-[var(--primary)]">Start here</p><h2 className="mt-[var(--space-1)] text-[length:var(--text-lg)] font-semibold">Install <code className="font-mono">using-krouter9</code></h2><ol className="my-[var(--space-3)] grid gap-[var(--space-2)] text-sm text-[var(--text-muted)] sm:grid-cols-2"><li>1. Copy the prompt</li><li>2. Paste it into your agent</li></ol><div className="flex flex-col gap-[var(--space-3)] sm:flex-row"><code tabIndex={0} aria-label="Installation prompt" className="min-w-0 flex-1 break-all rounded-[var(--radius-field)] border border-[color-mix(in_srgb,currentColor_18%,transparent)] bg-[var(--surface)] p-[var(--space-3)] font-mono text-xs text-[var(--text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]">{prompt}</code><CopyButton value={prompt} label="Copy prompt" copiedLabel="Prompt copied" /></div></section>
+    <section className="overflow-hidden rounded-[var(--radius-field)] border border-[color-mix(in_srgb,currentColor_18%,transparent)] bg-[var(--surface)]"><div className="flex flex-wrap items-center gap-[var(--space-3)] border-b border-[color-mix(in_srgb,currentColor_18%,transparent)] p-[var(--space-4)]"><label className="sr-only" htmlFor="skill-search">Search skills</label><input id="skill-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search skills" className="h-[var(--control-h)] min-w-0 flex-1 rounded-[var(--radius-control)] border border-[color-mix(in_srgb,currentColor_36%,transparent)] bg-[var(--surface)] px-3 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"/><span aria-live="polite" className="text-xs text-[var(--text-muted)]">{filtered.length} results</span>{query && <button type="button" onClick={() => setQuery("")} className="text-sm text-[var(--primary)]">Clear search</button>}</div>
+      {filtered.length ? <><div className="hidden grid-cols-[minmax(10rem,0.8fr)_minmax(16rem,1.5fr)_minmax(9rem,0.6fr)_auto] gap-[var(--space-3)] border-b border-[color-mix(in_srgb,currentColor_18%,transparent)] px-[var(--space-4)] py-[var(--space-2)] text-xs font-semibold text-[var(--text-muted)] sm:grid"><span>Skill</span><span>Purpose</span><span>Endpoint</span><span>Actions</span></div>{filtered.map((skill) => <SkillRow key={skill.id} skill={skill} />)}</> : <div className="p-[var(--space-8)] text-center"><p>No skills match this search.</p><button type="button" onClick={() => setQuery("")} className="mt-2 text-[var(--primary)]">Clear search</button></div>}
+      <footer className="p-[var(--space-3)] text-xs text-[var(--text-muted)]">Source: Konaimav2/KRouter9 skills</footer>
+    </section>
+  </main>;
 }

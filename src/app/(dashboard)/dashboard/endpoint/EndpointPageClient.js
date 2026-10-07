@@ -3,8 +3,9 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import PropTypes from "prop-types";
-import { Button, Input, Modal, CardSkeleton, Toggle, ConfirmModal } from "@/shared/components";
-import { AlertCircle, Check, CheckCircle2, CloudUpload, Copy, Eye, EyeOff, KeyRound, LoaderCircle, Power, Settings, ShieldCheck, Trash2 } from "lucide-react";
+import { Button, Input, CardSkeleton, Toggle } from "@/shared/components";
+import { Dialog, ConfirmDialog } from "@/shared/components/overlays";
+import { AlertCircle, Check, CheckCircle2, CloudUpload, Copy, Eye, EyeOff, KeyRound, LoaderCircle, Power, Search, Settings, ShieldCheck, Trash2 } from "lucide-react";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import {
   TUNNEL_BENEFITS,
@@ -29,6 +30,9 @@ export default function APIPageClient({ machineId }) {
   const [confirmState, setConfirmState] = useState(null);
   const [manageKey, setManageKey] = useState(null);
   const [rotatedKey, setRotatedKey] = useState(null);
+  const [keyQuery, setKeyQuery] = useState("");
+  const [keyStatus, setKeyStatus] = useState("all");
+  const [keySort, setKeySort] = useState("name");
 
   const [requireApiKey, setRequireApiKey] = useState(false);
   const [requireLogin, setRequireLogin] = useState(true);
@@ -721,361 +725,60 @@ export default function APIPageClient({ machineId }) {
 
   const currentEndpoint = baseUrl;
 
+  const filteredKeys = [...keys]
+    .filter((key) => key.name.toLowerCase().includes(keyQuery.toLowerCase()))
+    .filter((key) => keyStatus === "all" || (keyStatus === "active" ? key.isActive !== false : key.isActive === false))
+    .sort((a, b) => keySort === "created"
+      ? new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      : a.name.localeCompare(b.name));
+
   return (
-    <div className="flex min-w-0 max-w-full flex-col gap-8 px-1 sm:px-0">
-      {/* Endpoint ledger */}
-      <LedgerBand number="01" title="API endpoint" summary="Local and remote routes">
-        {/* Endpoint rows */}
-        <div className="flex min-w-0 flex-col divide-y divide-[var(--color-border)] p-3">
-          {/* Local */}
-          <EndpointRow
-            label="Local"
-            url={currentEndpoint}
-            copyId="local_url"
-            copied={copied}
-            onCopy={copy}
-          />
-          {/* Cloudflare Tunnel */}
-          <div className="flex min-w-0 flex-col gap-2 py-2 sm:flex-row sm:items-center">
-            <span className={`shrink-0 border-r border-[var(--color-border)] px-2 py-1 text-center font-mono text-xs sm:min-w-[5.5rem] ${tunnelEnabled ? "text-[var(--color-primary)]" : "text-[var(--color-text-muted)]"}`}>Tunnel</span>
-            {tunnelEnabled && !tunnelLoading && tunnelReachable ? (
-              <>
-                <Input value={`${tunnelPublicUrl || tunnelUrl}/v1`} readOnly className="flex-1 font-mono text-sm" />
-                <button
-                  onClick={() => copy(`${tunnelPublicUrl || tunnelUrl}/v1`, "tunnel_url")}
-                  className="flex size-11 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-primary)]" aria-label="Copy endpoint"
-                >
-                  {copied === "tunnel_url" ? <Check size={18}/> : <Copy size={18}/>}
-                </button>
-                <button
-                  onClick={() => setShowDisableTunnelModal(true)}
-                  className="p-2 hover:bg-red-500/10 rounded text-red-500 transition-colors shrink-0"
-                  title="Disable Tunnel"
-                >
-                  <Power size={18}/>
-                </button>
-              </>
-            ) : tunnelEnabled && !tunnelLoading && !tunnelReachable ? (
-              <>
-                <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded border border-amber-300 dark:border-amber-800 bg-amber-500/5 text-sm text-amber-600 dark:text-amber-400">
-                  <LoaderCircle size={16} className="animate-spin shrink-0"/>
-                  {tunnelEverReachable ? "Tunnel reconnecting..." : "Tunnel checking..."}
-                </div>
-                <button
-                  onClick={() => setShowDisableTunnelModal(true)}
-                  className="p-2 hover:bg-red-500/10 rounded text-red-500 transition-colors shrink-0"
-                  title="Disable Tunnel"
-                >
-                  <Power size={18}/>
-                </button>
-              </>
-            ) : tunnelLoading ? (
-              <>
-                <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded border border-border bg-input text-sm text-text-muted">
-                  <LoaderCircle size={16} className="animate-spin shrink-0"/>
-                  {tunnelProgress || "Creating tunnel..."}
-                </div>
-                <button
-                  onClick={() => { setTunnelLoading(false); setTunnelProgress(""); }}
-                  className="p-2 hover:bg-red-500/10 rounded text-red-500 transition-colors shrink-0"
-                  title="Stop"
-                >
-                  <Power size={18}/>
-                </button>
-              </>
-            ) : tunnelStatus?.type === "error" ? (
-              <>
-                <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded border border-red-300 dark:border-red-800 bg-red-500/5 text-sm text-red-600 dark:text-red-400">
-                  <AlertCircle size={16} className="shrink-0"/>
-                  {tunnelStatus.message}
-                </div>
-                <Button size="sm" icon="cloud_upload" onClick={() => setShowEnableTunnelModal(true)}>Enable</Button>
-              </>
-            ) : tunnelChecking ? (
-              <>
-                <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded border border-border bg-input text-sm text-text-muted">
-                  <LoaderCircle size={16} className="animate-spin shrink-0"/>
-                  Checking...
-                </div>
-                <button
-                  onClick={() => setTunnelChecking(false)}
-                  className="p-2 hover:bg-red-500/10 rounded text-red-500 transition-colors shrink-0"
-                  title="Stop"
-                >
-                  <Power size={18}/>
-                </button>
-              </>
-            ) : (
-              <Button
-                size="sm"
-                icon="cloud_upload"
-                onClick={() => {
-                  if (isLoginUnsafe) {
-                    setTunnelStatus({ type: "error", message: `Security required: ${unsafeReason}` });
-                    return;
-                  }
-                  if (!requireApiKey) {
-                    setTunnelStatus({ type: "error", message: "Security required: Enable \"Require API key\" before activating the tunnel." });
-                    return;
-                  }
-                  setShowEnableTunnelModal(true);
-                }}
-              >
-                Enable
-              </Button>
-            )}
-          </div>
-          {/* Tailscale */}
-          <div className="flex min-w-0 flex-col gap-2 py-2 sm:flex-row sm:items-center">
-            <span className={`shrink-0 border-r border-[var(--color-border)] px-2 py-1 text-center font-mono text-xs sm:min-w-[5.5rem] ${tsEnabled ? "text-[var(--color-primary)]" : "text-[var(--color-text-muted)]"}`}>Tailscale</span>
-            {tsEnabled && !tsLoading && tsReachable ? (
-              <>
-                <Input value={`${tsUrl}/v1`} readOnly className="flex-1 font-mono text-sm" />
-                <button
-                  onClick={() => copy(`${tsUrl}/v1`, "ts_url")}
-                  className="flex size-11 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-primary)]" aria-label="Copy endpoint"
-                >
-                  {copied === "ts_url" ? <Check size={18}/> : <Copy size={18}/>}
-                </button>
-                <button
-                  onClick={() => setShowDisableTsModal(true)}
-                  className="p-2 hover:bg-red-500/10 rounded text-red-500 transition-colors shrink-0"
-                  title="Disable Tailscale"
-                >
-                  <Power size={18}/>
-                </button>
-              </>
-            ) : tsEnabled && !tsLoading && !tsReachable ? (
-              <>
-                <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded border border-amber-300 dark:border-amber-800 bg-amber-500/5 text-sm text-amber-600 dark:text-amber-400">
-                  <LoaderCircle size={16} className="animate-spin shrink-0"/>
-                  {tsEverReachable ? "Tailscale reconnecting..." : "Tailscale checking..."}
-                </div>
-                <button
-                  onClick={() => setShowDisableTsModal(true)}
-                  className="p-2 hover:bg-red-500/10 rounded text-red-500 transition-colors shrink-0"
-                  title="Disable Tailscale"
-                >
-                  <Power size={18}/>
-                </button>
-              </>
-            ) : (tsLoading || tsConnecting) ? (
-              <>
-                <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded border border-border bg-input text-sm text-text-muted">
-                  <LoaderCircle size={16} className="animate-spin shrink-0"/>
-                  {tsProgress || "Connecting..."}
-                </div>
-                {tsAuthUrl && (
-                  <Button
-                    size="sm"
-                    icon="open_in_new"
-                    onClick={() => window.open(tsAuthUrl, "tailscale_auth", "width=600,height=700,noopener,noreferrer")}
-                  >
-                    {tsAuthLabel || "Open"}
-                  </Button>
-                )}
-                <button
-                  onClick={() => { setTsLoading(false); setTsConnecting(false); setTsProgress(""); clearUserAuth(); }}
-                  className="p-2 hover:bg-red-500/10 rounded text-red-500 transition-colors shrink-0"
-                  title="Stop"
-                >
-                  <Power size={18}/>
-                </button>
-              </>
-            ) : tsStatus?.type === "error" ? (
-              <>
-                <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded border border-red-300 dark:border-red-800 bg-red-500/5 text-sm text-red-600 dark:text-red-400">
-                  <AlertCircle size={16} className="shrink-0"/>
-                  {tsStatus.message}
-                </div>
-                <Button size="sm" icon="vpn_lock" onClick={handleOpenTsModal}>Enable</Button>
-              </>
-            ) : (
-              <Button
-                size="sm"
-                icon="vpn_lock"
-                onClick={() => {
-                  if (isLoginUnsafe) {
-                    setTsStatus({ type: "error", message: `Security required: ${unsafeReason}` });
-                    return;
-                  }
-                  handleOpenTsModal();
-                }}
-
-              >
-                Enable
-              </Button>
-            )}
-          </div>
+    <main className="min-w-0 max-w-full space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+      <header className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2"><h1 className="text-[length:var(--text-xl)] font-semibold tracking-[-0.02em]">Endpoint &amp; API keys</h1><span className="text-xs text-text-muted">Local mode</span></div>
+          <p className="mt-1 text-sm text-text-muted">Secure the <code className="font-[var(--font-data)]">/v1</code> gateway with a named credential.</p>
         </div>
+        <Button icon="add" onClick={() => setShowAddModal(true)}>Create API key</Button>
+      </header>
 
-        {/* Pre-enable security gate banner */}
-        {isLoginUnsafe && !tunnelEnabled && !tsEnabled && (
-          <div className="mt-4">
-            <SecurityWarning
-              message={unsafeReason}
-              action={{ label: "Open settings", href: "/dashboard/profile" }}
-            />
-          </div>
-        )}
-
-        {/* Security warnings when tunnel or tailscale is active */}
-        {(tunnelEnabled || tsEnabled) && (
-          <div className="mt-4 flex flex-col gap-2">
-            {!requireApiKey && (
-              <SecurityWarning
-                message="Require API key is disabled — your endpoint is publicly accessible without authentication."
-                action={{ label: "Enable", href: "#require-api-key" }}
-              />
-            )}
-            {(!requireLogin || !hasPassword) && (
-              <SecurityWarning
-                message={
-                  !requireLogin
-                    ? "Require login is disabled — anyone can access your dashboard via tunnel."
-                    : "Dashboard uses the default password — change it in Profile settings."
-                }
-                action={{
-                  label: !requireLogin ? "Enable" : "Change password",
-                  href: "/dashboard/profile",
-                }}
-              />
-            )}
-          </div>
-        )}
-
-        {/* Tunnel dashboard access option */}
-        {(tunnelEnabled || tsEnabled) && (
-          <div className="mt-4 pt-4 border-t border-border flex items-center gap-3">
-            <Toggle
-              checked={tunnelDashboardAccess}
-              onChange={() => handleTunnelDashboardAccess(!tunnelDashboardAccess)}
-            />
-            <div className="flex items-center gap-1.5">
-              <p className="font-medium text-sm">Allow dashboard access via tunnel</p>
-              <Tooltip text="When enabled, the dashboard can be accessed through your tunnel or Tailscale URL (login still required). When disabled, dashboard access via tunnel/Tailscale is completely blocked." />
-            </div>
-          </div>
-        )}
-      </LedgerBand>
-
-      {/* API Keys */}
-      <LedgerBand number="02" title="API keys" summary={`${keys.length} credential${keys.length === 1 ? "" : "s"}`} id="require-api-key">
-        <div className="flex flex-col gap-3 border-b border-[var(--color-border)] p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2"><KeyRound size={18} className="text-[var(--color-primary)]"/><h3 className="font-semibold">Credentials</h3></div>
-          <Button icon="add" onClick={() => setShowAddModal(true)}>
-            Create Key
-          </Button>
+      <section className="rounded-[var(--radius-field)] border border-border bg-surface" aria-labelledby="security-title">
+        <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div><h2 id="security-title" className="text-sm font-semibold">Security</h2><p className="mt-1 text-xs text-text-muted">API key required <span className={requireApiKey ? "text-success" : "text-danger"}>{requireApiKey ? "Enabled" : "Not required"}</span> · Remote exposure {tunnelEnabled || tsEnabled ? "on" : "off"}</p></div>
+          <a href="/dashboard/profile" className="text-sm text-primary hover:underline">Open settings</a>
         </div>
+        {(isLoginUnsafe || (isRemoteHost && !requireApiKey)) && <div className="border-t border-border p-3"><SecurityWarning message={isLoginUnsafe ? unsafeReason : "Remote API access is open without a required key."} action={{ label: "Open settings", href: "/dashboard/profile" }} /></div>}
+      </section>
 
-        <div className="flex items-center justify-between gap-4 border-b border-[var(--color-border)] p-4">
-          <div>
-            <p className="font-medium">Require API key</p>
-            <p className="text-sm text-text-muted">
-              Requests without a valid key will be rejected
-            </p>
-          </div>
-          <Toggle
-            checked={requireApiKey}
-            onChange={() => handleRequireApiKey(!requireApiKey)}
-          />
-        </div>
+      <section className="overflow-hidden rounded-[var(--radius-field)] border border-border bg-surface" aria-labelledby="endpoints-title">
+        <header className="border-b border-border px-4 py-3"><h2 id="endpoints-title" className="font-semibold">Endpoints</h2></header>
+        <div className="hidden grid-cols-[7rem_8rem_minmax(0,1fr)_7rem_7rem] border-b border-border bg-surface-2 px-4 py-2 text-xs font-semibold text-text-muted md:grid"><span>Route</span><span>Status</span><span>Base URL</span><span>Access</span><span>Actions</span></div>
+        <EndpointRow label="Local" url={currentEndpoint} copyId="local_url" copied={copied} onCopy={copy} status="Reachable" access="Host" />
+        <EndpointRow label="Cloudflare" url={tunnelEnabled ? `${tunnelPublicUrl || tunnelUrl}/v1` : "Not configured"} copyId="tunnel_url" copied={copied} onCopy={copy} status={tunnelLoading ? tunnelProgress || "Connecting" : tunnelEnabled ? (tunnelReachable ? "Connected" : "Reconnecting") : "Off"} access={tunnelDashboardAccess ? "Dashboard and API" : "API only"} disabled={!tunnelEnabled} actions={<Button size="sm" variant="secondary" disabled={tunnelLoading} onClick={() => tunnelEnabled ? setShowDisableTunnelModal(true) : setShowEnableTunnelModal(true)}>{tunnelEnabled ? "Disable" : "Enable"}</Button>} />
+        <EndpointRow label="Tailscale" url={tsEnabled ? `${tsUrl}/v1` : "Not configured"} copyId="ts_url" copied={copied} onCopy={copy} status={tsLoading ? tsProgress || "Connecting" : tsEnabled ? (tsReachable ? "Connected" : "Reconnecting") : "Off"} access={tunnelDashboardAccess ? "Dashboard and API" : "API only"} disabled={!tsEnabled} actions={<Button size="sm" variant="secondary" disabled={tsLoading} onClick={() => tsEnabled ? setShowDisableTsModal(true) : handleOpenTsModal()}>{tsEnabled ? "Disable" : "Enable"}</Button>} />
+        {(tunnelEnabled || tsEnabled) && <div className="flex items-center justify-between gap-4 border-t border-border px-4 py-3"><div><p className="text-sm font-medium">Dashboard access</p><p className="text-xs text-text-muted">Allow authenticated dashboard access through remote routes.</p></div><Toggle checked={tunnelDashboardAccess} onChange={() => handleTunnelDashboardAccess(!tunnelDashboardAccess)} /></div>}
+      </section>
 
-        {isRemoteHost && !requireApiKey && (
-          <div className="p-4">
-            <SecurityWarning message="Endpoint is exposed without an API key." />
+      <section id="require-api-key" className="overflow-hidden rounded-[var(--radius-field)] border border-border bg-surface" aria-labelledby="keys-title">
+        <header className="flex flex-col gap-3 border-b border-border px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+          <div><h2 id="keys-title" className="font-semibold">API keys <span className="font-normal text-text-muted">({filteredKeys.length})</span></h2><p className="text-xs text-text-muted">Named credentials and routing policy.</p></div>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="relative min-w-[13rem] flex-1"><Search aria-hidden="true" className="absolute left-3 top-2.5 size-4 text-text-muted"/><span className="sr-only">Search keys</span><input type="search" value={keyQuery} onChange={(event) => setKeyQuery(event.target.value)} className="h-9 w-full rounded-[var(--radius-control)] border border-border-strong bg-surface pl-9 pr-3 text-sm" placeholder="Search keys" /></label>
+            <label><span className="sr-only">Status</span><select value={keyStatus} onChange={(event) => setKeyStatus(event.target.value)} className="h-9 rounded-[var(--radius-control)] border border-border-strong bg-surface px-3 text-sm"><option value="all">All statuses</option><option value="active">Active</option><option value="paused">Paused</option></select></label>
+            <label><span className="sr-only">Sort keys</span><select value={keySort} onChange={(event) => setKeySort(event.target.value)} className="h-9 rounded-[var(--radius-control)] border border-border-strong bg-surface px-3 text-sm"><option value="name">Name</option><option value="created">Newest</option></select></label>
+            <label className="flex min-h-9 items-center gap-2 px-2 text-sm"><Toggle size="sm" checked={requireApiKey} onChange={() => handleRequireApiKey(!requireApiKey)} />Require API key</label>
           </div>
-        )}
-
-        {keys.length === 0 ? (
-          <div className="py-10 text-center">
-            <KeyRound size={28} className="mx-auto mb-3 text-[var(--color-text-muted)]" />
-            <p className="text-text-main font-medium mb-1">No API keys yet</p>
-            <p className="text-sm text-text-muted mb-4">Create your first API key to get started</p>
-            <Button icon="add" onClick={() => setShowAddModal(true)}>
-              Create Key
-            </Button>
-          </div>
-        ) : (
-          <div className="flex flex-col">
-            {keys.map((key) => (
-              <div
-                key={key.id}
-                className={`group grid min-h-[var(--row-h-comfortable)] grid-cols-[2.5rem_minmax(0,1fr)] gap-3 border-b border-[var(--color-border)] px-3 py-3 last:border-b-0 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto] ${key.isActive === false ? "bg-[var(--color-surface-strong)]" : "hover:bg-[var(--color-surface-hover)]"}`}
-              >
-                <span className="border-r border-[var(--color-border)] pr-3 text-center font-mono text-xs tabular-nums text-[var(--color-primary)]">{String(keys.indexOf(key) + 1).padStart(2, "0")}</span>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">{key.name}</p>
-                  <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
-                    <code className="max-w-full break-all font-mono text-xs text-text-muted">
-                      {visibleKeys.has(key.id) ? key.key : maskKey(key.key)}
-                    </code>
-                    <button
-                      onClick={() => toggleKeyVisibility(key.id)}
-                      className="p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded text-text-muted hover:text-primary transition-all"
-                      title={visibleKeys.has(key.id) ? "Hide key" : "Show key"}
-                    >
-                      {visibleKeys.has(key.id) ? <EyeOff size={14}/> : <Eye size={14}/>}
-                    </button>
-                    <button
-                      onClick={() => copy(key.key, key.id)}
-                      className="p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded text-text-muted hover:text-primary transition-all"
-                    >
-                      {copied === key.id ? <Check size={14}/> : <Copy size={14}/>}
-                    </button>
-                  </div>
-                  <p className="text-xs text-text-muted mt-1">
-                    Created {new Date(key.createdAt).toLocaleDateString()}
-                    {(key.rpmLimit > 0 || key.tpmLimit > 0) && (
-                      <span> · {(key.rpmLimit > 0) ? `${key.rpmLimit} rpm` : ""}{(key.rpmLimit > 0 && key.tpmLimit > 0) ? " · " : ""}{(key.tpmLimit > 0) ? `${key.tpmLimit} tpm` : ""}</span>
-                    )}
-                    {(key.modelPolicy && key.modelPolicy !== "off") && (
-                      <span> · {key.modelPolicy}</span>
-                    )}
-                  </p>
-                  {key.isActive === false && (
-                    <p className="text-xs text-orange-500 mt-1">Paused</p>
-                  )}
-                </div>
-                <div className="col-start-2 flex items-center gap-2 sm:col-start-3">
-                  <button
-                    onClick={() => setManageKey(key)}
-                    className="p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded text-text-muted hover:text-primary transition-all"
-                    title="Manage key"
-                  >
-                    <Settings size={18}/>
-                  </button>
-                  <Toggle
-                    size="sm"
-                    checked={key.isActive ?? true}
-                    onChange={(checked) => {
-                      if (key.isActive && !checked) {
-                        setConfirmState({
-                          title: "Pause API Key",
-                          message: `Pause API key "${key.name}"?\n\nThis key will stop working immediately but can be resumed later.`,
-                          onConfirm: async () => {
-                            setConfirmState(null);
-                            handleToggleKey(key.id, checked);
-                          }
-                        });
-                      } else {
-                        handleToggleKey(key.id, checked);
-                      }
-                    }}
-                    title={key.isActive ? "Pause key" : "Resume key"}
-                  />
-                  <button
-                    onClick={() => handleDeleteKey(key.id)}
-                    className="p-2 hover:bg-red-500/10 rounded text-red-500 transition-colors"
-                  >
-                    <Trash2 size={18}/>
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </LedgerBand>
+        </header>
+        <div className="hidden grid-cols-[minmax(9rem,1fr)_minmax(12rem,1.5fr)_minmax(8rem,1fr)_8rem_7rem_7rem] border-b border-border bg-surface-2 px-4 py-2 text-xs font-semibold text-text-muted md:grid"><span>Name</span><span>Key</span><span>Policy</span><span>Limits</span><span>Created</span><span>Status / actions</span></div>
+        {!filteredKeys.length ? <div className="px-4 py-12 text-center"><KeyRound className="mx-auto size-7 text-text-muted"/><p className="mt-3 font-semibold">{keys.length ? "No keys match this search." : "No API keys yet"}</p><p className="mt-1 text-sm text-text-muted">{keys.length ? "Clear search or change the status filter." : "Create a named key before sending requests to /v1."}</p>{keys.length ? <button type="button" className="mt-3 text-sm text-primary hover:underline" onClick={() => { setKeyQuery(""); setKeyStatus("all"); }}>Clear search</button> : <Button className="mt-4" onClick={() => setShowAddModal(true)}>Create API key</Button>}</div> : filteredKeys.map((key) => <div key={key.id} className="grid min-w-0 gap-2 border-b border-border px-4 py-3 last:border-b-0 hover:bg-surface-hover md:grid-cols-[minmax(9rem,1fr)_minmax(12rem,1.5fr)_minmax(8rem,1fr)_8rem_7rem_7rem] md:items-center">
+          <div className="min-w-0"><p className="line-clamp-2 text-sm font-medium">{key.name}</p></div>
+          <div className="flex min-w-0 items-center gap-1"><code className="min-w-0 truncate font-[var(--font-data)] text-xs text-text-muted" title={maskKey(key.key)}>{visibleKeys.has(key.id) ? key.key : maskKey(key.key)}</code><button type="button" onClick={() => toggleKeyVisibility(key.id)} className="grid size-9 shrink-0 place-content-center rounded-[var(--radius-control)] hover:bg-surface-active" aria-label={visibleKeys.has(key.id) ? `Hide ${key.name} key` : `Show ${key.name} key`}>{visibleKeys.has(key.id) ? <EyeOff size={14}/> : <Eye size={14}/>}</button><button type="button" onClick={() => copy(key.key, key.id)} className="grid size-9 shrink-0 place-content-center rounded-[var(--radius-control)] text-primary hover:bg-surface-active" aria-label={`Copy ${key.name} key`}>{copied === key.id ? <Check size={14}/> : <Copy size={14}/>}</button></div>
+          <div className="text-xs text-text-muted">{key.modelPolicy === "whitelist" ? `${parsePolicyCount(key.allowedModels)} allowed` : key.modelPolicy === "blacklist" ? `${parsePolicyCount(key.blockedModels)} blocked` : "All models"}</div>
+          <div className="text-xs text-text-muted">{key.rpmLimit > 0 ? `${key.rpmLimit} RPM` : "Unlimited"}</div>
+          <div className="font-[var(--font-data)] text-xs text-text-muted">{new Date(key.createdAt).toLocaleDateString()}</div>
+          <div className="flex items-center justify-between gap-1 md:justify-start"><Toggle size="sm" checked={key.isActive ?? true} onChange={(checked) => handleToggleKey(key.id, checked)} title={key.isActive ? "Pause key" : "Resume key"}/><button type="button" onClick={() => setManageKey(key)} className="grid size-9 place-content-center rounded-[var(--radius-control)] text-primary hover:bg-surface-active" aria-label={`Manage ${key.name}`}><Settings size={16}/></button><button type="button" onClick={() => handleDeleteKey(key.id)} className="grid size-9 place-content-center rounded-[var(--radius-control)] text-danger hover:bg-danger-wash" aria-label={`Delete ${key.name}`}><Trash2 size={16}/></button></div>
+        </div>)}
+      </section>
 
       {/* Add Key Modal */}
       <Modal
@@ -1352,13 +1055,23 @@ export default function APIPageClient({ machineId }) {
         message={confirmState?.message}
         variant="danger"
       />
-    </div>
+    </main>
   );
 }
 
 
-function LedgerBand({ number, title, summary, action, id, children }) {
-  return <section id={id} className="min-w-0 overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)]"><header className="flex flex-col gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-center gap-3"><span className="font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">{number}</span><div className="min-w-0"><h2 className="font-semibold">{title}</h2>{summary && <p className="text-xs text-[var(--color-text-muted)]">{summary}</p>}</div></div>{action}</header>{children}</section>;
+function parsePolicyCount(value) {
+  if (Array.isArray(value)) return value.length;
+  if (!value) return 0;
+  try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed.length : 0; } catch { return String(value).split(",").filter(Boolean).length; }
+}
+
+function Modal({ isOpen, title, onClose, children }) {
+  return <Dialog open={isOpen} title={title} onDismiss={onClose}>{children}</Dialog>;
+}
+
+function ConfirmModal({ isOpen, onClose, onConfirm, title, message }) {
+  return <ConfirmDialog open={isOpen} onCancel={onClose} onConfirm={onConfirm} title={title} description={message} actionLabel={title || "Continue"} destructive />;
 }
 
 

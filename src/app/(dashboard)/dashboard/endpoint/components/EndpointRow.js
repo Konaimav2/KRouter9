@@ -1,23 +1,19 @@
 "use client";
 
-import { Input } from "@/shared/components";
 import { Check, Copy } from "lucide-react";
 
-/** Reusable endpoint row component */
-export default function EndpointRow({ label, url, copyId, copied, onCopy, badge, actions }) {
+export default function EndpointRow({ label, url, copyId, copied, onCopy, status = "Reachable", access = "Host", disabled = false, actions }) {
+  const healthy = /reachable|connected/i.test(status);
   return (
-    <div className="grid min-w-0 grid-cols-[5.5rem_minmax(0,1fr)_2.75rem] items-center gap-2">
-      <span className={`border-r border-[var(--color-border)] px-2 py-1 text-center font-mono text-xs ${
-          (badge === "CF" || badge === "TS") ? "text-[var(--color-primary)]" : "text-[var(--color-text-muted)]"
-        }`}>{label}</span>
-      <Input value={url} readOnly className="flex-1 font-mono text-sm" />
-      <button
-        onClick={() => onCopy(url, copyId)}
-        className="flex size-11 items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-primary)]" aria-label={`Copy ${label} endpoint`}
-      >
-        {copied === copyId ? <Check size={18} /> : <Copy size={18} />}
-      </button>
-      {actions}
+    <div className="grid min-w-0 gap-2 border-b border-border px-4 py-3 last:border-b-0 md:grid-cols-[7rem_8rem_minmax(0,1fr)_7rem_7rem] md:items-center">
+      <span className="text-sm font-medium">{label}</span>
+      <span className={`text-xs ${healthy ? "text-success" : status === "Off" ? "text-text-muted" : "text-warning"}`}>{status}</span>
+      <code className="min-w-0 truncate font-[var(--font-data)] text-xs text-text-muted" title={url}>{url}</code>
+      <span className="text-xs text-text-muted">{access}</span>
+      <div className="flex items-center gap-1">
+        <button type="button" disabled={disabled} onClick={() => onCopy(url, copyId)} className="flex min-h-9 items-center gap-2 rounded-[var(--radius-control)] px-2 text-xs text-primary hover:bg-surface-hover disabled:text-disabled-text" aria-label={`Copy ${label} endpoint`}>{copied === copyId ? <Check size={15}/> : <Copy size={15}/>}Copy</button>
+        {actions}
+      </div>
     </div>
   );
 }
