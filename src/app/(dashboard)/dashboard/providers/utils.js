@@ -43,7 +43,9 @@ export function slugifyCustomProviderName(name) {
 export function buildCustomProviderRouteSlugs(nodes = []) {
   const seen = new Map();
   return new Map(nodes.map((node) => {
-    const base = `custom-${slugifyCustomProviderName(node?.name || node?.id)}`;
+    const prefix = String(node?.prefix || "").trim().toLowerCase();
+    const slug = prefix || slugifyCustomProviderName(node?.name || node?.id);
+    const base = `custom-${slug}`;
     const dedupeKey = base.toLowerCase();
     const occurrence = (seen.get(dedupeKey) || 0) + 1;
     seen.set(dedupeKey, occurrence);
