@@ -54,6 +54,7 @@ export default function ProviderDetailPage() {
   const [loading, setLoading] = useState(true);
   // P2: incremental render for provider pages with thousands of connections.
   const [visibleCount, setVisibleCount] = useState(50);
+  const [providerNode, setProviderNode] = useState(null);
   const [proxyPools, setProxyPools] = useState([]);
   const [showOAuthModal, setShowOAuthModal] = useState(false);
   const [showIFlowCookieModal, setShowIFlowCookieModal] = useState(false);
