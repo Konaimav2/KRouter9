@@ -1,3 +1,23 @@
+# v3.2.0 (2026-10-08) — Route Matrix recomposition + picker truth
+
+## New UI
+- NewAPI-console recomposition: unified overlay system (dialog/confirm/popover/sheet)
+  + endpoint, quota, console-log, usage (overview/logs/details/keys), skills rebuilt
+  on one grammar; single scroll container (dual-scroll whiteout gone)
+- Custom provider slug URLs (`custom-grip`, `custom-gripcla`) with legacy dual-resolve
+- Manage-key modal is configuration-only (usage analytics live on Usage page)
+- Console Log carries no Headroom setup (Token Saver only); quota axis marker fixed
+
+## Picker truth (live-fetch removed)
+- Playground picker no longer probes per-connection `/models`; sources are static
+  catalogs + your added models (custom store + aliases), disabled-filter honored
+- Quota order proven on real data: rendered cards == server expiring order, no
+  provider clustering; usage sort survives repeated clicks (URL-persisted)
+
+## Fixes
+- Provider detail 500 (F16 deleted state, dangling refs) — restored, slug-certified
+- Console source column overflow; quota reset-axis stray marker
+
 # v3.1.0 (2026-10-04) — Ledger completion: leftover surfaces, blue accent, usage depth
 
 ## New surfaces
