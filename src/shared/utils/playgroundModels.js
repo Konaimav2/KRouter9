@@ -45,42 +45,9 @@ export function normalizeStaticModel(model, connection) {
   };
 }
 
-export function normalizeLiveModel(model, connection) {
-  const rawId = typeof model === "string" ? model : model?.id || model?.name || model?.model || "";
-  if (!rawId) return null;
-
-  const displayName = typeof model === "string"
-    ? model
-    : model?.name || model?.displayName || rawId;
-
-  // Always emit a fully-qualified requestModel (alias/prefix + id), mirroring
-  // ModelSelectModal and the /v1/models canonical shape.
-  const prefix = requestPrefixFor(connection);
-  const providerId = connection.provider || connection.id;
-  let requestModel;
-  if (rawId === prefix || rawId.startsWith(`${prefix}/`)) {
-    requestModel = rawId;
-  } else if (rawId === providerId || rawId.startsWith(`${providerId}/`)) {
-    requestModel = `${prefix}${rawId.slice(providerId.length)}`;
-  } else if (rawId.includes("/")) {
-    requestModel = `${prefix}/${rawId.split("/").pop()}`;
-  } else {
-    requestModel = `${prefix}/${rawId}`;
-  }
-
-  return {
-    id: requestModel,
-    requestModel,
-    name: displayName,
-    providerId: connection.provider,
-    providerName: getProviderLabel(connection),
-    source: "live",
-  };
-}
-
 // Match the disabled-model store's `{ [alias]: modelId[] }` shape. Picker
 // rows are normalized to `{alias}/{modelId}` before this layer, so one pure
-// filter consistently covers static, live, and curated sources. Malformed or
+// filter consistently covers static and curated sources. Malformed or
 // unavailable maps fail open.
 export function filterDisabledPickerModels(models, disabledByAlias) {
   if (!disabledByAlias || typeof disabledByAlias !== "object") {
@@ -135,8 +102,8 @@ export function filterModelGroups(groups, query) {
 }
 
 // Combos group for the playground picker. Combos live outside connections, so the
-// connection-scoped picker sources (static catalogs, per-connection live fetch) can
-// never surface them — this builds the group from the combos list instead.
+// static catalogs and curated picker sources can never surface them — this builds
+// the group from the combos list instead.
 // requestModel stays the BARE combo name: the server resolves combos before provider
 // routing (handleChat combo path). Returns null when empty (caller filters it out).
 export function buildComboGroup(combos) {
@@ -229,8 +196,8 @@ export function selectConnectionCuratedIds(customModels, modelAliases, connectio
   return { ids, outputAlias, staticAlias, providerId };
 }
 
-// Normalize one curated bare id to the fully-qualified picker entry — the
-// same `{prefix}/{id}` shape normalizeLiveModel emits and /v1/models lists.
+// Normalize one curated bare id to the fully-qualified picker entry used by
+// the playground and /v1/models lists.
 export function normalizeCuratedModel(entry, connection, outputAlias) {
   const rawId = typeof entry === "string" ? entry : entry?.id;
   if (!rawId) return null;

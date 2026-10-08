@@ -11,7 +11,6 @@ import {
   getProviderGroupLabel,
   requestPrefixFor,
   normalizeStaticModel,
-  normalizeLiveModel,
   normalizeCuratedModel,
   selectConnectionCuratedIds,
   isComboShadowed,
@@ -133,14 +132,6 @@ function cloneSession(session) {
     ...session,
     messages: Array.isArray(session.messages) ? session.messages.map((message) => ({ ...message })) : [],
   };
-}
-
-function parseProviderModelsPayload(data) {
-  if (Array.isArray(data?.models)) return data.models;
-  if (Array.isArray(data?.data)) return data.data;
-  if (Array.isArray(data?.results)) return data.results;
-  if (Array.isArray(data)) return data;
-  return [];
 }
 
 export default function BasicChatPageClient() {
@@ -346,29 +337,6 @@ export default function BasicChatPageClient() {
           delete group.curatedCache;
         }
 
-        const liveResults = await Promise.all(
-          connections.map(async (connection) => {
-            try {
-              const response = await fetch(`/api/providers/${connection.id}/models`, { cache: "no-store" });
-              const data = await response.json().catch(() => ({}));
-              if (!response.ok) return { connection, models: [] };
-              const models = parseProviderModelsPayload(data)
-                .map((model) => normalizeLiveModel(model, connection))
-                .filter(Boolean);
-              return { connection, models };
-            } catch {
-              return { connection, models: [] };
-            }
-          })
-        );
-
-        for (const result of liveResults) {
-          const providerId = result.connection.provider || result.connection.id;
-          const group = providerMap.get(providerId);
-          if (!group) continue;
-          group.models.push(...result.models);
-        }
-
         const normalized = Array.from(providerMap.values())
           .map((group) => {
             const models = dedupeModels(filterDisabledPickerModels(group.models, disabledByAlias))
@@ -384,7 +352,7 @@ export default function BasicChatPageClient() {
           .filter((group) => group.models.length > 0)
           .sort((a, b) => String(a.providerName).localeCompare(String(b.providerName)));
 
-        // Combos live outside connections, so the connection-scoped sources above
+        // Combos live outside connections, so static catalogs and curated models
         // can never surface them — prepend as their own group (fail-open: a combos
         // fetch failure only hides the group, never the providers).
         try {
