@@ -260,6 +260,28 @@ export default function BasicChatPageClient() {
           return;
         }
 
+        let customModels = [];
+        try {
+          const customModelsRes = await fetch("/api/models/custom");
+          const customModelsData = await customModelsRes.json().catch(() => ({}));
+          if (customModelsRes.ok && Array.isArray(customModelsData.models)) {
+            customModels = customModelsData.models;
+          }
+        } catch {
+          // Custom-model store unavailable: static catalogs remain usable.
+        }
+
+        let modelAliases = {};
+        try {
+          const modelAliasesRes = await fetch("/api/models/alias");
+          const modelAliasesData = await modelAliasesRes.json().catch(() => ({}));
+          if (modelAliasesRes.ok && modelAliasesData.aliases && typeof modelAliasesData.aliases === "object") {
+            modelAliases = modelAliasesData.aliases;
+          }
+        } catch {
+          // Alias store unavailable: static catalogs remain usable.
+        }
+
         let disabledByAlias = {};
         try {
           const disabledRes = await fetch("/api/models/disabled", { cache: "no-store" });
@@ -304,8 +326,8 @@ export default function BasicChatPageClient() {
           group.models.push(...staticModels);
           group.curatedCache = group.curatedCache || [];
           const { ids: curatedIds, outputAlias } = selectConnectionCuratedIds(
-            providersData.customModels || [],
-            providersData.modelAliases || {},
+            customModels,
+            modelAliases,
             connection
           );
           for (const entry of curatedIds) {

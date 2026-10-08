@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { transformSync } from "@babel/core";
 import presetReact from "next/dist/compiled/babel/preset-react";
 import transformModulesCommonjs from "next/dist/compiled/babel/plugin-transform-modules-commonjs";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import * as playgroundModels from "../../src/shared/utils/playgroundModels.js";
 
 const sourcePath = new URL(
@@ -16,17 +16,20 @@ const compiledClient = transformSync(readFileSync(sourcePath, "utf8"), {
   plugins: [transformModulesCommonjs],
 }).code;
 
-function loadClient(effects) {
+function loadClient(effects, stateSetters) {
+  let stateIndex = 0;
   const testReact = {
     ...React,
     useCallback: (callback) => callback,
     useEffect: (effect) => effects.push(effect),
     useMemo: (factory) => factory(),
     useRef: (initialValue) => ({ current: initialValue }),
-    useState: (initialValue) => [
-      typeof initialValue === "function" ? initialValue() : initialValue,
-      vi.fn(),
-    ],
+    useState: (initialValue) => {
+      const setter = vi.fn();
+      stateSetters[stateIndex] = setter;
+      stateIndex += 1;
+      return [typeof initialValue === "function" ? initialValue() : initialValue, setter];
+    },
   };
   const passthrough = ({ children }) => children;
   const moduleMocks = {
@@ -40,7 +43,7 @@ function loadClient(effects) {
     "open-sse/providers/thinkingLevels.js": { getThinkingLevels: () => null },
     "@/shared/constants/providers": {
       isAnthropicCompatibleProvider: () => false,
-      isOpenAICompatibleProvider: () => false,
+      isOpenAICompatibleProvider: () => true,
     },
     "@/shared/utils/playgroundModels.js": playgroundModels,
   };
@@ -61,44 +64,59 @@ function jsonResponse(data, { ok = true, status = 200 } = {}) {
   return { ok, status, json: async () => data };
 }
 
-describe("playground model picker catalog sources", () => {
-  it("never requests per-connection model endpoints", async () => {
-    const effects = [];
-    const calls = [];
-    vi.stubGlobal("fetch", vi.fn(async (url) => {
-      calls.push(String(url));
+async function runLoader(fetchImpl) {
+  const effects = [];
+  const stateSetters = [];
+  vi.stubGlobal("fetch", vi.fn(fetchImpl));
+  const BasicChatPageClient = loadClient(effects, stateSetters);
+  BasicChatPageClient();
+  effects[2]();
+  for (let turn = 0; turn < 20 && stateSetters[0].mock.calls.length === 0; turn += 1) {
+    await Promise.resolve();
+  }
+  return stateSetters[0].mock.calls.at(-1)?.[0];
+}
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe("playground curated-store wiring", () => {
+  it("includes custom-store models qualified with the connection alias", async () => {
+    const groups = await runLoader(async (url) => {
       if (url === "/api/providers?mode=full") {
         return jsonResponse({
-          connections: [{ id: "connection-1", provider: "openai", isActive: true }],
-          customModels: [],
-          modelAliases: {},
+          connections: [{
+            id: "connection-1",
+            provider: "openai-compatible-connection-1",
+            isActive: true,
+            providerSpecificData: { prefix: "gripcla", nodeName: "GripClaude" },
+          }],
         });
       }
-      if (url === "/api/models/custom") return jsonResponse({ models: [] });
+      if (url === "/api/models/custom") {
+        return jsonResponse({ models: [{ providerAlias: "gripcla", id: "curated-model", type: "llm", name: "Curated" }] });
+      }
       if (url === "/api/models/alias") return jsonResponse({ aliases: {} });
       if (url === "/api/models/disabled") return jsonResponse({ disabled: {} });
       if (url === "/api/combos") return jsonResponse({ combos: [] });
       throw new Error(`Unexpected fetch: ${url}`);
-    }));
+    });
 
-    const BasicChatPageClient = loadClient(effects);
-    BasicChatPageClient();
-    expect(effects.length).toBeGreaterThanOrEqual(3);
-    effects[2]();
-    for (let turn = 0; turn < 24 && calls.length < 6; turn += 1) {
-      await Promise.resolve();
-    }
+    expect(groups.flatMap((group) => group.models).map((model) => model.requestModel))
+      .toContain("gripcla/curated-model");
+  });
 
-    expect(calls).toEqual([
-      "/api/providers?mode=full",
-      "/api/models/custom",
-      "/api/models/alias",
-      "/api/models/disabled",
-      "/api/combos",
-      "/api/combos",
-    ]);
-    expect(calls.some((url) => /^\/api\/providers\/[^/]+\/models$/.test(url))).toBe(false);
+  it("still builds static groups when curated-store reads fail", async () => {
+    const groups = await runLoader(async (url) => {
+      if (url === "/api/providers?mode=full") {
+        return jsonResponse({ connections: [{ id: "connection-1", provider: "openai", isActive: true }] });
+      }
+      if (url === "/api/models/custom" || url === "/api/models/alias") throw new Error("store unavailable");
+      if (url === "/api/models/disabled") return jsonResponse({ disabled: {} });
+      if (url === "/api/combos") return jsonResponse({ combos: [] });
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
 
-    vi.unstubAllGlobals();
+    expect(groups.flatMap((group) => group.models).map((model) => model.requestModel))
+      .toContain("openai/static-model");
   });
 });
