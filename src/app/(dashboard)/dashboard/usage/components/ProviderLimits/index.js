@@ -1047,7 +1047,7 @@ export default function ProviderLimits({ sort } = {}) {
         </div>
       </div>
 
-      <div className="flex items-center gap-3 border-b border-border pb-3 text-xs text-text-muted"><span className="h-2 w-2 bg-primary" aria-hidden="true" /><span>Earlier reset</span><span className="ml-auto">Later or unknown reset</span></div>
+      <div className="flex items-center gap-3 border-b border-border pb-3 text-xs text-text-muted"><span>Earlier reset</span><span className="ml-auto">Later or unknown reset</span></div>
 
       {/* Global reset runway */}
       {expiringFirst && (

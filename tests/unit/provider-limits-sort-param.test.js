@@ -96,3 +96,16 @@ describe("ProviderLimits server sort", () => {
     expect(setExpiringFirst.mock.calls[0][0](false)).toBe(true);
   });
 });
+
+describe("ProviderLimits reset axis", () => {
+  it("renders only the two reset labels without stray marker elements", () => {
+    const axis = source.match(
+      /<div className="[^"]*border-b border-border[^"]*">([\s\S]*?)<\/div>/,
+    )?.[1];
+
+    expect(axis).toBeDefined();
+    expect(axis?.match(/Earlier reset/g)).toHaveLength(1);
+    expect(axis?.match(/Later or unknown reset/g)).toHaveLength(1);
+    expect(axis?.match(/aria-hidden|h-2 w-2|bg-primary/g) ?? []).toHaveLength(0);
+  });
+});

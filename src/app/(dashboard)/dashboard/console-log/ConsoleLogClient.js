@@ -29,7 +29,7 @@ function parseLine(line) {
 function renderLine(line) {
   const parsed = parseLine(redactSensitiveText(line));
   return (
-    <div className="grid min-w-0 grid-cols-1 gap-1 border-b border-border px-3 py-2 last:border-b-0 md:grid-cols-[5.5rem_5.5rem_minmax(6.25rem,10rem)_minmax(0,1fr)] md:gap-0">
+    <div className="grid min-w-0 grid-cols-1 gap-1 border-b border-border px-3 py-2 last:border-b-0 md:grid-cols-[5.5rem_5.5rem_minmax(8rem,10rem)_minmax(0,1fr)] md:gap-0">
       <div className="font-[var(--font-data)] text-text-muted md:pr-3">{parsed.time}</div>
       <div className={`font-semibold ${LEVEL_STYLES[parsed.level] || LEVEL_STYLES.LOG} md:border-l md:border-border md:px-3`}>{parsed.level}</div>
       <div className="min-w-0 truncate text-text-muted md:border-l md:border-border md:px-3" title={parsed.source}>{parsed.source}</div>
