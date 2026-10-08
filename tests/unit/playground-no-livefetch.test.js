@@ -74,6 +74,8 @@ describe("playground model picker catalog sources", () => {
           modelAliases: {},
         });
       }
+      if (url === "/api/models/custom") return jsonResponse({ models: [] });
+      if (url === "/api/models/alias") return jsonResponse({ aliases: {} });
       if (url === "/api/models/disabled") return jsonResponse({ disabled: {} });
       if (url === "/api/combos") return jsonResponse({ combos: [] });
       throw new Error(`Unexpected fetch: ${url}`);
@@ -83,12 +85,14 @@ describe("playground model picker catalog sources", () => {
     BasicChatPageClient();
     expect(effects.length).toBeGreaterThanOrEqual(3);
     effects[2]();
-    for (let turn = 0; turn < 12 && calls.length < 4; turn += 1) {
+    for (let turn = 0; turn < 24 && calls.length < 6; turn += 1) {
       await Promise.resolve();
     }
 
     expect(calls).toEqual([
       "/api/providers?mode=full",
+      "/api/models/custom",
+      "/api/models/alias",
       "/api/models/disabled",
       "/api/combos",
       "/api/combos",
