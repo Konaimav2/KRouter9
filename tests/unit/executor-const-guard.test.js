@@ -86,10 +86,8 @@ describe("OpenCode Free endpoint routing", () => {
     expect(chat.reasoning_effort).toBe("high");
   });
 
-  it("resolves gpt-6.1-sol through the provider models lookup (provider default format)", () => {
-    const entry = opencode.models.find((m) => m.id === "gpt-6.1-sol");
-    expect(entry?.name).toBe("GPT 6.1 Sol");
-    expect(entry?.targetFormat).toBeUndefined();
-    expect(getProviderModels("oc").some((m) => m.id === "gpt-6.1-sol")).toBe(true);
+  it("does not advertise plan-gated ids on the free-tier static catalog", () => {
+    expect(opencode.models.some((m) => m.id === "gpt-6.1-sol")).toBe(false);
+    expect(getProviderModels("oc").some((m) => m.id === "gpt-6.1-sol")).toBe(false);
   });
 });
