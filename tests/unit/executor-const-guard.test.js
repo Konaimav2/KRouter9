@@ -8,6 +8,7 @@ import {
 import { DEFAULT_MAX_TOKENS, DEFAULT_MIN_TOKENS } from "../../open-sse/config/runtimeConfig.js";
 import mimoFree from "../../open-sse/providers/registry/mimo-free.js";
 import opencode from "../../open-sse/providers/registry/opencode.js";
+import { getProviderModels } from "../../open-sse/config/providerModels.js";
 import antigravity from "../../open-sse/providers/registry/antigravity.js";
 import { OpenCodeExecutor } from "../../open-sse/executors/opencode.js";
 
@@ -83,5 +84,12 @@ describe("OpenCode Free endpoint routing", () => {
     expect(chat.max_tokens).toBe(4096);
     expect(chat.max_output_tokens).toBeUndefined();
     expect(chat.reasoning_effort).toBe("high");
+  });
+
+  it("resolves gpt-6.1-sol through the provider models lookup (provider default format)", () => {
+    const entry = opencode.models.find((m) => m.id === "gpt-6.1-sol");
+    expect(entry?.name).toBe("GPT 6.1 Sol");
+    expect(entry?.targetFormat).toBeUndefined();
+    expect(getProviderModels("oc").some((m) => m.id === "gpt-6.1-sol")).toBe(true);
   });
 });
