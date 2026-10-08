@@ -47,4 +47,10 @@ describe("U3c F14 RED: console-log spam filter + buffer", () => {
     expect(clientSource).toMatch(/renderLine\(line\)[\s\S]*redactSensitiveText\(line\)/);
     expect(clientSource).toContain("msg.logs.map(redactSensitiveText)");
   });
+
+  it("keeps the source column clear of separators and exposes truncated text", () => {
+    const clientSource = fs.readFileSync(fileURLToPath(new URL("../../src/app/(dashboard)/dashboard/console-log/ConsoleLogClient.js", import.meta.url)), "utf8");
+    expect(clientSource).toContain("md:grid-cols-[5.5rem_5.5rem_minmax(8rem,10rem)_minmax(0,1fr)]");
+    expect(clientSource).toMatch(/className="min-w-0 truncate text-text-muted md:border-l md:border-border md:px-3" title=\{parsed\.source\}/);
+  });
 });
