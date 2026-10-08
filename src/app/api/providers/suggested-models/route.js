@@ -37,16 +37,18 @@ export async function GET(request) {
   }
 
   // Optional keyed catalogs (e.g. /v1/models behind an API key): `provider`
-  // triggers a dashboard-authed server-side key lookup. Unauthed callers asking
-  // for a keyed provider get [] (fail-open), never the key, never an error.
+  // triggers a dashboard-authed server-side key lookup. Providers with no
+  // apikey connection fall back to an unauthenticated fetch (public catalogs);
+  // key-gated upstreams fail open to [] via non-OK status. Never the key,
+  // never an error.
   const provider = searchParams.get("provider");
   let headers;
   if (provider) {
+    // Keyless/public catalogs have no apikey connection — fall back to an
+    // unauthenticated fetch instead of starving them with an immediate [].
+    // Truly key-gated catalogs still fail open: upstream 401 → [] below.
     const apiKey = await resolveCatalogApiKey(request, provider);
-    if (!apiKey) {
-      return NextResponse.json({ data: [] });
-    }
-    headers = { Authorization: `Bearer ${apiKey}` };
+    if (apiKey) headers = { Authorization: `Bearer ${apiKey}` };
   }
 
   try {
