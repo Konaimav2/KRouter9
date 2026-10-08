@@ -28,6 +28,7 @@ export default {
     // /chat/completions, so the format is declared per-model, not per-provider.
     { id: "muse-spark-1.2-contributor-free", name: "Muse Spark 1.2 Contributor Free", targetFormat: "openai-responses" },
     { id: "muse-spark-1.3-contributor-free", name: "Muse Spark 1.3 Contributor Free", targetFormat: "openai-responses" },
+    { id: "gpt-6.1-sol", name: "GPT 6.1 Sol" },
   ],
   modelsFetcher: { url: "https://opencode.ai/zen/v1/models", type: "opencode-free" },
   passthroughModels: true,
