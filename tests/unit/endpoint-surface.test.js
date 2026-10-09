@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { transformSync } from "@babel/core";
 import presetReact from "next/dist/compiled/babel/preset-react";
 import transformModulesCommonjs from "next/dist/compiled/babel/plugin-transform-modules-commonjs";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const hookHarness = { cursor: 0, states: [], copiedValues: [] };
 const testReact = {
@@ -159,6 +159,11 @@ describe("endpoint and API key dashboard surface", () => {
     hookHarness.states[13] = true;
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
   it("renders endpoint status and masked API key rows", () => {
     const html = renderClient();
 
@@ -188,26 +193,46 @@ describe("endpoint and API key dashboard surface", () => {
     expect(html).not.toContain("Alpha production");
   });
 
-  it("reveals a key only after its explicit visibility action", () => {
+  it("reveals a key only after the guarded reveal fetch resolves", async () => {
+    vi.useFakeTimers();
+    const key = "sk-alpha-super-secret-1234";
+    const fetchMock = vi.fn(async (url) => {
+      expect(url).toBe("/api/keys/key-a/reveal?confirm=true");
+      return { ok: true, status: 200, json: async () => ({ key }) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
     const show = findElement(
       clientTree(),
       (node) => node.type === "button" && node.props["aria-label"] === "Show Alpha production key",
     );
-    show.props.onClick();
+    const htmlBefore = renderClient();
+    expect(htmlBefore).not.toContain("sk-alpha-super-secret-1234");
 
+    await show.props.onClick();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     const html = renderClient();
-    expect(html).toContain("sk-alpha-super-secret-1234");
+    expect(html).toContain(key);
     expect(html).toContain("Hide Alpha production key");
     expect(html).not.toContain("sk-beta-super-secret-5678");
   });
 
-  it("copies the selected full key through the shared clipboard behavior", () => {
+  it("copies the selected full key through the guarded reveal read then clipboard", async () => {
+    const key = "sk-beta-super-secret-5678";
+    const fetchMock = vi.fn(async (url) => {
+      expect(url).toBe("/api/keys/key-b/reveal?confirm=true");
+      return { ok: true, status: 200, json: async () => ({ key }) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
     const copy = findElement(
       clientTree(),
       (node) => node.type === "button" && node.props["aria-label"] === "Copy Beta paused key",
     );
-    copy.props.onClick();
+    await copy.props.onClick();
 
-    expect(hookHarness.copiedValues).toEqual(["sk-beta-super-secret-5678"]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(hookHarness.copiedValues).toEqual([key]);
   });
 });

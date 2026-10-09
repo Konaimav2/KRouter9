@@ -169,6 +169,9 @@ export default function ManageKeyModal({ apiKey, onClose, onSaved, onRotated }) 
     }
   };
 
+  // Rotate returns the raw string ONCE plus sanitized metadata (rotatedMeta);
+  // the parent merges the sanitized shape into the list and shows the raw
+  // one-time string in its own dismiss-to-clear modal.
   const handleRotate = async () => {
     if (!apiKey) return;
     setRotating(true);
@@ -180,7 +183,7 @@ export default function ManageKeyModal({ apiKey, onClose, onSaved, onRotated }) 
         setError(data.error || "Failed to rotate");
         return;
       }
-      onRotated(data.key);
+      onRotated(data);
     } catch (e) {
       setError(e.message);
     } finally {
