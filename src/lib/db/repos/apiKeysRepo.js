@@ -24,6 +24,26 @@ function rowToKey(row) {
   };
 }
 
+export function rowToKeyPublic(row) {
+  return sanitizeApiKeyRow(rowToKey(row));
+}
+
+// Server-side mask for gateway key strings. List/detail responses carry
+// maskedKey only; the raw secret leaves the server solely through the
+// guarded single-record reveal endpoint (or one-time create/rotate reads).
+export function maskGatewayKey(key) {
+  if (!key || typeof key !== "string") return "";
+  if (key.length <= 10) return "????????";
+  return `${key.slice(0, 6)}${"•".repeat(Math.max(4, key.length - 10))}${key.slice(-4)}`;
+}
+
+// Strip the raw `key` secret, keep all metadata, attach server mask.
+export function sanitizeApiKeyRow(row) {
+  if (!row) return null;
+  const { key, ...meta } = row;
+  return { ...meta, maskedKey: maskGatewayKey(key) };
+}
+
 export async function getApiKeys() {
   const db = await getAdapter();
   const rows = db.all(`SELECT * FROM apiKeys ORDER BY createdAt ASC`);

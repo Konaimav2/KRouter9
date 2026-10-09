@@ -83,8 +83,12 @@ export default function APIPageClient({ machineId }) {
   const [tunnelEverReachable, setTunnelEverReachable] = useState(false);
   const [tsEverReachable, setTsEverReachable] = useState(false);
 
-  // API key visibility toggle state
-  const [visibleKeys, setVisibleKeys] = useState(new Set());
+  // API key visibility: masked metadata only at rest. Reveal/copy fetch the raw
+  // secret via the guarded single-record endpoint and clear it ≤15s + on
+  // dismiss/navigate. Copy discards the transient immediately after writing.
+  const [revealedKeys, setRevealedKeys] = useState({}); // id -> raw string (transient)
+  const [revealError, setRevealError] = useState(null);
+  const revealTimersRef = useRef(new Map()); // id -> timeout handle
 
   // Client-side local/remote detection (UI hint only, not a security gate)
   const [isRemoteHost, setIsRemoteHost] = useState(false);
@@ -93,7 +97,99 @@ export default function APIPageClient({ machineId }) {
       setIsRemoteHost(!["localhost", "127.0.0.1", "::1"].includes(window.location.hostname));
   }, []);
 
+  // Clear any revealed secret when the page unmounts / user navigates away.
+  useEffect(() => {
+    const timers = revealTimersRef.current;
+    return () => {
+      for (const t of timers.values()) clearTimeout(t);
+      timers.clear();
+      setRevealedKeys({});
+    };
+  }, []);
+
+  const clearRevealedKey = useCallback((keyId) => {
+    const timers = revealTimersRef.current;
+    const t = timers.get(keyId);
+    if (t) {
+      clearTimeout(t);
+      timers.delete(keyId);
+    }
+    setRevealedKeys((prev) => {
+      if (!(keyId in prev)) return prev;
+      const next = { ...prev };
+      delete next[keyId];
+      return next;
+    });
+  }, []);
+
+  const scheduleRevealClear = useCallback((keyId) => {
+    const timers = revealTimersRef.current;
+    const prev = timers.get(keyId);
+    if (prev) clearTimeout(prev);
+    timers.set(keyId, setTimeout(() => {
+      timers.delete(keyId);
+      setRevealedKeys((old) => {
+        if (!(keyId in old)) return old;
+        const next = { ...old };
+        delete next[keyId];
+        return next;
+      });
+    }, 15_000));
+  }, []);
+
   const { copied, copy } = useCopyToClipboard();
+
+  // Guarded single-record read: the raw secret lives in state for <=15s,
+  // cleared on hide/delete/toggle/unmount. List/detail APIs carry maskedKey
+  // only; the raw string never flows through them.
+  const revealKey = useCallback(async (keyId) => {
+    if (!keyId) return;
+    if (revealedKeys[keyId]) {
+      clearRevealedKey(keyId);
+      return;
+    }
+    setRevealError(null);
+    try {
+      const res = await fetch(`/api/keys/${keyId}/reveal?confirm=true`, { cache: "no-store" });
+      if (!res.ok) {
+        setRevealError(res.status === 404 ? "Key not found." : "Reveal failed.");
+        return;
+      }
+      const data = await res.json();
+      if (!data || typeof data.key !== "string" || !data.key) {
+        setRevealError("Reveal failed.");
+        return;
+      }
+      setRevealedKeys((prev) => ({ ...prev, [keyId]: data.key }));
+      scheduleRevealClear(keyId);
+    } catch {
+      setRevealError("Reveal failed.");
+    }
+  }, [revealedKeys, clearRevealedKey, scheduleRevealClear]);
+
+  // Copy via the guarded read; the transient is discarded immediately after
+  // the clipboard write so the raw secret never rests in state.
+  const copyKeyViaReveal = useCallback(async (keyId) => {
+    if (!keyId) return;
+    setRevealError(null);
+    try {
+      const res = await fetch(`/api/keys/${keyId}/reveal?confirm=true`, { cache: "no-store" });
+      if (!res.ok) {
+        setRevealError(res.status === 404 ? "Key not found." : "Copy failed.");
+        return;
+      }
+      const data = await res.json();
+      if (!data || typeof data.key !== "string" || !data.key) {
+        setRevealError("Copy failed.");
+        return;
+      }
+      copy(data.key, keyId);
+      // Discard: never retain a copy-transient; drop any prior reveal too.
+      clearRevealedKey(keyId);
+    } catch {
+      setRevealError("Copy failed.");
+    }
+  }, [clearRevealedKey, copy]);
 
   // Security gate: block remote exposure while dashboard uses default password or login is off.
   const isLoginUnsafe = !requireLogin || !hasPassword;
@@ -663,11 +759,7 @@ export default function APIPageClient({ machineId }) {
           const res = await fetch(`/api/keys/${id}`, { method: "DELETE" });
           if (res.ok) {
             setKeys(keys.filter((k) => k.id !== id));
-            setVisibleKeys(prev => {
-              const next = new Set(prev);
-              next.delete(id);
-              return next;
-            });
+            clearRevealedKey(id);
           }
         } catch (error) {
           console.log("Error deleting key:", error);
@@ -684,6 +776,8 @@ export default function APIPageClient({ machineId }) {
         body: JSON.stringify({ isActive }),
       });
       if (res.ok) {
+        // Pause/resume invalidates any transient reveal for that key.
+        clearRevealedKey(id);
         setKeys(prev => prev.map(k => k.id === id ? { ...k, isActive } : k));
       }
     } catch (error) {
@@ -696,14 +790,9 @@ export default function APIPageClient({ machineId }) {
     return fullKey.slice(0, 6) + "•".repeat(fullKey.length - 10) + fullKey.slice(-4);
   };
 
-  const toggleKeyVisibility = (keyId) => {
-    setVisibleKeys(prev => {
-      const next = new Set(prev);
-      if (next.has(keyId)) next.delete(keyId);
-      else next.add(keyId);
-      return next;
-    });
-  };
+  // Client fallback only: rows prefer the server mask (key.maskedKey).
+  // Raw strings never arrive via list/detail — only via the guarded reveal.
+  const displayMask = (key) => key.maskedKey || maskKey(key.key);
 
   const [baseUrl, setBaseUrl] = useState("/v1");
 
@@ -769,10 +858,11 @@ export default function APIPageClient({ machineId }) {
             <label className="flex min-h-9 items-center gap-2 px-2 text-sm"><Toggle size="sm" checked={requireApiKey} onChange={() => handleRequireApiKey(!requireApiKey)} />Require API key</label>
           </div>
         </header>
+        {revealError && <p className="border-b border-border px-4 py-2 text-sm text-danger" role="alert">{revealError}</p>}
         <div className="hidden grid-cols-[minmax(9rem,1fr)_minmax(12rem,1.5fr)_minmax(8rem,1fr)_8rem_7rem_7rem] border-b border-border bg-surface-2 px-4 py-2 text-xs font-semibold text-text-muted md:grid"><span>Name</span><span>Key</span><span>Policy</span><span>Limits</span><span>Created</span><span>Status / actions</span></div>
         {!filteredKeys.length ? <div className="px-4 py-12 text-center"><KeyRound className="mx-auto size-7 text-text-muted"/><p className="mt-3 font-semibold">{keys.length ? "No keys match this search." : "No API keys yet"}</p><p className="mt-1 text-sm text-text-muted">{keys.length ? "Clear search or change the status filter." : "Create a named key before sending requests to /v1."}</p>{keys.length ? <button type="button" className="mt-3 text-sm text-primary hover:underline" onClick={() => { setKeyQuery(""); setKeyStatus("all"); }}>Clear search</button> : <Button className="mt-4" onClick={() => setShowAddModal(true)}>Create API key</Button>}</div> : filteredKeys.map((key) => <div key={key.id} className="grid min-w-0 gap-2 border-b border-border px-4 py-3 last:border-b-0 hover:bg-surface-hover md:grid-cols-[minmax(9rem,1fr)_minmax(12rem,1.5fr)_minmax(8rem,1fr)_8rem_7rem_7rem] md:items-center">
           <div className="min-w-0"><p className="line-clamp-2 text-sm font-medium">{key.name}</p></div>
-          <div className="flex min-w-0 items-center gap-1"><code className="min-w-0 truncate font-[var(--font-data)] text-xs text-text-muted" title={maskKey(key.key)}>{visibleKeys.has(key.id) ? key.key : maskKey(key.key)}</code><button type="button" onClick={() => toggleKeyVisibility(key.id)} className="grid size-9 shrink-0 place-content-center rounded-[var(--radius-control)] hover:bg-surface-active" aria-label={visibleKeys.has(key.id) ? `Hide ${key.name} key` : `Show ${key.name} key`}>{visibleKeys.has(key.id) ? <EyeOff size={14}/> : <Eye size={14}/>}</button><button type="button" onClick={() => copy(key.key, key.id)} className="grid size-9 shrink-0 place-content-center rounded-[var(--radius-control)] text-primary hover:bg-surface-active" aria-label={`Copy ${key.name} key`}>{copied === key.id ? <Check size={14}/> : <Copy size={14}/>}</button></div>
+          <div className="flex min-w-0 items-center gap-1"><code className="min-w-0 truncate font-[var(--font-data)] text-xs text-text-muted" title={revealedKeys[key.id] || displayMask(key)}>{revealedKeys[key.id] || displayMask(key)}</code><button type="button" onClick={() => revealKey(key.id)} className="grid size-9 shrink-0 place-content-center rounded-[var(--radius-control)] hover:bg-surface-active" aria-label={revealedKeys[key.id] ? `Hide ${key.name} key` : `Show ${key.name} key`}>{revealedKeys[key.id] ? <EyeOff size={14}/> : <Eye size={14}/>}</button><button type="button" onClick={() => copyKeyViaReveal(key.id)} className="grid size-9 shrink-0 place-content-center rounded-[var(--radius-control)] text-primary hover:bg-surface-active" aria-label={`Copy ${key.name} key`}>{copied === key.id ? <Check size={14}/> : <Copy size={14}/>}</button></div>
           <div className="text-xs text-text-muted">{key.modelPolicy === "whitelist" ? `${parsePolicyCount(key.allowedModels)} allowed` : key.modelPolicy === "blacklist" ? `${parsePolicyCount(key.blockedModels)} blocked` : "All models"}</div>
           <div className="text-xs text-text-muted">{key.rpmLimit > 0 ? `${key.rpmLimit} RPM` : "Unlimited"}</div>
           <div className="font-[var(--font-data)] text-xs text-text-muted">{new Date(key.createdAt).toLocaleDateString()}</div>
@@ -855,13 +945,18 @@ export default function APIPageClient({ machineId }) {
         apiKey={manageKey}
         onClose={() => setManageKey(null)}
         onSaved={(updated) => {
+          // Sanitized shape: metadata + maskedKey, never the raw secret.
           setKeys((prev) => prev.map((k) => (k.id === updated.id ? { ...k, ...updated } : k)));
           setManageKey(null);
         }}
-        onRotated={(rotated) => {
-          setKeys((prev) => prev.map((k) => (k.id === rotated.id ? { ...k, ...rotated } : k)));
+        onRotated={(payload) => {
+          // Sanitized shape: merge rotatedMeta only; the raw string goes to
+          // the one-time modal and clears on dismiss, never into list state.
+          const meta = payload?.rotatedMeta || payload;
+          const raw = typeof payload?.key === "string" ? payload.key : null;
+          if (meta?.id) setKeys((prev) => prev.map((k) => (k.id === meta.id ? { ...k, ...meta } : k)));
           setManageKey(null);
-          setRotatedKey(rotated.key);
+          setRotatedKey(raw);
         }}
       />
 
