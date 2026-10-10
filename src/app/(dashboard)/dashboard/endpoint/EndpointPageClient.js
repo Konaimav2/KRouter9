@@ -149,6 +149,7 @@ export default function APIPageClient({ machineId }) {
   const copyWithFeedback = async (text, id) => {
     try {
       await copy(text, id);
+      notify.success("Copied to clipboard.");
     } catch {
       notify.error("Copy failed. Check clipboard permissions and try again.");
     }
@@ -178,19 +179,23 @@ export default function APIPageClient({ machineId }) {
       const res = await fetch(`/api/keys/${keyId}/reveal?confirm=true`, { cache: "no-store" });
       if (!res.ok) {
         setRevealError(res.status === 404 ? "Key not found." : "Reveal failed.");
+        notify.error("Could not reveal API key. Try again.");
         return;
       }
       const data = await res.json();
       if (!data || typeof data.key !== "string" || !data.key) {
         setRevealError("Reveal failed.");
+        notify.error("Could not reveal API key. Try again.");
         return;
       }
       setRevealedKeys((prev) => ({ ...prev, [keyId]: data.key }));
       scheduleRevealClear(keyId);
+      notify.success("API key revealed. It will hide after 15 seconds.");
     } catch {
       setRevealError("Reveal failed.");
+      notify.error("Could not reveal API key. Try again.");
     }
-  }, [revealedKeys, clearRevealedKey, scheduleRevealClear]);
+  }, [revealedKeys, clearRevealedKey, scheduleRevealClear, notify]);
 
   // Copy via the guarded read; the transient is discarded immediately after
   // the clipboard write so the raw secret never rests in state.
@@ -211,6 +216,7 @@ export default function APIPageClient({ machineId }) {
         return;
       }
       await copy(data.key, keyId);
+      notify.success("API key copied.");
       // Discard: never retain a copy-transient; drop any prior reveal too.
       clearRevealedKey(keyId);
     } catch {
@@ -780,6 +786,7 @@ export default function APIPageClient({ machineId }) {
 
       if (res.ok) {
         setCreatedKey(data.key);
+        notify.success("API key created. Copy it before closing this dialog.");
         await fetchData();
         setNewKeyName("");
         setNewKeyExpiresAt("");

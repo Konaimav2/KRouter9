@@ -116,11 +116,11 @@ export default function DocsPage() {
     <div className="min-h-screen bg-[var(--color-canvas)] text-[var(--color-text)]">
       <a href="#docs-main" className="skip-link">Skip to content</a>
       <header className="sticky top-0 z-[var(--z-sticky)] border-b border-[var(--workbar-border)] bg-[var(--workbar-bg)]">
-        <div className="mx-auto flex min-h-16 max-w-[var(--layout-content-max)] items-center gap-3 px-4 lg:px-8">
+        <div className="mx-auto flex min-h-16 max-w-[var(--layout-content-max)] flex-wrap items-center gap-3 px-4 py-3 sm:flex-nowrap sm:py-0 lg:px-8">
           <img src="/krouter9.png" alt="" className="size-8 object-contain" />
           <span className="font-semibold">KRouter9</span><span className="text-[var(--color-text-subtle)]">/</span>
           <span className="text-sm text-[var(--color-text-muted)]">API Reference</span>
-          <nav className="ml-auto flex items-center gap-2">
+          <nav className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto sm:flex-nowrap">
             <Link href="/dashboard" className="rounded-[var(--radius-sm)] border border-[var(--button-border)] px-3 py-2 text-sm">Dashboard</Link>
             <a href="/api/docs/openapi.yaml" className="rounded-[var(--radius-sm)] bg-[var(--color-primary)] px-3 py-2 text-sm font-semibold text-[var(--color-on-primary)]">OpenAPI YAML</a>
           </nav>

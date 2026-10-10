@@ -414,7 +414,7 @@ export default function ProvidersPage() {
       id: "apikey",
       testMode: "apikey",
       label: "API key",
-      entries: visibleApikeyEntries.map(([providerId, provider]) => ({ providerId, provider, stats: getProviderStats(providerId, "apikey"), authType: "apikey", toggleAuthType: "apikey", apiKey: true })),
+      entries: visibleApikeyEntries.map(([providerId, provider]) => ({ providerId, provider, stats: getProviderStats(providerId, ["apikey", "api_key"]), authType: "apikey", toggleAuthType: "apikey", apiKey: true })),
     },
   ];
 

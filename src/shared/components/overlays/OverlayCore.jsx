@@ -90,6 +90,20 @@ export function useOverlayController({ open, onDismiss, initialFocusRef, mobileB
   }, [open, initialFocusRef]);
 
   useEffect(() => {
+    if (!open) return undefined;
+    // Escape still dismisses when focus lands on the scrim or outside the shell.
+    // Panel-handled events stop propagation; only the topmost shell may fall back.
+    const onEscape = (event) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const roots = document.querySelectorAll("[data-overlay]");
+      if (roots.length && !roots[roots.length - 1].contains(panelRef.current)) return;
+      handleOverlayKey(event, panelRef.current, dismissRef.current);
+    };
+    document.addEventListener("keydown", onEscape);
+    return () => document.removeEventListener("keydown", onEscape);
+  }, [open]);
+
+  useEffect(() => {
     if (!open || !mobileBack || typeof window === "undefined" || !window.matchMedia("(max-width: 639px)").matches) return undefined;
     const marker = `overlay-${Date.now()}-${Math.random()}`;
     window.history.pushState({ ...window.history.state, __overlay: marker }, "");

@@ -127,6 +127,13 @@ export const MODEL_CAPABILITIES = {
   "kimi-for-coding-highspeed": { vision: true, videoInput: true, reasoning: true, thinkingFormat: "kimi", thinkingCanDisable: false, contextWindow: 262144, maxOutput: 65536 },
   "kimi-k2.7-code":    { vision: true, videoInput: true, reasoning: true, thinkingFormat: "kimi", thinkingCanDisable: false, contextWindow: 262144, maxOutput: 65536 },
   "kimi-k2.7-code-highspeed": { vision: true, videoInput: true, reasoning: true, thinkingFormat: "kimi", thinkingCanDisable: false, contextWindow: 262144, maxOutput: 65536 },
+  // GPT-6 family bare ids — real 1.05M window so custom-node seats (grip/x)
+  // resolve exact instead of the generic 272k pattern floor. Generic *gpt-6*
+  // pattern below is kept as the floor for unknown members.
+  "gpt-6.1-sol":      { vision: true, reasoning: true, search: true, thinkingFormat: "openai", contextWindow: 1050000, maxOutput: 128000 },
+  "gpt-6-sol":        { vision: true, reasoning: true, search: true, thinkingFormat: "openai", contextWindow: 1050000, maxOutput: 128000 },
+  "gpt-6-luna":       { vision: true, reasoning: true, search: true, thinkingFormat: "openai", contextWindow: 1050000, maxOutput: 128000 },
+  "gpt-6-astra":      { vision: true, reasoning: true, search: true, thinkingFormat: "openai", contextWindow: 1050000, maxOutput: 128000 },
   // OpenCode Free Muse Spark — multimodal (text+image per models.dev meta/muse-spark)
   // via OpenAI Responses input_image; reasoning supports up to xhigh.
   "muse-spark-1.2-contributor-free": { vision: true, reasoning: true, thinkingFormat: "openai", contextWindow: 1048576, maxOutput: 131072 },
@@ -139,6 +146,10 @@ const KIRO_GPT_5_6_CAPABILITIES = { vision: true, reasoning: true, search: true,
 // (lower than OpenAI API's 1.05M). Sol differs from Terra/Luna. #2720
 const CODEX_GPT_56_SOL_CAPS  = { vision: true, reasoning: true, search: true, thinkingFormat: "openai", contextWindow: 372000, maxOutput: 128000 };
 const CODEX_GPT_56_DEFAULT_CAPS = { vision: true, reasoning: true, search: true, thinkingFormat: "openai", contextWindow: 272000, maxOutput: 128000 };
+
+// GPT-6 family real upstream window is 1.05M (DevDay + llm-stats for
+// 6.1-sol/Luna/Astra) — applies to codex seats and canonical bare ids alike.
+const CODEX_GPT_6_CAPS = { vision: true, reasoning: true, search: true, thinkingFormat: "openai", contextWindow: 1050000, maxOutput: 128000 };
 
 /**
  * Provider-specific capability overrides. Keyed by provider alias/id.
@@ -154,13 +165,13 @@ export const PROVIDER_CAPABILITIES = {
     "deepseek-ai/deepseek-v4-flash": { reasoning: true, thinkingFormat: "openai", contextWindow: 1000000, maxOutput: 65536 },
   },
   "codex": {
-    "gpt-6.1-sol":               CODEX_GPT_56_SOL_CAPS,
-    "gpt-6.1-sol-review":        CODEX_GPT_56_SOL_CAPS,
-    "gpt-6-sol":                 CODEX_GPT_56_DEFAULT_CAPS,
-    "gpt-6-sol-review":          CODEX_GPT_56_DEFAULT_CAPS,
-    "gpt-6-luna":                CODEX_GPT_56_DEFAULT_CAPS,
-    "gpt-6-luna-review":         CODEX_GPT_56_DEFAULT_CAPS,
-    "gpt-6-astra":               { vision: true, reasoning: true, search: true, thinkingFormat: "openai", contextWindow: 272000, maxOutput: 128000 },
+    "gpt-6.1-sol":               CODEX_GPT_6_CAPS,
+    "gpt-6.1-sol-review":        CODEX_GPT_6_CAPS,
+    "gpt-6-sol":                 CODEX_GPT_6_CAPS,
+    "gpt-6-sol-review":          CODEX_GPT_6_CAPS,
+    "gpt-6-luna":                CODEX_GPT_6_CAPS,
+    "gpt-6-luna-review":         CODEX_GPT_6_CAPS,
+    "gpt-6-astra":               CODEX_GPT_6_CAPS,
     "gpt-5.6-sol":               CODEX_GPT_56_SOL_CAPS,
     "gpt-5.6-sol-review":        CODEX_GPT_56_SOL_CAPS,
     "gpt-5.6-terra":             CODEX_GPT_56_DEFAULT_CAPS,

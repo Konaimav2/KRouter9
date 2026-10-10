@@ -1172,7 +1172,7 @@ export default function BasicChatPageClient() {
 
                 <div className="mt-2 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <div className="relative">
+                    <div className="relative" data-attach-menu>
                       <button type="button" onClick={() => setAttachMenuOpen((v) => !v)} disabled={!activeModel || loadingData} aria-label="Attach" className="p-2 text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition rounded-full hover:bg-[var(--color-surface-raised)]">
                         <Icon name="add" className="text-[20px]" />
                       </button>
@@ -1199,7 +1199,7 @@ export default function BasicChatPageClient() {
                         <Icon name="stop" className="text-[16px]" />
                       </button>
                     ) : null}
-                    <button onClick={sendMessage} disabled={!canSend} className={`h-8 w-8 rounded-full flex items-center justify-center transition ${canSend ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)] hover:bg-[var(--color-primary-hover)]' : 'bg-[var(--color-surface-raised)] text-[var(--color-text-disabled)] cursor-not-allowed'}`}>
+                    <button type="button" aria-label="Send message" onClick={sendMessage} disabled={!canSend} className={`h-11 w-11 shrink-0 rounded-full flex items-center justify-center transition ${canSend ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)] hover:bg-[var(--color-primary-hover)]' : 'bg-[var(--color-surface-raised)] text-[var(--color-text-disabled)] cursor-not-allowed'}`}>
                       <Icon name="arrow_upward" className="text-[16px]" />
                     </button>
                   </div>
