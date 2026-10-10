@@ -28,11 +28,17 @@ export function labelForMaskedKey(k) {
 
 // True while Run/Start/Copy must stay disabled: a masked list exists but no
 // raw credential has been resolved yet (still resolving, or reveal failed).
-// Empty/missing list means manual entry — nothing to resolve, not blocked.
-export function isKeyActionBlocked({ keys, rawKey, resolving, error }) {
+// Empty/missing list means manual entry — nothing to resolve, not blocked —
+// but ONLY once the initial list load has settled: while the list is still
+// loading (or its load failed), emptiness is unknown, so gate closed.
+// Extra fields (loading / keysError) are optional so existing callers that
+// pass only { keys, rawKey, resolving, error } keep their behavior.
+export function isKeyActionBlocked({ keys, rawKey, resolving, error, loading, keysError }) {
   const list = Array.isArray(keys) ? keys : [];
-  if (list.length === 0) return false;
+  if (loading) return true;
+  if (keysError) return true;
   if (resolving) return true;
   if (error) return true;
+  if (list.length === 0) return false;
   return !rawKey;
 }

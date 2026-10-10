@@ -1,7 +1,7 @@
 "use client";
 
 import Icon from "@/shared/components/Icon";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, Button, Badge, Input } from "@/shared/components";
 import { revealKeyById, pickDefaultKeyId, labelForMaskedKey, isKeyActionBlocked } from "@/lib/maskedKeyClient";
 
@@ -26,6 +26,26 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
   const [actionError, setActionError] = useState(null);
   const [mitmRouterBaseUrl, setMitmRouterBaseUrl] = useState(DEFAULT_MITM_ROUTER_BASE);
   const [port443Conflict, setPort443Conflict] = useState(null);
+  // Stale-reveal guard: each reveal is bound to the selection it was issued
+  // for. A slow reveal that completes after a reselection is ignored, and
+  // switching selection clears the previous credential immediately so a stale
+  // secret is never submitted while the new reveal is in flight.
+  const revealSeqRef = useRef(0);
+  const resolveForSelection = useCallback((id) => {
+    const seq = ++revealSeqRef.current;
+    setSelectedApiKey("");
+    if (!id) return;
+    setResolvingKey(true);
+    setKeyError("");
+    revealKeyById(id)
+      .then((raw) => { if (revealSeqRef.current === seq) setSelectedApiKey(raw); })
+      .catch((err) => {
+        if (revealSeqRef.current !== seq) return;
+        setSelectedApiKey("");
+        setKeyError(err.message || "Failed to resolve API key");
+      })
+      .finally(() => { if (revealSeqRef.current === seq) setResolvingKey(false); });
+  }, []);
 
   const serverIsWindows = status?.isWin === true;
   const canRunWithoutPassword = serverIsWindows || status?.hasCachedPassword || status?.needsSudoPassword === false;
@@ -62,13 +82,8 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
     const id = pickDefaultKeyId(keys);
     if (!id) return;
     setSelectedKeyId(id);
-    setResolvingKey(true);
-    setKeyError("");
-    revealKeyById(id)
-      .then((raw) => setSelectedApiKey(raw))
-      .catch((e) => setKeyError(e.message || "Failed to resolve API key"))
-      .finally(() => setResolvingKey(false));
-  }, [apiKeys]);
+    resolveForSelection(id);
+  }, [apiKeys, resolveForSelection]);
 
   const handleAction = (action) => {
     setActionError(null);
@@ -166,7 +181,9 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
   };
 
   const isRunning = status?.running;
-  const keyBlocked = isKeyActionBlocked({ keys: maskedKeys, rawKey: selectedApiKey, resolving: resolvingKey, error: keyError });
+  // Keys arrive via props with no load signal from the parent: the list is
+  // treated as settled (manual entry when empty), matching helper defaults.
+  const keyBlocked = isKeyActionBlocked({ keys: maskedKeys, rawKey: selectedApiKey, resolving: resolvingKey, error: keyError, loading: false, keysError: "" });
 
   return (
     <>
@@ -232,13 +249,7 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
                       onChange={(e) => {
                         const id = e.target.value;
                         setSelectedKeyId(id);
-                        if (!id) { setSelectedApiKey(""); return; }
-                        setResolvingKey(true);
-                        setKeyError("");
-                        revealKeyById(id)
-                          .then((raw) => setSelectedApiKey(raw))
-                          .catch((err) => { setSelectedApiKey(""); setKeyError(err.message || "Failed to resolve API key"); })
-                          .finally(() => setResolvingKey(false));
+                        resolveForSelection(id);
                       }}
                       className="flex-1 min-w-0 px-2 py-1.5 bg-surface rounded border border-border text-xs text-text-main focus:outline-none focus:ring-1 focus:ring-primary/50"
                     >

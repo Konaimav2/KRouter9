@@ -32,6 +32,8 @@ export function EmbeddingExampleCard({ providerId, customAlias }) {
   const [maskedKeys, setMaskedKeys] = useState([]);
   const [resolvingKey, setResolvingKey] = useState(false);
   const [keyError, setKeyError] = useState("");
+  const [keysLoading, setKeysLoading] = useState(true);
+  const [keysError, setKeysError] = useState("");
   const [useTunnel, setUseTunnel] = useState(false);
   const [localEndpoint, setLocalEndpoint] = useState("");
   const [tunnelEndpoint, setTunnelEndpoint] = useState("");
@@ -40,6 +42,24 @@ export function EmbeddingExampleCard({ providerId, customAlias }) {
   const [error, setError] = useState("");
   const { copied: copiedCurl, copy: copyCurl } = useCopyToClipboard();
   const { copied: copiedRes, copy: copyRes } = useCopyToClipboard();
+  // Stale-reveal guard: bind each resolved credential to the selection it was
+  // issued for; ignore completions that arrive after a reselection.
+  const revealSeqRef = useRef(0);
+  const resolveForSelection = (id) => {
+    const seq = ++revealSeqRef.current;
+    setApiKey("");
+    if (!id) { setResolvingKey(false); return; }
+    setResolvingKey(true);
+    setKeyError("");
+    revealKeyById(id)
+      .then((raw) => { if (revealSeqRef.current === seq) setApiKey(raw); })
+      .catch((e) => {
+        if (revealSeqRef.current !== seq) return;
+        setApiKey("");
+        setKeyError(e.message || "Failed to resolve API key");
+      })
+      .finally(() => { if (revealSeqRef.current === seq) setResolvingKey(false); });
+  };
 
   useEffect(() => {
     setLocalEndpoint(window.location.origin);
@@ -48,16 +68,13 @@ export function EmbeddingExampleCard({ providerId, customAlias }) {
       .then((d) => {
         const keys = d.keys || [];
         setMaskedKeys(keys);
+        setKeysError("");
+        setKeysLoading(false);
         const id = pickDefaultKeyId(keys);
         if (!id) return;
-        setResolvingKey(true);
-        setKeyError("");
-        revealKeyById(id)
-          .then((raw) => setApiKey(raw))
-          .catch((e) => setKeyError(e.message || "Failed to resolve API key"))
-          .finally(() => setResolvingKey(false));
+        resolveForSelection(id);
       })
-      .catch((e) => setKeyError(e.message || "Failed to load API keys"));
+      .catch((e) => { setKeysLoading(false); setKeysError(e.message || "Failed to load API keys"); setKeyError(e.message || "Failed to load API keys"); });
     fetch("/api/tunnel/status")
       .then((r) => r.json())
       .then((d) => { if (d.publicUrl) setTunnelEndpoint(d.publicUrl); })
@@ -66,7 +83,7 @@ export function EmbeddingExampleCard({ providerId, customAlias }) {
 
   const endpoint = useTunnel ? tunnelEndpoint : localEndpoint;
   const modelFull = selectedModel ? `${providerAlias}/${selectedModel}` : "";
-  const keyBlocked = isKeyActionBlocked({ keys: maskedKeys, rawKey: apiKey, resolving: resolvingKey, error: keyError });
+  const keyBlocked = isKeyActionBlocked({ keys: maskedKeys, rawKey: apiKey, resolving: resolvingKey, error: keyError, loading: keysLoading, keysError });
 
   // Build request body — include dimensions only if user provided a positive number
   const buildBody = () => {

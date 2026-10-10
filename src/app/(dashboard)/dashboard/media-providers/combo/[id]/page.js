@@ -64,6 +64,8 @@ export default function ComboDetailPage() {
   const [maskedKeys, setMaskedKeys] = useState([]);
   const [resolvingKey, setResolvingKey] = useState(false);
   const [keyError, setKeyError] = useState("");
+  const [keysLoading, setKeysLoading] = useState(true);
+  const [keysError, setKeysError] = useState("");
   const [connections, setConnections] = useState([]);
   const [modelAliases, setModelAliases] = useState({});
 
@@ -82,6 +84,8 @@ export default function ComboDetailPage() {
         const k = await keysRes.json();
         const keys = k.keys || [];
         setMaskedKeys(keys);
+        setKeysError("");
+        setKeysLoading(false);
         const keyId = pickDefaultKeyId(keys);
         if (keyId) {
           setResolvingKey(true);
@@ -95,6 +99,8 @@ export default function ComboDetailPage() {
           }
         }
       } else {
+        setKeysLoading(false);
+        setKeysError("Failed to load API keys");
         setKeyError("Failed to load API keys");
       }
       if (connsRes.ok) setConnections((await connsRes.json()).connections || []);
@@ -254,7 +260,7 @@ export default function ComboDetailPage() {
   const kindLabel = KIND_LABELS[combo.kind] || MEDIA_PROVIDER_KINDS.find((k) => k.id === combo.kind)?.label || "Combo";
   const examplePath = EXAMPLE_PATHS[combo.kind];
   const exampleBody = combo.kind && EXAMPLE_BODIES[combo.kind] ? EXAMPLE_BODIES[combo.kind](combo.name) : null;
-  const keyBlocked = isKeyActionBlocked({ keys: maskedKeys, rawKey: apiKey, resolving: resolvingKey, error: keyError });
+  const keyBlocked = isKeyActionBlocked({ keys: maskedKeys, rawKey: apiKey, resolving: resolvingKey, error: keyError, loading: keysLoading, keysError });
   const curlExample = examplePath
     ? `curl -X POST http://localhost:20128${examplePath} \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer ${apiKey || "YOUR_KEY"}" \\\n  -d '${JSON.stringify(exampleBody)}'`
     : "";
