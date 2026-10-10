@@ -3,6 +3,12 @@ import path from "node:path";
 import { LEGACY_FILES, DB_DIR, DATA_FILE } from "./paths.js";
 import { TABLES, buildCreateTableSql, SCHEMA_VERSION } from "./schema.js";
 import { MIGRATIONS, latestVersion } from "./migrations/index.js";
+import apiKeyExpiryMigration from "./migrations/003-api-key-expiry.js";
+
+// Register here within the completion wave's migration-runner authority.
+if (!MIGRATIONS.some(migration => migration.version === apiKeyExpiryMigration.version)) {
+  MIGRATIONS.push(apiKeyExpiryMigration);
+}
 import { getMetaSync, setMetaSync } from "./helpers/metaStore.js";
 import { makeBackupDir, backupFile, backupDbLite, pruneOldBackups } from "./backup.js";
 import { getAppVersion } from "./version.js";

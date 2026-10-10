@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { normalizeApiKeyExpiry } from "@/lib/db/repos/apiKeysRepo.js";
 import { getApiKeys, createApiKey, sanitizeApiKeyRow } from "@/lib/localDb";
 import { getConsistentMachineId } from "@/shared/utils/machineId";
 import { hasValidDashboardSession, REVEAL_NO_STORE_HEADERS } from "@/lib/proxyRevealGuard.js";
@@ -73,6 +74,15 @@ export async function POST(request) {
   try {
     const body = await request.json();
     const { name } = body;
+    let expiresAt;
+    try {
+      expiresAt = normalizeApiKeyExpiry(body.expiresAt);
+    } catch {
+      return NextResponse.json(
+        { error: "expiresAt must be a future ISO datetime with a timezone" },
+        { status: 400, headers: REVEAL_NO_STORE_HEADERS }
+      );
+    }
 
     if (!name) {
       return NextResponse.json(
@@ -83,13 +93,14 @@ export async function POST(request) {
 
     // Always get machineId from server
     const machineId = await getConsistentMachineId();
-    const apiKey = await createApiKey(name, machineId);
+    const apiKey = await createApiKey(name, machineId, expiresAt);
 
     return NextResponse.json({
       key: apiKey.key,
       name: apiKey.name,
       id: apiKey.id,
       machineId: apiKey.machineId,
+      expiresAt: apiKey.expiresAt,
     }, { status: 201, headers: REVEAL_NO_STORE_HEADERS });
   } catch (error) {
     console.log("Error creating key:", error);

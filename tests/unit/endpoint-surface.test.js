@@ -6,6 +6,7 @@ import presetReact from "next/dist/compiled/babel/preset-react";
 import transformModulesCommonjs from "next/dist/compiled/babel/plugin-transform-modules-commonjs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const notices = [];
 const hookHarness = { cursor: 0, states: [], copiedValues: [] };
 const testReact = {
   ...React,
@@ -59,7 +60,7 @@ const moduleMocks = {
   "@/shared/hooks/useCopyToClipboard": {
     useCopyToClipboard: () => ({
       copied: false,
-      copy: (value) => hookHarness.copiedValues.push(value),
+      copy: async (value) => { if (hookHarness.copyFails) throw new Error("clipboard denied"); hookHarness.copiedValues.push(value); },
     }),
   },
   "./endpointConstants": {
@@ -76,13 +77,15 @@ const moduleMocks = {
   },
   "./components/EndpointRow": {
     __esModule: true,
-    default: ({ label, url, status, access, actions }) => React.createElement(
+    default: ({ label, url, status, access, actions, onCopy, copyId }) => React.createElement(
       "div",
       { "data-endpoint": label },
       `${label}|${url}|${status}|${access}`,
+      React.createElement("button", { "aria-label": `Copy ${label} endpoint`, onClick: () => onCopy(url, copyId) }, "Copy"),
       actions,
     ),
   },
+  "@/store/notificationStore": { useNotificationStore: { getState: () => ({ success: (message) => notices.push(["success", message]), error: (message) => notices.push(["error", message]) }) } },
   "./components/ManageKeyModal": { __esModule: true, default: () => null },
   "./components/StatusAlert": { __esModule: true, default: ({ status }) => React.createElement("p", null, status.message) },
   "./components/Tooltip": { __esModule: true, default: ({ children }) => children },
@@ -152,6 +155,7 @@ describe("endpoint and API key dashboard surface", () => {
     hookHarness.cursor = 0;
     hookHarness.copiedValues = [];
     hookHarness.states = [];
+    hookHarness.copyFails = false;
     hookHarness.states[0] = keys;
     hookHarness.states[1] = false;
     hookHarness.states[11] = true;
@@ -234,5 +238,89 @@ describe("endpoint and API key dashboard surface", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(hookHarness.copiedValues).toEqual([key]);
+  });
+});
+
+describe("endpoint wave A feedback", () => {
+  beforeEach(() => { hookHarness.cursor = 0; hookHarness.states = [keys, false]; hookHarness.copyFails = false; notices.length = 0; });
+  afterEach(() => { vi.unstubAllGlobals(); });
+  it("notifies successful and failed API-key requirement toggles without optimistic failure", async () => {
+    const toggle = () => findElement(clientTree(), n => n.type === Toggle && n.props.size === "sm" && !n.props.title);
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true })));
+    await toggle().props.onChange(); expect(notices).toEqual([["success", "API key requirement enabled."]]);
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false })));
+    await toggle().props.onChange(); expect(notices.at(-1)).toEqual(["error", "Could not update API key requirement. Try again."]);
+    expect(toggle().props.checked).toBe(true);
+  });
+  it("renders Cloudflare failure detail", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, json: async () => ({ error: "fixture tunnel failure" }) })));
+    await findElement(clientTree(), n => n.type === Button && n.props.children === "Start Tunnel").props.onClick();
+    expect(renderClient()).toContain("fixture tunnel failure");
+    expect(notices.at(-1)[0]).toBe("error");
+  });
+  it("notifies Cloudflare disable success and retains inline detail", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({}) })));
+    await findElement(clientTree(), n => n.type === Button && n.props.variant === "danger" && n.props.onClick.name === "handleDisableTunnel").props.onClick();
+    expect(notices.at(-1)).toEqual(["success", "Tunnel disabled"]);
+    expect(renderClient()).toContain("Tunnel disabled");
+  });
+  it("reports rejected clipboard writes", async () => {
+    hookHarness.copyFails = true;
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ key: "fixture-key" }) })));
+    await findElement(clientTree(), n => n.type === "button" && n.props["aria-label"] === "Copy Beta paused key").props.onClick();
+    expect(notices.at(-1)).toEqual(["error", "Copy failed. Check clipboard permissions and try again."]);
+  });
+});
+
+
+describe("wave A completion copy errors and expiry controls", () => {
+  beforeEach(() => { hookHarness.cursor = 0; hookHarness.states = [keys, false]; hookHarness.copyFails = true; notices.length = 0; });
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+  it("reports local endpoint clipboard rejection", async () => {
+    // EndpointRow is a functional child; inspect its public callback contract.
+    const row = findElement(clientTree(), n => n.props?.label === "Local");
+    await row.props.onCopy("/v1", "local_url");
+    expect(notices.at(-1)).toEqual(["error", "Copy failed. Check clipboard permissions and try again."]);
+  });
+  it.each([["created_key", 4], ["rotated_key", 7]])("reports %s clipboard rejection", async (id, stateIndex) => {
+    hookHarness.states[stateIndex] = "fixture-key";
+    const button = findElement(clientTree(), n => n.type === Button && n.props.icon === "content_copy" && String(n.props.onClick).includes(id));
+    await button.props.onClick();
+    expect(notices.at(-1)).toEqual(["error", "Copy failed. Check clipboard permissions and try again."]);
+  });
+  it("offers a labeled optional expiry datetime and submits it as an ISO instant", async () => {
+    hookHarness.states[2] = true;
+    hookHarness.copyFails = false;
+    let tree = clientTree();
+    const input = findElement(tree, n => n.type === Input && n.props.type === "datetime-local");
+    expect(input).not.toBeNull();
+    expect(input.props.label).toBe("Expires at (optional)");
+    input.props.onChange({ target: { value: "2999-01-01T12:00" } });
+    findElement(tree, n => n.type === Input && n.props.label === "Key Name").props.onChange({ target: { value: "Temporary" } });
+    const fetchMock = vi.fn(async (url, options) => options?.method === "POST" ? ({ ok: true, json: async () => ({ key: "fixture-key" }) }) : ({ ok: true, json: async () => ({ keys: [] }) }));
+    vi.stubGlobal("fetch", fetchMock);
+    await findElement(clientTree(), n => n.type === Button && n.props.onClick?.name === "handleCreateKey").props.onClick();
+    const payload = JSON.parse(fetchMock.mock.calls.find(([,options]) => options?.method === "POST")[1].body);
+    expect(payload.expiresAt).toBe(new Date("2999-01-01T12:00").toISOString());
+  });
+  it("badges only future keys expiring within 24 hours", () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date("2026-10-10T12:00:00Z"));
+    hookHarness.states[0] = keys.map((key, index) => ({ ...key, expiresAt: index ? "2026-10-12T12:00:00Z" : "2026-10-10T18:00:00Z" }));
+    expect(renderClient().match(/Expires within 24h/g)).toHaveLength(1);
+  });
+});
+
+describe("real clipboard hook promise contract", () => {
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+  it("returns the write promise to callers", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("navigator", { clipboard: { writeText: async () => {} } });
+    const source = readFileSync(new URL("../../src/shared/hooks/useCopyToClipboard.js", import.meta.url), "utf8").replace(/^import .*;$/m, "").replace("export function", "function");
+    const hook = new Function("useState", "useCallback", "useRef", `${source}; return useCopyToClipboard;`)(() => [null, () => {}], callback => callback, () => ({ current: null }));
+    const result = hook().copy("synthetic-value");
+    expect(result).toBeInstanceOf(Promise);
+    await expect(result).resolves.toBeUndefined();
+    vi.stubGlobal("navigator", { clipboard: { writeText: async () => { throw new Error("denied"); } } });
+    await expect(hook().copy("synthetic-value")).rejects.toThrow("denied");
   });
 });

@@ -10,6 +10,7 @@ function rowToKey(row) {
     machineId: row.machineId,
     isActive: row.isActive === 1 || row.isActive === true,
     createdAt: row.createdAt,
+    expiresAt: row.expiresAt ?? null,
     rpmLimit: row.rpmLimit ?? 0,
     tpmLimit: row.tpmLimit ?? 0,
     modelPolicy: row.modelPolicy || "off",
@@ -62,7 +63,20 @@ export async function getApiKeyByKey(key) {
   return rowToKey(row);
 }
 
-export async function createApiKey(name, machineId) {
+export function normalizeApiKeyExpiry(expiresAt) {
+  if (expiresAt === undefined || expiresAt === null) return null;
+  if (typeof expiresAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(expiresAt)) {
+    throw new Error("expiresAt must be a future ISO datetime with a timezone");
+  }
+  const expiry = Date.parse(expiresAt);
+  if (!Number.isFinite(expiry) || expiry <= Date.now()) {
+    throw new Error("expiresAt must be a future ISO datetime with a timezone");
+  }
+  return new Date(expiry).toISOString();
+}
+
+export async function createApiKey(name, machineId, expiresAt = null) {
+  const normalizedExpiry = normalizeApiKeyExpiry(expiresAt);
   if (!machineId) throw new Error("machineId is required");
   const db = await getAdapter();
   const { generateApiKeyWithMachine } = await import("@/shared/utils/apiKey");
@@ -74,10 +88,11 @@ export async function createApiKey(name, machineId) {
     machineId,
     isActive: true,
     createdAt: new Date().toISOString(),
+    expiresAt: normalizedExpiry,
   };
   db.run(
-    `INSERT INTO apiKeys(id, key, name, machineId, isActive, createdAt) VALUES(?, ?, ?, ?, ?, ?)`,
-    [apiKey.id, apiKey.key, apiKey.name, apiKey.machineId, 1, apiKey.createdAt]
+    `INSERT INTO apiKeys(id, key, name, machineId, isActive, createdAt, expiresAt) VALUES(?, ?, ?, ?, ?, ?, ?)`,
+    [apiKey.id, apiKey.key, apiKey.name, apiKey.machineId, 1, apiKey.createdAt, apiKey.expiresAt]
   );
   return { ...apiKey, rpmLimit: 0, tpmLimit: 0, modelPolicy: "off", allowedModels: null, blockedModels: null, creditLimit: 0, usageCost: 0, usageTokens: 0, quotaLimit: 0, rateLimit: 0 };
 }
@@ -140,7 +155,11 @@ export async function deleteApiKey(id) {
 
 export async function validateApiKey(key) {
   const db = await getAdapter();
-  const row = db.get(`SELECT isActive FROM apiKeys WHERE key = ?`, [key]);
+  const row = db.get(`SELECT isActive, expiresAt FROM apiKeys WHERE key = ?`, [key]);
   if (!row) return false;
+  if (row.expiresAt !== null && row.expiresAt !== undefined) {
+    const expiry = typeof row.expiresAt === "string" ? Date.parse(row.expiresAt) : NaN;
+    if (!Number.isFinite(expiry) || expiry <= Date.now()) return false;
+  }
   return row.isActive === 1 || row.isActive === true;
 }
