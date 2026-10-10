@@ -127,7 +127,15 @@ export async function GET(request) {
       });
       // Never follow redirects: a registry URL that redirects (301/302/307/308,
       // or meta-refresh style) off-registry would re-open the SSRF.
+      // Cancel the body and abort the controller BEFORE clearing the timer:
+      // a stalled 401/redirect body must not outlive the fetch.
       if (!res.ok || (res.status >= 300 && res.status < 400)) {
+        controller.abort();
+        try {
+          await res.body?.cancel?.();
+        } catch {
+          // ignore cancel errors on the fail-open path
+        }
         return NextResponse.json({ data: [] });
       }
       const declared = Number(res.headers?.get?.("content-length"));

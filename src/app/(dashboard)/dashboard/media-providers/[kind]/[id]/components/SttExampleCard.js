@@ -1,7 +1,7 @@
 "use client";
 
 import Icon from "@/shared/components/Icon";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Card } from "@/shared/components";
 import { getProviderAlias } from "@/shared/constants/providers";
 import { getModelKind } from "@/shared/constants/models";
@@ -30,6 +30,8 @@ export function SttExampleCard({ providerId }) {
   const [selectedKeyId, setSelectedKeyId] = useState("");
   const [resolvingKey, setResolvingKey] = useState(false);
   const [keyError, setKeyError] = useState("");
+  const [keysLoading, setKeysLoading] = useState(true);
+  const [keysError, setKeysError] = useState("");
   const [useTunnel, setUseTunnel] = useState(false);
   const [localEndpoint, setLocalEndpoint] = useState("");
   const [tunnelEndpoint, setTunnelEndpoint] = useState("");
@@ -39,6 +41,24 @@ export function SttExampleCard({ providerId }) {
   const [error, setError] = useState("");
   const { copied: copiedCurl, copy: copyCurl } = useCopyToClipboard();
   const { copied: copiedRes, copy: copyRes } = useCopyToClipboard();
+  // Stale-reveal guard: bind each resolved credential to the selection it was
+  // issued for; ignore completions that arrive after a reselection.
+  const revealSeqRef = useRef(0);
+  const resolveForSelection = useCallback((id) => {
+    const seq = ++revealSeqRef.current;
+    setApiKey("");
+    if (!id) { setResolvingKey(false); return; }
+    setResolvingKey(true);
+    setKeyError("");
+    revealKeyById(id)
+      .then((raw) => { if (revealSeqRef.current === seq) setApiKey(raw); })
+      .catch((e) => {
+        if (revealSeqRef.current !== seq) return;
+        setApiKey("");
+        setKeyError(e.message || "Failed to resolve API key");
+      })
+      .finally(() => { if (revealSeqRef.current === seq) setResolvingKey(false); });
+  }, []);
 
   useEffect(() => {
     setLocalEndpoint(window.location.origin);
@@ -47,17 +67,14 @@ export function SttExampleCard({ providerId }) {
       .then((d) => {
         const keys = d.keys || [];
         setMaskedKeys(keys);
+        setKeysError("");
+        setKeysLoading(false);
         const id = pickDefaultKeyId(keys);
         if (!id) return;
         setSelectedKeyId(id);
-        setResolvingKey(true);
-        setKeyError("");
-        revealKeyById(id)
-          .then((raw) => setApiKey(raw))
-          .catch((e) => setKeyError(e.message || "Failed to resolve API key"))
-          .finally(() => setResolvingKey(false));
+        resolveForSelection(id);
       })
-      .catch((e) => setKeyError(e.message || "Failed to load API keys"));
+      .catch((e) => { setKeysLoading(false); setKeysError(e.message || "Failed to load API keys"); setKeyError(e.message || "Failed to load API keys"); });
     fetch("/api/tunnel/status")
       .then((r) => r.json())
       .then((d) => { if (d.publicUrl) setTunnelEndpoint(d.publicUrl); })
@@ -82,7 +99,7 @@ export function SttExampleCard({ providerId }) {
 
   const endpoint = useTunnel ? tunnelEndpoint : localEndpoint;
   const modelFull = selectedModel ? `${providerAlias}/${selectedModel}` : "";
-  const keyBlocked = isKeyActionBlocked({ keys: maskedKeys, rawKey: apiKey, resolving: resolvingKey, error: keyError });
+  const keyBlocked = isKeyActionBlocked({ keys: maskedKeys, rawKey: apiKey, resolving: resolvingKey, error: keyError, loading: keysLoading, keysError });
 
   const curlSnippet = `curl -X POST ${endpoint}/v1/audio/transcriptions \\
   -H "Authorization: Bearer ${apiKey || "YOUR_KEY"}" \\
@@ -190,13 +207,7 @@ export function SttExampleCard({ providerId }) {
               onChange={(e) => {
                 const id = e.target.value;
                 setSelectedKeyId(id);
-                if (!id) { setApiKey(""); return; }
-                setResolvingKey(true);
-                setKeyError("");
-                revealKeyById(id)
-                  .then((raw) => setApiKey(raw))
-                  .catch((err) => { setApiKey(""); setKeyError(err.message || "Failed to resolve API key"); })
-                  .finally(() => setResolvingKey(false));
+                resolveForSelection(id);
               }}
               className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
             >
