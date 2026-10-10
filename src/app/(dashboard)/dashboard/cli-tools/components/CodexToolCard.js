@@ -25,11 +25,9 @@ export default function CodexToolCard({ tool, isExpanded, onToggle, baseUrl, api
   const [showManualConfigModal, setShowManualConfigModal] = useState(false);
   const [customBaseUrl, setCustomBaseUrl] = useState("");
 
-  useEffect(() => {
-    if (apiKeys?.length > 0 && !selectedApiKey) {
-      setSelectedApiKey(apiKeys[0].key);
-    }
-  }, [apiKeys, selectedApiKey]);
+  // Key selection is owned by ApiKeySelect: it lists by id/name/masked value and
+  // resolves ONLY the chosen credential via the guarded single-record reveal.
+  // No default here — ApiKeySelect auto-picks the first entry when empty.
 
   useEffect(() => {
     if (initialStatus) setCodexStatus(initialStatus);
@@ -104,10 +102,14 @@ export default function CodexToolCard({ tool, isExpanded, onToggle, baseUrl, api
     setApplying(true);
     setMessage(null);
     try {
-      // Use sk_krouter9 for localhost if no key, otherwise use selected key
-      const keyToUse = (selectedApiKey && selectedApiKey.trim())
-        ? selectedApiKey
-        : (!cloudEnabled ? "sk_krouter9" : selectedApiKey);
+      // The selected key arrives ONLY via ApiKeySelect's guarded single-record
+      // reveal. Never fall back to a dummy value silently — an explicit error
+      // forces the user to pick (or create) a real credential.
+      const keyToUse = (selectedApiKey && selectedApiKey.trim()) ? selectedApiKey : "";
+      if (!keyToUse || keyToUse === "sk_krouter9") {
+        setMessage({ type: "error", text: "No API key selected — pick a key above (or create one in the Keys page) before applying." });
+        return;
+      }
 
       const res = await fetch("/api/cli-tools/codex-settings", {
         method: "POST",
@@ -168,7 +170,7 @@ export default function CodexToolCard({ tool, isExpanded, onToggle, baseUrl, api
   const getManualConfigs = () => {
     const keyToUse = (selectedApiKey && selectedApiKey.trim())
       ? selectedApiKey
-      : (!cloudEnabled ? "sk_krouter9" : "<API_KEY_FROM_DASHBOARD>");
+      : "<API_KEY_FROM_DASHBOARD — select a key above to fill this in>";
 
     const effectiveSubagentModel = subagentModel || selectedModel;
 
@@ -357,7 +359,7 @@ default_subagent_model = "${effectiveSubagentModel}"
               )}
 
               <div className="grid grid-cols-1 gap-2 sm:flex sm:items-center">
-                <Button variant="primary" size="sm" onClick={handleApplySettings} disabled={(!selectedApiKey && (cloudEnabled && apiKeys.length > 0)) || !selectedModel} loading={applying}>
+                <Button variant="primary" size="sm" onClick={handleApplySettings} disabled={!selectedApiKey || !selectedModel} loading={applying}>
                   <Icon name="save" className="text-[14px] mr-1" />Apply
                 </Button>
                 <Button variant="outline" size="sm" onClick={handleResetSettings} disabled={restoring} loading={restoring}>

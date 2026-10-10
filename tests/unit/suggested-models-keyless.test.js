@@ -64,7 +64,7 @@ describe("suggested-models keyless fallback", () => {
     });
 
     const res = await GET(
-      req("https://x/api/providers/suggested-models?url=https://zen/models&type=opencode-free&provider=keyed")
+      req("https://x/api/providers/suggested-models?url=https://zen/models&type=opencode-free&provider=opencode")
     );
     const body = await res.json();
 

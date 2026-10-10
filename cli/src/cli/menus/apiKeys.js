@@ -27,7 +27,7 @@ function displayApiKeys(keys, port) {
       console.log("│                                                          │");
       console.log(`│  ${index + 1}. ${key.name}${" ".repeat(52 - String(index + 1).length - key.name.length)}│`);
       
-      const maskedKey = maskKey(key.key);
+      const maskedKey = key.maskedKey || maskKey(key.key);
       console.log(`│     Key: ${maskedKey}${" ".repeat(47 - maskedKey.length)}│`);
       
       const created = formatDate(key.createdAt);
@@ -102,8 +102,15 @@ async function handleCreateKey() {
 async function handleViewFullKey(key) {
   console.log("\n🔍 Full API Key");
   console.log("─".repeat(30));
+  const revealed = key.id ? await api.revealApiKey(key.id) : null;
+  const fullKey = revealed && revealed.success ? revealed.data.key : null;
+  if (!fullKey) {
+    showStatus(`Failed to reveal key: ${revealed ? revealed.error : "missing id"}`, "error");
+    await pause();
+    return;
+  }
   console.log(`Name: ${key.name}`);
-  console.log(`Key: ${key.key}`);
+  console.log(`Key: ${fullKey}`);
   console.log(`ID: ${key.id}`);
   console.log(`Created: ${formatDate(key.createdAt)}`);
   
@@ -121,7 +128,14 @@ async function handleViewFullKey(key) {
  * @param {Object} key - API key object
  */
 async function handleCopyKey(key) {
-  if (copyToClipboard(key.key)) {
+  const revealed = key.id ? await api.revealApiKey(key.id) : null;
+  const fullKey = revealed && revealed.success ? revealed.data.key : null;
+  if (!fullKey) {
+    showStatus(`Failed to reveal key: ${revealed ? revealed.error : "missing id"}`, "error");
+    await pause();
+    return;
+  }
+  if (copyToClipboard(fullKey)) {
     showStatus(`Key "${key.name}" copied to clipboard!`, "success");
   } else {
     showStatus("Failed to copy to clipboard", "error");
@@ -137,7 +151,7 @@ async function handleCopyKey(key) {
 async function handleDeleteKey(key) {
   console.log(`\n⚠️  Delete API Key: ${key.name}`);
   console.log("─".repeat(30));
-  console.log(`Key: ${maskKey(key.key)}`);
+  console.log(`Key: ${key.maskedKey || maskKey(key.key)}`);
   console.log(`Created: ${formatDate(key.createdAt)}`);
   
   const confirmed = await confirm("\nAre you sure you want to delete this key?");
@@ -172,7 +186,7 @@ async function showKeyActions(key, port, breadcrumb = []) {
   await showMenuWithBack({
     title: `🔑 ${key.name}`,
     breadcrumb: [...breadcrumb, key.name],
-    headerContent: `Name: ${key.name}\nKey: ${key.key}\nEndpoint: ${endpoint}`,
+    headerContent: `Name: ${key.name}\nKey: ${key.maskedKey || maskKey(key.key)}\nEndpoint: ${endpoint}`,
     items: [
       {
         label: "Copy to Clipboard",
@@ -215,7 +229,7 @@ async function showApiKeysMenu(port, breadcrumb = []) {
       }
       return { items: result.data.keys || [] };
     },
-    formatItem: (key) => `${key.name} (${maskKey(key.key)})`,
+    formatItem: (key) => `${key.name} (${key.maskedKey || maskKey(key.key)})`,
     onSelect: async (key) => {
       await showKeyActions(key, port, breadcrumb);
     },

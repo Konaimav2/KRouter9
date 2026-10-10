@@ -23,13 +23,19 @@ const CLAUDE_MODEL_TYPES = [
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
 /**
- * Get first available API key from server
+ * Get first available API key from server.
+ * Selects by id from the masked list, then resolves ONLY the chosen
+ * credential via the strict-auth single-record reveal endpoint
+ * (server-side CLI-token auth, rate-limited, audited). Raw secrets are
+ * never read from list payloads.
  * @returns {Promise<string|null>}
  */
 async function getFirstApiKey() {
   const result = await api.getApiKeys();
   const keys = result.success ? (result.data.keys || []) : [];
-  return keys.length > 0 ? keys[0].key : null;
+  if (keys.length === 0 || !keys[0].id) return null;
+  const revealed = await api.revealApiKey(keys[0].id);
+  return revealed.success ? (revealed.data.key || null) : null;
 }
 
 // ─── Claude Code ──────────────────────────────────────────────────────────────
