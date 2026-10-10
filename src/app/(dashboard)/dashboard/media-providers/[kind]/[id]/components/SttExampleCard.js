@@ -7,6 +7,7 @@ import { getProviderAlias } from "@/shared/constants/providers";
 import { getModelKind } from "@/shared/constants/models";
 import { getModelsByProviderId } from "@/shared/constants/models";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
+import { revealKeyById, pickDefaultKeyId, labelForMaskedKey, isKeyActionBlocked } from "@/lib/maskedKeyClient";
 import { Row } from "./exampleShared";
 
 export function SttExampleCard({ providerId }) {
@@ -25,6 +26,10 @@ export function SttExampleCard({ providerId }) {
   const [responseFormat, setResponseFormat] = useState("json");
   const [temperature, setTemperature] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [maskedKeys, setMaskedKeys] = useState([]);
+  const [selectedKeyId, setSelectedKeyId] = useState("");
+  const [resolvingKey, setResolvingKey] = useState(false);
+  const [keyError, setKeyError] = useState("");
   const [useTunnel, setUseTunnel] = useState(false);
   const [localEndpoint, setLocalEndpoint] = useState("");
   const [tunnelEndpoint, setTunnelEndpoint] = useState("");
@@ -39,12 +44,24 @@ export function SttExampleCard({ providerId }) {
     setLocalEndpoint(window.location.origin);
     fetch("/api/keys")
       .then((r) => r.json())
-      .then((d) => { setApiKey((d.keys || []).find((k) => k.isActive !== false)?.key || ""); })
-      .catch(() => {});
+      .then((d) => {
+        const keys = d.keys || [];
+        setMaskedKeys(keys);
+        const id = pickDefaultKeyId(keys);
+        if (!id) return;
+        setSelectedKeyId(id);
+        setResolvingKey(true);
+        setKeyError("");
+        revealKeyById(id)
+          .then((raw) => setApiKey(raw))
+          .catch((e) => setKeyError(e.message || "Failed to resolve API key"))
+          .finally(() => setResolvingKey(false));
+      })
+      .catch((e) => setKeyError(e.message || "Failed to load API keys"));
     fetch("/api/tunnel/status")
       .then((r) => r.json())
       .then((d) => { if (d.publicUrl) setTunnelEndpoint(d.publicUrl); })
-      .catch(() => {});
+      .catch(() => { setTunnelEndpoint(""); });
     const loadCustom = () => {
       fetch("/api/models/custom", { cache: "no-store" })
         .then((r) => r.json())
@@ -52,7 +69,7 @@ export function SttExampleCard({ providerId }) {
           const list = (d.models || []).filter((m) => getModelKind(m) === "stt" && m.providerAlias === providerAlias);
           setCustomSttModels(list);
         })
-        .catch(() => {});
+        .catch(() => { setCustomSttModels([]); });
     };
     loadCustom();
     window.addEventListener("focus", loadCustom);
@@ -65,6 +82,7 @@ export function SttExampleCard({ providerId }) {
 
   const endpoint = useTunnel ? tunnelEndpoint : localEndpoint;
   const modelFull = selectedModel ? `${providerAlias}/${selectedModel}` : "";
+  const keyBlocked = isKeyActionBlocked({ keys: maskedKeys, rawKey: apiKey, resolving: resolvingKey, error: keyError });
 
   const curlSnippet = `curl -X POST ${endpoint}/v1/audio/transcriptions \\
   -H "Authorization: Bearer ${apiKey || "YOUR_KEY"}" \\
@@ -155,12 +173,40 @@ export function SttExampleCard({ providerId }) {
           </div>
         </Row>
 
-        {/* API Key */}
+        {/* API Key (masked — raw resolves via guarded reveal only) */}
         <Row label="API Key">
           <span className="px-3 py-1.5 text-sm font-mono text-text-main bg-sidebar rounded-lg truncate block">
-            {apiKey ? `${apiKey.slice(0, 8)}${"\u2022".repeat(Math.min(20, Math.max(0, apiKey.length - 8)))}` : <span className="text-text-muted italic">No key configured</span>}
+            {resolvingKey
+              ? <span className="text-text-muted italic">Resolving selected key…</span>
+              : (selectedKeyId
+                ? labelForMaskedKey(maskedKeys.find((k) => k.id === selectedKeyId) || { id: selectedKeyId })
+                : <span className="text-text-muted italic">No key configured</span>)}
           </span>
         </Row>
+        {maskedKeys.length > 1 && (
+          <Row label="Key">
+            <select
+              value={selectedKeyId}
+              onChange={(e) => {
+                const id = e.target.value;
+                setSelectedKeyId(id);
+                if (!id) { setApiKey(""); return; }
+                setResolvingKey(true);
+                setKeyError("");
+                revealKeyById(id)
+                  .then((raw) => setApiKey(raw))
+                  .catch((err) => { setApiKey(""); setKeyError(err.message || "Failed to resolve API key"); })
+                  .finally(() => setResolvingKey(false));
+              }}
+              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+            >
+              {maskedKeys.map((k) => (
+                <option key={k.id} value={k.id}>{labelForMaskedKey(k)}</option>
+              ))}
+            </select>
+          </Row>
+        )}
+        {keyError && <p role="alert" className="text-xs text-red-500 break-words">{keyError}</p>}
 
         {/* Audio file */}
         <Row label="Audio File">
@@ -243,14 +289,15 @@ export function SttExampleCard({ providerId }) {
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
               <button
                 onClick={() => copyCurl(curlSnippet)}
-                className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-primary transition-colors"
+                disabled={keyBlocked}
+                className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Icon name={copiedCurl ? "check" : "content_copy"} size={14} />
                 {copiedCurl ? "Copied" : "Copy"}
               </button>
               <button
                 onClick={handleRun}
-                disabled={running || !audioFile || !modelFull}
+                disabled={running || !audioFile || !modelFull || keyBlocked}
                 className="flex w-full sm:w-auto items-center justify-center gap-1.5 px-3 py-1 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Icon name="play_arrow" size={14} style={running ? { animation: "spin 1s linear infinite" } : undefined} />

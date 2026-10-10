@@ -1,11 +1,12 @@
 "use client";
 
 import Icon from "@/shared/components/Icon";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card } from "@/shared/components";
 import { getProviderAlias, isCustomEmbeddingProvider } from "@/shared/constants/providers";
 import { getModelsByProviderId, getModelKind } from "@/shared/constants/models";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
+import { revealKeyById, pickDefaultKeyId, isKeyActionBlocked } from "@/lib/maskedKeyClient";
 import { Row } from "./exampleShared";
 
 const DEFAULT_RESPONSE_EXAMPLE = `{
@@ -28,6 +29,9 @@ export function EmbeddingExampleCard({ providerId, customAlias }) {
   const [input, setInput] = useState("The quick brown fox jumps over the lazy dog");
   const [dimensions, setDimensions] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [maskedKeys, setMaskedKeys] = useState([]);
+  const [resolvingKey, setResolvingKey] = useState(false);
+  const [keyError, setKeyError] = useState("");
   const [useTunnel, setUseTunnel] = useState(false);
   const [localEndpoint, setLocalEndpoint] = useState("");
   const [tunnelEndpoint, setTunnelEndpoint] = useState("");
@@ -41,16 +45,28 @@ export function EmbeddingExampleCard({ providerId, customAlias }) {
     setLocalEndpoint(window.location.origin);
     fetch("/api/keys")
       .then((r) => r.json())
-      .then((d) => { setApiKey((d.keys || []).find((k) => k.isActive !== false)?.key || ""); })
-      .catch(() => {});
+      .then((d) => {
+        const keys = d.keys || [];
+        setMaskedKeys(keys);
+        const id = pickDefaultKeyId(keys);
+        if (!id) return;
+        setResolvingKey(true);
+        setKeyError("");
+        revealKeyById(id)
+          .then((raw) => setApiKey(raw))
+          .catch((e) => setKeyError(e.message || "Failed to resolve API key"))
+          .finally(() => setResolvingKey(false));
+      })
+      .catch((e) => setKeyError(e.message || "Failed to load API keys"));
     fetch("/api/tunnel/status")
       .then((r) => r.json())
       .then((d) => { if (d.publicUrl) setTunnelEndpoint(d.publicUrl); })
-      .catch(() => {});
+      .catch(() => { setTunnelEndpoint(""); });
   }, []);
 
   const endpoint = useTunnel ? tunnelEndpoint : localEndpoint;
   const modelFull = selectedModel ? `${providerAlias}/${selectedModel}` : "";
+  const keyBlocked = isKeyActionBlocked({ keys: maskedKeys, rawKey: apiKey, resolving: resolvingKey, error: keyError });
 
   // Build request body — include dimensions only if user provided a positive number
   const buildBody = () => {
@@ -166,6 +182,8 @@ export function EmbeddingExampleCard({ providerId, customAlias }) {
             className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary font-mono"
           />
         </Row>
+        {resolvingKey && <p className="text-xs text-text-muted">Resolving selected key…</p>}
+        {keyError && <p role="alert" className="text-xs text-red-500 break-words">{keyError}</p>}
 
         {/* Input */}
         <Row label="Input">
@@ -206,14 +224,15 @@ export function EmbeddingExampleCard({ providerId, customAlias }) {
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
               <button
                 onClick={() => copyCurl(curlSnippet)}
-                className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-primary transition-colors"
+                disabled={keyBlocked}
+                className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Icon name={copiedCurl ? "check" : "content_copy"} size={14} />
                 {copiedCurl ? "Copied" : "Copy"}
               </button>
               <button
                 onClick={handleRun}
-                disabled={running || !input.trim() || !modelFull}
+                disabled={running || !input.trim() || !modelFull || keyBlocked}
                 className="flex w-full sm:w-auto items-center justify-center gap-1.5 px-3 py-1 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Icon name="play_arrow" size={14} style={running ? { animation: "spin 1s linear infinite" } : undefined} />
