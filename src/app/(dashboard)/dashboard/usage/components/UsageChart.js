@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import PropTypes from "prop-types";
 import {
   AreaChart,
@@ -20,39 +20,49 @@ const fmtTokens = (n) => {
 
 const fmtCost = (n) => `$${(n || 0).toFixed(4)}`;
 
-export default function UsageChart({ period = "7d", viewMode = "tokens" }) {
+export default function UsageChart({ period = "7d", viewMode = "tokens", scopeQuery }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const requestId = useRef(0);
+  const query = scopeQuery || new URLSearchParams({ period }).toString();
   const chartMode = viewMode === "costs" ? "cost" : "tokens";
 
   const fetchData = useCallback(async () => {
+    const request = ++requestId.current;
     setLoading(true);
+    setError("");
     try {
-      const res = await fetch(`/api/usage/chart?period=${period}`);
-      if (res.ok) {
-        const json = await res.json();
-        setData(json);
-      }
-    } catch (e) {
-      console.error("Failed to fetch chart data:", e);
+      const res = await fetch(`/api/usage/chart?${query}`);
+      if (!res.ok) throw new Error("Usage trend could not be refreshed.");
+      const json = await res.json();
+      if (request !== requestId.current) return;
+      setData(json);
+      setLoaded(true);
+    } catch {
+      if (request === requestId.current) setError("Usage trend could not be refreshed. Existing data is still shown.");
     } finally {
-      setLoading(false);
+      if (request === requestId.current) setLoading(false);
     }
-  }, [period]);
+  }, [query]);
 
   useEffect(() => {
-    // Data loading is intentionally initiated when the selected period changes.
+    // Loading follows the URL-derived scope; older responses cannot replace it.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchData();
+    return () => { requestId.current += 1; };
   }, [fetchData]);
 
   const hasData = data.some((d) => d.tokens > 0 || d.cost > 0);
 
   return (
     <div className="flex min-w-0 flex-col gap-3 p-3 sm:p-4">
-      {loading ? (
+      {loading && (loaded || data.length > 0) && <span role="status" className="text-xs text-[var(--text-muted)]">Refreshing…</span>}
+      {error && <div role="alert" className="text-sm text-[var(--danger)]">{error} <button type="button" className="underline" onClick={fetchData}>Retry</button></div>}
+      {loading && !loaded && !data.length ? (
         <div className="space-y-3 py-3" aria-label="Loading usage trend">
-          {Array.from({ length: 5 }, (_, index) => <div key={index} className="h-7 animate-pulse bg-[var(--color-surface-strong)]" />)}
+          {Array.from({ length: 5 }, (_, index) => <div key={index} className="h-7 animate-pulse motion-reduce:animate-none bg-[var(--color-surface-strong)]" />)}
         </div>
       ) : !hasData ? (
         <div className="h-48 flex items-center justify-center text-text-muted text-sm">No data for this period</div>
@@ -119,7 +129,7 @@ export default function UsageChart({ period = "7d", viewMode = "tokens" }) {
           </AreaChart>
         </ResponsiveContainer>
       )}
-    {!loading && hasData && (
+    {hasData && (
         <div className="overflow-x-auto border-t border-border pt-3" tabIndex={0} role="region" aria-label="Usage trend data table">
           <table className="w-full min-w-[420px] text-xs"><thead><tr><th className="p-2 text-left">Period</th><th className="p-2 text-right">{chartMode === "tokens" ? "Tokens" : "Cost (USD)"}</th></tr></thead><tbody>{data.map((point, index) => <tr key={`${point.label}-${index}`} className="border-t border-border"><td className="p-2">{point.label}</td><td className="p-2 text-right font-mono tabular-nums">{chartMode === "tokens" ? fmtTokens(point.tokens) : fmtCost(point.cost)}</td></tr>)}</tbody></table>
         </div>
@@ -130,5 +140,6 @@ export default function UsageChart({ period = "7d", viewMode = "tokens" }) {
 
 UsageChart.propTypes = {
   period: PropTypes.string,
+  scopeQuery: PropTypes.string,
   viewMode: PropTypes.oneOf(["tokens", "costs"]),
 };
