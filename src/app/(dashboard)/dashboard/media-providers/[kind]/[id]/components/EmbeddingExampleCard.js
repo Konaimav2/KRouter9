@@ -82,7 +82,10 @@ export function EmbeddingExampleCard({ providerId, customAlias }) {
 
   const endpoint = useTunnel ? tunnelEndpoint : localEndpoint;
   const modelFull = selectedModel ? `${providerAlias}/${selectedModel}` : "";
-  const keyBlocked = isKeyActionBlocked({ keys: maskedKeys, rawKey: apiKey, resolving: resolvingKey, error: keyError, loading: keysLoading, keysError });
+  // Settled-empty with an empty manual field is NOT usable: require a
+  // nonempty trimmed explicit credential (mirrors Generic/Stt listEmptyOk).
+  const hasCredential = apiKey.trim().length > 0;
+  const keyBlocked = isKeyActionBlocked({ keys: maskedKeys, rawKey: apiKey, resolving: resolvingKey, error: keyError, loading: keysLoading, keysError }) || (maskedKeys.length === 0 && !hasCredential);
 
   // Build request body — include dimensions only if user provided a positive number
   const buildBody = () => {
@@ -98,7 +101,7 @@ export function EmbeddingExampleCard({ providerId, customAlias }) {
   -d '${JSON.stringify(buildBody())}'`;
 
   const handleRun = async () => {
-    if (!input.trim() || !modelFull) return;
+    if (!input.trim() || !modelFull || !hasCredential) return;
     setRunning(true);
     setError("");
     setResult(null);
@@ -203,6 +206,9 @@ export function EmbeddingExampleCard({ providerId, customAlias }) {
         </Row>
         {resolvingKey && <p className="text-xs text-text-muted">Resolving selected key…</p>}
         {keyError && <p role="alert" className="text-xs text-red-500 break-words">{keyError}</p>}
+        {maskedKeys.length === 0 && !hasCredential && !keysLoading && !keysError && (
+          <p className="text-xs text-text-muted">Enter an API key to run this example.</p>
+        )}
 
         {/* Input */}
         <Row label="Input">
@@ -242,7 +248,7 @@ export function EmbeddingExampleCard({ providerId, customAlias }) {
             <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">Request</span>
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
               <button
-                onClick={() => copyCurl(curlSnippet)}
+                onClick={() => { if (hasCredential) copyCurl(curlSnippet); }}
                 disabled={keyBlocked}
                 className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
