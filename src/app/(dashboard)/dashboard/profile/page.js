@@ -922,6 +922,17 @@ export default function ProfilePage() {
     ["session", "06", "Session"],
   ];
 
+  const jumpToSection = (id, event) => {
+    const section = document.getElementById(id);
+    const main = document.getElementById("dashboard-main");
+    if (!section || !main?.contains(section)) return;
+    event?.preventDefault();
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    section.scrollIntoView({ behavior: reduceMotion || event?.detail === 0 ? "instant" : "smooth", block: "start" });
+    section.focus({ preventScroll: true });
+    window.history.replaceState(null, "", `#${id}`);
+  };
+
   return (
     <div className="mx-auto w-full max-w-[72rem] px-1 sm:px-0">
       <div className="mb-4 lg:hidden">
@@ -934,9 +945,7 @@ export default function ProfilePage() {
         <select
           id="settings-section"
           defaultValue="system"
-          onChange={(event) => {
-            window.location.hash = event.target.value;
-          }}
+          onChange={(event) => jumpToSection(event.target.value)}
           className="h-11 w-full rounded-[var(--input-radius)] border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm"
         >
           {sections.map(([id, number, label]) => (
@@ -960,6 +969,7 @@ export default function ProfilePage() {
             <a
               key={id}
               href={`#${id}`}
+              onClick={(event) => jumpToSection(id, event)}
               className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] flex min-h-11 items-center gap-3 px-3 py-2 text-sm hover:text-[var(--color-primary)]"
             >
               <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">{number}</span>
