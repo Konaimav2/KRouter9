@@ -2,8 +2,9 @@
 ARG NODE_IMAGE=node:22-alpine
 FROM ${NODE_IMAGE} AS base
 WORKDIR /app
-# CN mirror for apk (used by builder and runner stages)
-RUN sed -i 's|dl-cdn.alpinelinux.org|mirrors.aliyun.com|g' /etc/apk/repositories
+# apk mirror: official default (fast globally). CN aliyun mirror caused
+# multi-minute stalls on non-CN builders — do not switch back without
+# verifying from the build host. (Was: mirrors.aliyun.com, Oct 2026.)
 
 FROM base AS builder
 
