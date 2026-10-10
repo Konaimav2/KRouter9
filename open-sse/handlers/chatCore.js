@@ -9,6 +9,7 @@ import { createRequestLogger } from "../utils/requestLogger.js";
 import { getModelTargetFormat, getModelSupportedFormats, getModelStrip, getModelUpstreamId, getModelType, PROVIDER_ID_TO_ALIAS } from "../config/providerModels.js";
 import { PROVIDERS } from "../config/providers.js";
 import { createErrorResult, parseUpstreamError, formatProviderError } from "../utils/error.js";
+import { censorProxyPoolUrl } from "@/lib/proxyMask.js";
 import { HTTP_STATUS, TOKEN_SAVER_HEADER } from "../config/runtimeConfig.js";
 import { handleBypassRequest } from "../utils/bypassHandler.js";
 import { trackPendingRequest, appendRequestLog, saveRequestDetail } from "@/lib/usageDb.js";
@@ -368,7 +369,7 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   if (proxyOptions.vercelRelayUrl) {
     const connectionName = credentials?.connectionName || credentials?.connectionId || "unknown";
     const poolId = credentials?.providerSpecificData?.connectionProxyPoolId || "none";
-    log?.info?.("PROXY", `${provider.toUpperCase()} | ${model} | conn=${connectionName} | pool=${poolId} | vercel-relay=${proxyOptions.vercelRelayUrl}`);
+    log?.info?.("PROXY", `${provider.toUpperCase()} | ${model} | conn=${connectionName} | pool=${poolId} | vercel-relay=${censorProxyPoolUrl(proxyOptions.vercelRelayUrl)}`);
   } else if (proxyOptions.connectionProxyEnabled && proxyOptions.connectionProxyUrl) {
     let maskedProxyUrl = proxyOptions.connectionProxyUrl;
     try {
@@ -440,6 +441,13 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
     // never reclassify as 502, never burn a retry or an account cooldown.
     if (error?.status === HTTP_STATUS.PAYLOAD_TOO_LARGE || error?.code === "RELAY_PAYLOAD_TOO_LARGE") {
       return createErrorResult(HTTP_STATUS.PAYLOAD_TOO_LARGE, error.message || "Request body too large for relay egress");
+    }
+    // Relay/edge timeouts (Vercel FUNCTION_INVOCATION_TIMEOUT, gateway timeouts,
+    // ETIMEDOUT) surface as 504 with a retry-safe message. The thrown error can
+    // embed the relay URL — never forward it to the client.
+    const thrownText = `${error?.message || ""} ${error?.cause?.message || ""} ${error?.code || ""}`;
+    if (/function_invocation_timeout|gateway.timeout|timed out|etimedout/i.test(thrownText)) {
+      return createErrorResult(HTTP_STATUS.GATEWAY_TIMEOUT, "Upstream timed out (gateway timeout). Safe to retry.");
     }
     const errMsg = formatProviderError(error, provider, model, HTTP_STATUS.BAD_GATEWAY);
     if (log?.errorLine) {
