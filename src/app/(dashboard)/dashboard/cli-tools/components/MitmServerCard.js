@@ -55,9 +55,9 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
     });
   }, [fetchStatus]);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     const keys = apiKeys || [];
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMaskedKeys(keys);
     const id = pickDefaultKeyId(keys);
     if (!id) return;
