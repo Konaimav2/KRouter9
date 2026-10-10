@@ -433,7 +433,7 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
           <ActionButton icon={testing ? "progress_activity" : "play_arrow"} label={testing ? "Testing" : "Test"} onClick={testCombo} disabled={testing || combo.models.length === 0} spin={testing} />
           <div ref={commandRef} className="relative">
             <ActionButton icon="more_horiz" label="Manage" onClick={() => setCommandOpen((value) => !value)} />
-            {commandOpen ? <div role="menu" className="absolute right-0 top-full z-[var(--z-menu)] mt-1 w-48 border border-[var(--color-border-strong)] bg-[var(--color-surface-raised)] py-1 shadow-[var(--shadow-tray)]"><button type="button" role="menuitem" onClick={() => { setExpanded(true); setCommandOpen(false); }} className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm hover:bg-[var(--color-surface-hover)]"><Icon name="tune" size={16} />Manage route</button><button type="button" role="menuitem" onClick={() => { setCommandOpen(false); onDelete(); }} className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger-wash)]"><Icon name="delete" size={16} />Delete combo</button></div> : null}
+            {commandOpen ? <div role="menu" className="opacity-100 starting:opacity-0 transition-opacity duration-[var(--duration-base)] ease-[var(--ease-enter)] motion-reduce:transition-none [&:has(:focus-visible)]:transition-none absolute right-0 top-full z-[var(--z-menu)] mt-1 w-48 border border-[var(--color-border-strong)] bg-[var(--color-surface-raised)] py-1 shadow-[var(--shadow-tray)]"><button type="button" role="menuitem" onClick={() => { setExpanded(true); setCommandOpen(false); }} className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm hover:bg-[var(--color-surface-hover)]"><Icon name="tune" size={16} />Manage route</button><button type="button" role="menuitem" onClick={() => { setCommandOpen(false); onDelete(); }} className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger-wash)]"><Icon name="delete" size={16} />Delete combo</button></div> : null}
           </div>
         </div>
       </div>
@@ -527,7 +527,7 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
 }
 
 function ActionButton({ icon, label, onClick, danger = false, disabled = false, spin = false }) {
-  return <button type="button" onClick={onClick} disabled={disabled} className={`flex min-h-11 min-w-11 flex-col items-center justify-center gap-0.5 rounded-[var(--radius-sm)] px-2 text-[10px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${danger ? "text-[var(--color-danger)] hover:bg-[var(--color-danger-wash)]" : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)]"}`}><Icon name={icon} size={17} className={spin ? "animate-spin" : ""} /><span>{label}</span></button>;
+  return <button type="button" onClick={onClick} disabled={disabled} className={`flex min-h-11 min-w-11 flex-col items-center justify-center gap-0.5 rounded-[var(--radius-sm)] px-2 text-[10px] transition-colors duration-[var(--duration-base)] ease-[var(--ease-standard)] motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-40 ${danger ? "text-[var(--color-danger)] hover:bg-[var(--color-danger-wash)]" : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)]"}`}><Icon name={icon} size={17} className={spin ? "animate-spin" : ""} /><span>{label}</span></button>;
 }
 
 function IconButton({ icon, label, onClick, disabled = false, danger = false }) {
@@ -630,7 +630,7 @@ function ModelItem({ id, index, model, isFirst, isLast, onRename, onMoveUp, onMo
     <div
       ref={setNodeRef}
       style={style}
-      className={`group flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1 bg-black/[0.02] hover:bg-black/[0.04] dark:bg-white/[0.02] dark:hover:bg-white/[0.04] transition-colors ${isDragging ? "shadow-md ring-1 ring-primary/30" : ""}`}
+      className={`group flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1 bg-black/[0.02] hover:bg-black/[0.04] dark:bg-white/[0.02] dark:hover:bg-white/[0.04] transition-colors duration-[var(--duration-base)] ease-[var(--ease-standard)] motion-reduce:transition-none ${isDragging ? "shadow-md ring-1 ring-primary/30" : ""}`}
     >
       {/* Drag handle */}
       <button
@@ -693,7 +693,7 @@ function ModelItem({ id, index, model, isFirst, isLast, onRename, onMoveUp, onMo
       {/* Remove */}
       <button
         onClick={onRemove}
-        className="p-0.5 hover:bg-red-500/10 rounded text-text-muted hover:text-red-500 transition-all"
+        className="p-0.5 hover:bg-red-500/10 rounded text-text-muted hover:text-red-500 transition-colors duration-[var(--duration-base)] ease-[var(--ease-standard)] motion-reduce:transition-none"
         title="Remove"
       >
         <Icon name="close" className="text-[12px]" />
@@ -864,7 +864,7 @@ function ComboFormModal({ isOpen, combo, onClose, onSave, activeProviders, kindF
             {/* Add Model button */}
             <button
               onClick={() => setShowModelSelect(true)}
-              className="w-full mt-2 py-2 border border-dashed border-black/10 dark:border-white/10 rounded-lg text-xs text-primary font-medium hover:text-primary hover:border-primary/50 transition-colors flex items-center justify-center gap-1"
+              className="w-full mt-2 py-2 border border-dashed border-black/10 dark:border-white/10 rounded-lg text-xs text-primary font-medium hover:text-primary hover:border-primary/50 transition-colors duration-[var(--duration-base)] ease-[var(--ease-standard)] motion-reduce:transition-none flex items-center justify-center gap-1"
             >
               <Icon name="add" className="text-[16px]" />
               Add Model

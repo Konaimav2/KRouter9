@@ -10,8 +10,8 @@ export default function Sheet({ open, onDismiss, title, description, children, f
   return (
     <OverlayLayer>
       <div className="overlay-root overlay-root--sheet" data-overlay="sheet">
-        <button className="overlay-scrim" type="button" tabIndex={-1} aria-label="Close sheet" onClick={dismissOnScrim ? () => onDismiss?.("scrim") : undefined} />
-        <section ref={panelRef} className={`overlay-shell overlay-sheet overlay-sheet--${side}${fullHeight ? " overlay-sheet--full" : ""} ${className}`} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} tabIndex={-1} onKeyDown={onKeyDown}>
+        <button className="overlay-scrim opacity-100 starting:opacity-0 [&:has(:focus-visible)]:transition-none!" style={{ animation: "none", transition: "opacity var(--duration-base) var(--ease-enter)" }} type="button" tabIndex={-1} aria-label="Close sheet" onClick={dismissOnScrim ? () => onDismiss?.("scrim") : undefined} />
+        <section style={{ animation: "none", transition: "opacity var(--duration-base) var(--ease-enter)" }} ref={panelRef} className={`overlay-shell opacity-100 starting:opacity-0 [&:has(:focus-visible)]:transition-none! overlay-sheet overlay-sheet--${side}${fullHeight ? " overlay-sheet--full" : ""} ${className}`} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} tabIndex={-1} onKeyDown={onKeyDown}>
           <header className="overlay-header">
             <div><h2 id={titleId}>{title}</h2>{description ? <p id={descriptionId}>{description}</p> : null}</div>
             <button className="overlay-close" type="button" aria-label="Close" onClick={() => onDismiss?.("close")}>×</button>

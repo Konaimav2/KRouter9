@@ -166,7 +166,7 @@ button:disabled,[role="button"][aria-disabled="true"] { cursor:not-allowed; }
 .data-text { font-family:var(--font-data); font-variant-numeric:tabular-nums slashed-zero; }
 .sr-only { position:absolute!important; width:1px!important; height:1px!important; padding:0!important; margin:-1px!important; overflow:hidden!important; clip:rect(0,0,0,0)!important; white-space:nowrap!important; border:0!important; }
 @media (max-width:1023px) { html { scroll-padding-top:var(--layout-workbar-height); } }
-@media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:1ms!important; animation-iteration-count:1!important; scroll-behavior:auto!important; transition-duration:1ms!important; } }
+@media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none!important; scroll-behavior:auto!important; transition:none!important; } }
 
 /* Legacy effects are intentionally removed on Switchboard Ledger surfaces. */
 /* Switchboard Ledger compatibility overrides (must remain last). */
@@ -254,7 +254,7 @@ button:disabled,[role="button"][aria-disabled="true"] { cursor:not-allowed; }
 .ribbon-action,.ribbon-icon-action { display:flex; min-height:40px; align-items:center; justify-content:center; gap:var(--space-2); border:var(--divider-stroke) solid var(--button-border); border-radius:var(--radius-control); padding-inline:var(--space-3); color:var(--color-text-muted); font-size:13px; white-space:nowrap; }
 .ribbon-icon-action { width:40px; padding:0; border-color:transparent; border-radius:var(--radius-control)!important; }
 .ribbon-action:hover,.ribbon-icon-action:hover { background:var(--color-surface-hover); color:var(--color-text); }
-.instrument-field { min-height:0; flex:1; overflow-y:auto; overscroll-behavior:contain; padding:var(--layout-page-pad-desktop); }
+.instrument-field { scroll-behavior:smooth; min-height:0; flex:1; overflow-y:auto; overscroll-behavior:contain; padding:var(--layout-page-pad-desktop); }
 .instrument-field--playground { display:flex; flex-direction:column; overflow:hidden; padding:0; }
 
 @media (max-width:1023px) {
