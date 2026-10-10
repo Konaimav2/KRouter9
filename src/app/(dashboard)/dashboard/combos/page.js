@@ -120,16 +120,17 @@ export default function CombosPage() {
       if (res.ok) {
         await fetchData();
         setShowCreateModal(false);
-      } else {
-        const err = await res.json();
-        alert(err.error || "Failed to create combo");
+        return { ok: true };
       }
+      const err = await res.json();
+      return { ok: false, error: err.error || "Failed to create combo" };
     } catch (error) {
       console.log("Error creating combo:", error);
+      return { ok: false, error: "Network error. Check the gateway and retry." };
     }
   };
 
-  const handleUpdate = async (id, data) => {
+  const handleUpdate = async (id, data, oldName) => {
     try {
       const res = await fetch(`/api/combos/${id}`, {
         method: "PUT",
@@ -137,15 +138,37 @@ export default function CombosPage() {
         body: JSON.stringify(data),
       });
       if (res.ok) {
+        // comboStrategies is keyed by combo name — migrate the entry on rename
+        // so the renamed route keeps its strategy instead of going stale.
+        const nextName = data?.name;
+        if (nextName && oldName && nextName !== oldName && comboStrategies[oldName]) {
+          const updated = { ...comboStrategies };
+          updated[nextName] = updated[oldName];
+          delete updated[oldName];
+          try {
+            await fetch("/api/settings", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ comboStrategies: updated }),
+            });
+          } catch (error) {
+            console.log("Error migrating combo strategy:", error);
+          }
+          setComboStrategies(updated);
+        }
         await fetchData();
-      } else {
-        const err = await res.json();
-        alert(err.error || "Failed to update combo");
+        return { ok: true };
       }
+      const err = await res.json();
+      return { ok: false, error: err.error || "Failed to update combo" };
     } catch (error) {
       console.log("Error updating combo:", error);
+      return { ok: false, error: "Network error. Check the gateway and retry." };
     }
   };
+
+  const handleRename = async (id, oldName, newName, models) =>
+    handleUpdate(id, { name: newName, models }, oldName);
 
   const handleDelete = async (id, name) => {
     setConfirmState({
@@ -255,7 +278,8 @@ export default function CombosPage() {
                 copied={copied}
                 onCopy={copy}
                 onDelete={() => handleDelete(combo.id, combo.name)}
-                onChangeModels={(models) => handleUpdate(combo.id, { name: combo.name, models })}
+                onChangeModels={(models) => handleUpdate(combo.id, { name: combo.name, models }, combo.name)}
+                onRename={(newName, models) => handleRename(combo.id, combo.name, newName, models)}
                 strategy={comboStrategies[combo.name] || {}}
                 onSetStrategy={(patch) => handleSetComboStrategy(combo.name, patch)}
               />
@@ -288,12 +312,15 @@ const STRATEGY_OPTIONS = [
   { value: "fusion", label: "Fusion — panel + judge", shortLabel: "Fusion" },
 ];
 
-function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDelete, onChangeModels, strategy = {}, onSetStrategy }) {
+function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDelete, onChangeModels, onRename, strategy = {}, onSetStrategy }) {
   const [showJudgeSelect, setShowJudgeSelect] = useState(false);
   const [showAddModel, setShowAddModel] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [draftModels, setDraftModels] = useState(combo.models);
+  const [draftName, setDraftName] = useState(combo.name);
+  const [nameError, setNameError] = useState("");
+  const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
@@ -301,7 +328,29 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
   const current = strategy.fallbackStrategy || "fallback";
   const judge = strategy.judgeModel || "";
   const isFusion = current === "fusion";
-  const dirty = draftModels.length !== combo.models.length || draftModels.some((model, index) => model !== combo.models[index]);
+  const trimmedName = draftName.trim();
+  const nameChanged = trimmedName !== combo.name;
+  const dirty = nameChanged || draftModels.length !== combo.models.length || draftModels.some((model, index) => model !== combo.models[index]);
+
+  const validateDraftName = (value) => {
+    if (!value.trim()) {
+      setNameError("Name is required");
+      return false;
+    }
+    if (!VALID_NAME_REGEX.test(value.trim())) {
+      setNameError("Only letters, numbers, -, _ and . allowed");
+      return false;
+    }
+    setNameError("");
+    return true;
+  };
+
+  const handleDraftNameChange = (e) => {
+    const value = e.target.value;
+    setDraftName(value);
+    if (value) validateDraftName(value);
+    else setNameError("");
+  };
 
   const moveModel = (index, delta) => {
     const target = index + delta;
@@ -314,10 +363,18 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
 
   const saveMembers = async () => {
     if (!dirty || saving) return;
+    setSaveError("");
+    if (nameChanged && !validateDraftName(draftName)) return;
     setSaving(true);
-    await onChangeModels(draftModels);
+    const result = nameChanged
+      ? await onRename(trimmedName, draftModels)
+      : await onChangeModels(draftModels);
     setSaving(false);
-    setAnnouncement(`${combo.name} saved with ${draftModels.length} ordered members`);
+    if (result && result.ok === false) {
+      setSaveError(result.error || "Failed to update combo");
+      return;
+    }
+    setAnnouncement(`${nameChanged ? trimmedName : combo.name} saved with ${draftModels.length} ordered members`);
   };
 
   const testCombo = async () => {
@@ -369,6 +426,17 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
       {expanded && (
         <div className="border-t border-[var(--color-border)] bg-[var(--color-surface-strong)] p-3 sm:p-4">
           <div className="space-y-2">
+            <div>
+              <label htmlFor={`rename-${combo.id}`} className="mb-1 block text-xs font-medium text-[var(--color-text-muted)]">Combo name</label>
+              <Input
+                id={`rename-${combo.id}`}
+                aria-label="Rename combo"
+                value={draftName}
+                onChange={handleDraftNameChange}
+                placeholder={combo.name}
+                error={nameError}
+              />
+            </div>
             <div className="grid grid-cols-3 overflow-hidden border border-[var(--color-border)]" aria-label="Routing strategy">{STRATEGY_OPTIONS.map((option) => <button key={option.value} type="button" aria-pressed={current === option.value} onClick={() => onSetStrategy({ fallbackStrategy: option.value })} className={`min-h-11 px-3 text-xs font-medium ${current === option.value ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]" : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]"}`}>{option.shortLabel}</button>)}</div>
             {draftModels.map((model, index) => (
               <div
@@ -395,7 +463,8 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
               </div>
             ))}
             <button type="button" onClick={() => setShowAddModel(true)} className="flex min-h-12 w-full items-center justify-center gap-2 border border-dashed border-[var(--color-primary-border)] font-medium text-[var(--color-primary)] hover:bg-[var(--color-primary-wash)]"><Icon name="add" size={17} />Add model</button>
-            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] pt-3 sm:flex-row sm:items-center sm:justify-between"><p className="text-xs text-[var(--color-text-muted)]">{dirty ? "Unsaved order changes" : "Route order saved"}</p><div className="flex gap-2"><Button size="sm" variant="secondary" onClick={() => { setDraftModels(combo.models); setExpanded(false); }} disabled={saving}>Cancel</Button><Button size="sm" onClick={saveMembers} loading={saving} disabled={!dirty || saving}>Save route</Button></div></div>
+            {saveError && <p role="alert" className="text-xs text-[var(--color-danger)]">{saveError}</p>}
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] pt-3 sm:flex-row sm:items-center sm:justify-between"><p className="text-xs text-[var(--color-text-muted)]">{dirty ? "Unsaved order changes" : "Route order saved"}</p><div className="flex gap-2"><Button size="sm" variant="secondary" onClick={() => { setDraftModels(combo.models); setDraftName(combo.name); setNameError(""); setSaveError(""); setExpanded(false); }} disabled={saving}>Cancel</Button><Button size="sm" onClick={saveMembers} loading={saving} disabled={!dirty || !!nameError || saving}>Save route</Button></div></div>
           </div>
         </div>
       )}
