@@ -49,4 +49,33 @@ describe("providers status filter", () => {
     expect(matchesStatusFilter("active", disabledStats)).toBe(false);
     expect(matchesStatusFilter("none", disabledStats)).toBe(false);
   });
+
+  it("aliases the Connected tile id to the active vocabulary", () => {
+    const activeStats = { total: 1, allDisabled: false };
+    expect(matchesStatusFilter("connected", activeStats)).toBe(true);
+    expect(matchesStatusFilter("connected", { total: 0 })).toBe(false);
+  });
+
+  it("aliases the Disabled tile id to the inactive vocabulary", () => {
+    const disabledStats = { total: 3, allDisabled: true };
+    expect(matchesStatusFilter("disabled", disabledStats)).toBe(true);
+    expect(matchesStatusFilter("disabled", { total: 1, allDisabled: false })).toBe(
+      false,
+    );
+  });
+
+  it("keeps select and tile vocabularies in sync over the same provider set", () => {
+    const providers = [
+      { stats: { total: 1, allDisabled: false }, isNoAuth: false },
+      { stats: { total: 2, allDisabled: true }, isNoAuth: false },
+      { stats: { total: 0, allDisabled: false }, isNoAuth: false },
+    ];
+    const count = (value) =>
+      providers.filter((p) => matchesStatusFilter(value, p.stats, p.isNoAuth))
+        .length;
+    expect(count("connected")).toBe(count("active"));
+    expect(count("disabled")).toBe(count("inactive"));
+    expect(count("connected")).toBe(1);
+    expect(count("disabled")).toBe(1);
+  });
 });

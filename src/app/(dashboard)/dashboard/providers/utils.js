@@ -13,9 +13,14 @@ export function getConnectionStatus(stats, isNoAuth = false) {
   return stats.allDisabled ? "inactive" : "active";
 }
 
+// Health-tile ids ("connected"/"disabled") predate the select vocabulary
+// ("active"/"inactive"/"none"); alias them so both controls filter identically.
+const STATUS_FILTER_ALIASES = { connected: "active", disabled: "inactive" };
+
 export function matchesStatusFilter(statusFilter, stats, isNoAuth = false) {
   if (statusFilter === "all") return true;
-  return getConnectionStatus(stats, isNoAuth) === statusFilter;
+  const normalized = STATUS_FILTER_ALIASES[statusFilter] || statusFilter;
+  return getConnectionStatus(stats, isNoAuth) === normalized;
 }
 
 export function buildCustomProviderDisplaySlugs(nodes = []) {
