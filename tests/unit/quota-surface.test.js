@@ -50,17 +50,17 @@ describe("quota dashboard surface", () => {
     const html = renderToStaticMarkup(React.createElement(QuotaPage));
 
     expect(html).toContain(">Quota</h1>");
-    expect(html).toContain("Accounts are ordered globally by their next reset.");
+    expect(html).toContain("Accounts are ordered A–Z.");
     expect(html).toContain("Account identities are masked by default");
     expect(html).toContain("Provider quota rows");
   });
 
-  it("requests globally expiring-first provider limits", () => {
+  it("renders provider limits without a stale sort prop (A-Z default lives in the component)", () => {
     ProviderLimits.mockClear();
     renderToStaticMarkup(React.createElement(QuotaPage));
 
     expect(ProviderLimits).toHaveBeenCalledWith(
-      expect.objectContaining({ sort: "expiring" }),
+      expect.not.objectContaining({ sort: "expiring" }),
       undefined,
     );
   });
