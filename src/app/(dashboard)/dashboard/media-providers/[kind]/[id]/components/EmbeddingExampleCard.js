@@ -64,14 +64,13 @@ export function EmbeddingExampleCard({ providerId, customAlias }) {
   useEffect(() => {
     setLocalEndpoint(window.location.origin);
     fetch("/api/keys")
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error("Failed to load API keys"); return r.json(); })
       .then((d) => {
         const keys = d.keys || [];
         setMaskedKeys(keys);
         setKeysError("");
         setKeysLoading(false);
         const id = pickDefaultKeyId(keys);
-        if (!id) return;
         resolveForSelection(id);
       })
       .catch((e) => { setKeysLoading(false); setKeysError(e.message || "Failed to load API keys"); setKeyError(e.message || "Failed to load API keys"); });
@@ -194,7 +193,10 @@ export function EmbeddingExampleCard({ providerId, customAlias }) {
           <input
             type="password"
             value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
+            // Manual entry wins: invalidate any pending auto-reveal so a late
+            // completion cannot clobber the typed value, and drop stale
+            // resolving/error so the typed credential is usable immediately.
+            onChange={(e) => { revealSeqRef.current++; setResolvingKey(false); setKeyError(""); setApiKey(e.target.value); }}
             placeholder="sk-..."
             className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary font-mono"
           />

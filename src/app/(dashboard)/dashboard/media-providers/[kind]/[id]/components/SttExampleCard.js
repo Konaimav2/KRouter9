@@ -63,7 +63,7 @@ export function SttExampleCard({ providerId }) {
   useEffect(() => {
     setLocalEndpoint(window.location.origin);
     fetch("/api/keys")
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error("Failed to load API keys"); return r.json(); })
       .then((d) => {
         const keys = d.keys || [];
         setMaskedKeys(keys);
@@ -99,7 +99,10 @@ export function SttExampleCard({ providerId }) {
 
   const endpoint = useTunnel ? tunnelEndpoint : localEndpoint;
   const modelFull = selectedModel ? `${providerAlias}/${selectedModel}` : "";
-  const keyBlocked = isKeyActionBlocked({ keys: maskedKeys, rawKey: apiKey, resolving: resolvingKey, error: keyError, loading: keysLoading, keysError });
+  // Settled-empty is not a manual-entry state here (no manual input): without
+  // a resolved credential the action stays blocked.
+  const listEmptyOk = maskedKeys.length > 0 || !!apiKey;
+  const keyBlocked = isKeyActionBlocked({ keys: maskedKeys, rawKey: apiKey, resolving: resolvingKey, error: keyError, loading: keysLoading, keysError }) || !listEmptyOk;
 
   const curlSnippet = `curl -X POST ${endpoint}/v1/audio/transcriptions \\
   -H "Authorization: Bearer ${apiKey || "YOUR_KEY"}" \\
