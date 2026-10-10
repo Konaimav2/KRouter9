@@ -324,3 +324,42 @@ describe("real clipboard hook promise contract", () => {
     await expect(hook().copy("synthetic-value")).rejects.toThrow("denied");
   });
 });
+
+
+describe("Wave H1 guarded key-operation toasts", () => {
+  beforeEach(() => { hookHarness.cursor = 0; hookHarness.states = [keys, false]; hookHarness.copyFails = false; notices.length = 0; });
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+  it("announces successful creation without putting the secret in a notice", async () => {
+    hookHarness.states[2] = true;
+    findElement(clientTree(), n => n.type === Input && n.props.label === "Key Name").props.onChange({ target: { value: "Fixture" } });
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ key: "synthetic-secret", keys: [] }) })));
+    await findElement(clientTree(), n => n.props.onClick?.name === "handleCreateKey").props.onClick();
+    expect(notices).toContainEqual(["success", "API key created. Copy it before closing this dialog."]);
+    expect(JSON.stringify(notices)).not.toContain("synthetic-secret");
+  });
+  it("announces successful reveal and its auto-hide deadline without secret text", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ key: "synthetic-secret" }) })));
+    await findElement(clientTree(), n => n.props["aria-label"] === "Show Alpha production key").props.onClick();
+    expect(notices).toEqual([["success", "API key revealed. It will hide after 15 seconds."]]);
+  });
+  it.each(["http", "payload", "network"])("announces %s reveal failures", async (kind) => {
+    vi.stubGlobal("fetch", vi.fn(async () => { if (kind === "network") throw new Error("network"); return { ok: kind !== "http", status: 401, json: async () => ({}) }; }));
+    await findElement(clientTree(), n => n.props["aria-label"] === "Show Alpha production key").props.onClick();
+    expect(notices).toEqual([["error", "Could not reveal API key. Try again."]]);
+  });
+  it("announces successful protected copy only after the clipboard write", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ key: "synthetic-secret" }) })));
+    await findElement(clientTree(), n => n.props["aria-label"] === "Copy Alpha production key").props.onClick();
+    expect(hookHarness.copiedValues.at(-1)).toBe("synthetic-secret");
+    expect(notices).toEqual([["success", "API key copied."]]);
+  });
+  it("announces one-time issued-key copy success", async () => {
+    hookHarness.states[4] = "synthetic-secret";
+    await findElement(clientTree(), n => n.type === Button && n.props.icon === "content_copy" && String(n.props.onClick).includes("created_key")).props.onClick();
+    expect(notices).toEqual([["success", "Copied to clipboard."]]);
+  });
+  it("uses the incumbent polite live toast region", () => {
+    expect(readFileSync(new URL("../../src/shared/components/layouts/DashboardLayout.js", import.meta.url), "utf8")).toContain('aria-live="polite"');
+  });
+});

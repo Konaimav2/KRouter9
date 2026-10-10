@@ -12,6 +12,14 @@ export const TOKEN_REFRESH_SPAM_PATTERNS = [
   /Connection refresh (finished|failed)/,
   /Copilot token expiring soon/,
   /Credentials updated in localDb/,
+  // Live-rendered shape from src/sse/utils/logger.js info()/warn():
+  // `[time] <icon> [TOKEN] <message>` — executors log e.g.
+  // log?.info?.("TOKEN", "Antigravity refreshed") (antigravity.js),
+  // log?.info?.("TOKEN", `${provider} refreshed`) (default.js),
+  // `${PROVIDER} | refreshed for embeddings|image generation|video …`.
+  /\[TOKEN\][^\n]*\brefreshed\b/i,
+  /\[TOKEN\][^\n]*\brefresh (failed|error|threw)\b/i,
+  /onCredentialsRefreshed/,
 ];
 
 export function isTokenRefreshSpam(line) {

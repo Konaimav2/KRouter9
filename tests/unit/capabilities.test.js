@@ -69,7 +69,7 @@ describe("getCapabilitiesForModel", () => {
       reasoning: true,
       search: true,
       thinkingFormat: "openai",
-      contextWindow: 272000,
+      contextWindow: 1050000,
       maxOutput: 128000,
     });
   });
