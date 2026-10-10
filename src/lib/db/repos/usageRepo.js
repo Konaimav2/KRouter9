@@ -383,8 +383,29 @@ function loadDaysInRange(adapter, maxDays) {
   return adapter.all(`SELECT dateKey, data FROM usageDaily WHERE dateKey >= ?`, [cutoffKey]);
 }
 
+function loadDaysInDateRange(adapter, startIso, endIso) {
+  const toKey = (iso) => String(iso).slice(0, 10);
+  const startKey = toKey(startIso);
+  const endKey = toKey(endIso);
+  if (!startKey || !endKey || startKey > endKey) return [];
+  return adapter.all(
+    `SELECT dateKey, data FROM usageDaily WHERE dateKey >= ? AND dateKey <= ?`,
+    [startKey, endKey]
+  );
+}
+
 export async function getUsageStats(period = "all") {
   const db = await getAdapter();
+  // Custom-range form (from stats/chart routes): { period, startDate, endDate }
+  // with ISO bounds. Plain-string callers keep the old behavior.
+  const customRange =
+    period && typeof period === "object" && (period.startDate || period.endDate)
+      ? {
+          start: new Date(period.startDate).toISOString(),
+          end: new Date(period.endDate).toISOString(),
+        }
+      : null;
+  const effectivePeriod = customRange ? period.period || "all" : period;
 
   const [{ getProviderConnections }, { getApiKeys }, { getProviderNodes }] = await Promise.all([
     import("./connectionsRepo.js"),
@@ -484,12 +505,14 @@ export async function getUsageStats(period = "all") {
     }
   }
 
-  const useDailySummary = period !== "24h" && period !== "today";
+  const useDailySummary = effectivePeriod !== "24h" && effectivePeriod !== "today";
 
   if (useDailySummary) {
     const periodDays = { "7d": 7, "30d": 30, "60d": 60 };
-    const maxDays = periodDays[period] || null;
-    const dayRows = loadDaysInRange(db, maxDays);
+    const maxDays = periodDays[effectivePeriod] || null;
+    const dayRows = customRange
+      ? loadDaysInDateRange(db, customRange.start, customRange.end)
+      : loadDaysInRange(db, maxDays);
 
     for (const dr of dayRows) {
       const dateKey = dr.dateKey;
@@ -607,17 +630,25 @@ export async function getUsageStats(period = "all") {
   } else {
     // 24h / today: live history
     let cutoff;
-    if (period === "today") {
+    if (customRange) {
+      cutoff = customRange.start;
+    } else if (effectivePeriod === "today") {
       const startOfDay = new Date();
       startOfDay.setHours(0, 0, 0, 0);
       cutoff = startOfDay.toISOString();
     } else {
       cutoff = new Date(Date.now() - PERIOD_MS["24h"]).toISOString();
     }
-    const filtered = db.all(
-      `SELECT timestamp, provider, model, connectionId, apiKey, endpoint, promptTokens, completionTokens, cost, tokens FROM usageHistory WHERE timestamp >= ?`,
-      [cutoff]
-    );
+    const upperBound = customRange ? customRange.end : null;
+    const filtered = upperBound
+      ? db.all(
+        `SELECT timestamp, provider, model, connectionId, apiKey, endpoint, promptTokens, completionTokens, cost, tokens FROM usageHistory WHERE timestamp >= ? AND timestamp <= ?`,
+        [cutoff, upperBound]
+      )
+      : db.all(
+        `SELECT timestamp, provider, model, connectionId, apiKey, endpoint, promptTokens, completionTokens, cost, tokens FROM usageHistory WHERE timestamp >= ?`,
+        [cutoff]
+      );
 
     for (const r of filtered) {
       const tokens = parseJson(r.tokens, {}) || {};
@@ -704,8 +735,40 @@ export async function getUsageStats(period = "all") {
 export async function getChartData(period = "7d") {
   const db = await getAdapter();
   const now = Date.now();
+  // Custom-range form (from the chart route): { period, startDate, endDate }
+  // with ISO bounds. Plain-string callers keep the old behavior.
+  const customRange =
+    period && typeof period === "object" && (period.startDate || period.endDate)
+      ? {
+          start: new Date(period.startDate).toISOString(),
+          end: new Date(period.endDate).toISOString(),
+        }
+      : null;
+  const effectivePeriod = customRange ? period.period || "7d" : period;
 
-  if (period === "today") {
+  if (customRange) {
+    const startMs = new Date(customRange.start).getTime();
+    const endMs = new Date(customRange.end).getTime();
+    const dayCount = Math.min(Math.max(Math.ceil((endMs - startMs) / 86400000), 1), 60);
+    const labelFn = (d) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const dayRows = loadDaysInDateRange(db, customRange.start, customRange.end);
+    const dayMap = {};
+    for (const r of dayRows) dayMap[r.dateKey] = parseJson(r.data, {});
+    const base = new Date(startMs);
+    return Array.from({ length: dayCount }, (_, i) => {
+      const d = new Date(base);
+      d.setDate(d.getDate() + i);
+      const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const dayData = dayMap[dateKey];
+      return {
+        label: labelFn(d),
+        tokens: dayData ? (dayData.promptTokens || 0) + (dayData.completionTokens || 0) : 0,
+        cost: dayData ? (dayData.cost || 0) : 0,
+      };
+    });
+  }
+
+  if (effectivePeriod === "today") {
     const bucketCount = 24;
     const bucketMs = 3600000;
     const startOfDay = new Date();
@@ -731,7 +794,7 @@ export async function getChartData(period = "7d") {
     return buckets;
   }
 
-  if (period === "24h") {
+  if (effectivePeriod === "24h") {
     const bucketCount = 24;
     const bucketMs = 3600000;
     const labelFn = (ts) => new Date(ts).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
@@ -752,7 +815,7 @@ export async function getChartData(period = "7d") {
     return buckets;
   }
 
-  const bucketCount = period === "7d" ? 7 : period === "30d" ? 30 : 60;
+  const bucketCount = effectivePeriod === "7d" ? 7 : effectivePeriod === "30d" ? 30 : effectivePeriod === "all" ? 60 : 60;
   const today = new Date();
   const labelFn = (d) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 

@@ -146,7 +146,7 @@ function getGroupKey(item, field) {
   return item[field] || "Unknown";
 }
 
-function groupData(data, field) {
+function groupData(data, field, sortBy, sortOrder) {
   const groups = new Map();
   for (const item of data || []) {
     const groupKey = getGroupKey(item, field);
@@ -156,14 +156,21 @@ function groupData(data, field) {
     if (item.lastUsed && (!group.summary.lastUsed || new Date(item.lastUsed) > new Date(group.summary.lastUsed))) group.summary.lastUsed = item.lastUsed;
     group.items.push(item);
   }
-  return [...groups.values()];
+  return [...groups.values()].sort((a, b) => {
+    const value = (group) => group.summary[sortBy] ?? group.items[0]?.[sortBy] ?? group.groupKey;
+    const left = value(a); const right = value(b);
+    const comparison = typeof left === "string" && typeof right === "string"
+      ? left.toLowerCase().localeCompare(right.toLowerCase())
+      : (left || 0) - (right || 0);
+    return comparison * (sortOrder === "asc" ? 1 : -1);
+  });
 }
 
 function LoadingBands() {
-  return <div className="space-y-6" aria-label="Loading usage"><div className="grid grid-cols-2 gap-px border border-[var(--ledger-border)] bg-[var(--ledger-rule)] lg:grid-cols-4">{Array.from({ length: 4 }, (_, index) => <div key={index} className="h-24 animate-pulse bg-[var(--ledger-bg)]" />)}</div><div className="h-72 animate-pulse border border-[var(--ledger-border)] bg-[var(--surface-hover)]" /></div>;
+  return <div className="space-y-6" aria-label="Loading usage">{["Overview", "Route activity", "Trend", "Breakdown"].map((title) => <section key={title} className="border border-border bg-surface"><header className="border-b border-border bg-surface-2 px-4 py-3"><h2 className="font-semibold">{title}</h2></header><div aria-label={`Loading ${title.toLowerCase()}`} className={`${title === "Overview" ? "h-24" : "h-72"} animate-pulse motion-reduce:animate-none bg-[var(--surface-hover)]`} /></section>)}</div>;
 }
 
-export default function UsageDashboard({ period, mode }) {
+export default function UsageDashboard({ period, mode, scopeQuery }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const sortBy = searchParams.get("sortBy") || "rawModel";
@@ -177,25 +184,31 @@ export default function UsageDashboard({ period, mode }) {
   const [statsError, setStatsError] = useState("");
   const [streamError, setStreamError] = useState(false);
   const loaded = useRef(false);
+  const statsRequest = useRef(0);
+  const query = scopeQuery || new URLSearchParams({ period }).toString();
 
   const fetchStats = useCallback(async () => {
+    const request = ++statsRequest.current;
     loaded.current ? setFetching(true) : setLoading(true);
     setStatsError("");
     try {
-      const response = await fetch(`/api/usage/stats?period=${period}`);
+      const response = await fetch(`/api/usage/stats?${query}`);
       if (!response.ok) throw new Error(`Usage statistics failed (${response.status})`);
       const data = await response.json();
-      setStats((previous) => ({ ...previous, ...data }));
+      if (request !== statsRequest.current) return;
+      setStats(data);
       loaded.current = true;
     } catch (error) {
+      if (request !== statsRequest.current) return;
       setStatsError(error.message || "Failed to load usage statistics.");
-    } finally { setLoading(false); setFetching(false); }
-  }, [period]);
+    } finally { if (request === statsRequest.current) { setLoading(false); setFetching(false); } }
+  }, [query]);
 
   useEffect(() => {
     // Data loading is intentionally initiated when the selected period changes.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchStats();
+    return () => { statsRequest.current += 1; };
   }, [fetchStats]);
   useEffect(() => {
     Promise.all([fetch("/api/providers?mode=full").then((response) => response.ok ? response.json() : null), fetch("/api/provider-nodes").then((response) => response.ok ? response.json() : null)]).then(([data, nodeData]) => {
@@ -232,10 +245,10 @@ export default function UsageDashboard({ period, mode }) {
       return SummaryCells;
     };
     const detail = (item, first) => <><td className="px-6 py-3 font-medium">{first}</td>{tableView !== "model" && <td className="px-6 py-3 font-mono tabular-nums">{item.rawModel}</td>}<td className="px-6 py-3"><Badge variant={item.pending > 0 ? "primary" : "neutral"} size="sm">{item.provider}</Badge></td>{tableView === "account" && <td className="px-6 py-3">{item.accountName}</td>}<td className="px-6 py-3 text-right">{fmt(item.requests)}</td><td className="px-6 py-3 text-right text-[var(--text-muted)]">{fmtTime(item.lastUsed)}</td></>;
-    if (tableView === "account") return { columns: ACCOUNT_COLUMNS, groups: groupData(sortData(stats.byAccount, {}, sortBy, sortOrder), "accountName"), summary: commonSummary(2), detail: (item) => detail(item, item.accountName), empty: "No account-specific usage recorded yet." };
-    if (tableView === "apiKey") return { columns: API_KEY_COLUMNS, groups: groupData(sortData(stats.byApiKey, {}, sortBy, sortOrder), "keyName"), summary: commonSummary(2), detail: (item) => detail(item, item.keyName), empty: "No API key usage recorded yet." };
-    if (tableView === "endpoint") return { columns: ENDPOINT_COLUMNS, groups: groupData(sortData(stats.byEndpoint, {}, sortBy, sortOrder), "endpoint"), summary: commonSummary(2), detail: (item) => detail(item, item.endpoint), empty: "No endpoint usage recorded yet." };
-    return { columns: MODEL_COLUMNS, groups: groupData(sortData(stats.byModel, stats.pending?.byModel || {}, sortBy, sortOrder), "rawModel"), summary: commonSummary(1), detail: (item) => detail(item, item.rawModel), empty: "No usage recorded yet." };
+    if (tableView === "account") return { columns: ACCOUNT_COLUMNS, groups: groupData(sortData(stats.byAccount, {}, sortBy, sortOrder), "accountName", sortBy, sortOrder), summary: commonSummary(2), detail: (item) => detail(item, item.accountName), empty: "No account-specific usage recorded yet." };
+    if (tableView === "apiKey") return { columns: API_KEY_COLUMNS, groups: groupData(sortData(stats.byApiKey, {}, sortBy, sortOrder), "keyName", sortBy, sortOrder), summary: commonSummary(2), detail: (item) => detail(item, item.keyName), empty: "No API key usage recorded yet." };
+    if (tableView === "endpoint") return { columns: ENDPOINT_COLUMNS, groups: groupData(sortData(stats.byEndpoint, {}, sortBy, sortOrder), "endpoint", sortBy, sortOrder), summary: commonSummary(2), detail: (item) => detail(item, item.endpoint), empty: "No endpoint usage recorded yet." };
+    return { columns: MODEL_COLUMNS, groups: groupData(sortData(stats.byModel, stats.pending?.byModel || {}, sortBy, sortOrder), "rawModel", sortBy, sortOrder), summary: commonSummary(1), detail: (item) => detail(item, item.rawModel), empty: "No usage recorded yet." };
   }, [sortBy, sortOrder, stats, tableView]);
 
   if (loading && !stats) return <LoadingBands />;
@@ -243,9 +256,9 @@ export default function UsageDashboard({ period, mode }) {
 
   return <div className="space-y-[var(--space-6)]">
     {(statsError || streamError) && <div className="border border-[var(--warning)] bg-[var(--warning-wash)] p-3 text-sm text-[var(--warning)]">{statsError || "Live updates disconnected. Displayed aggregate data may be stale."} <button type="button" onClick={fetchStats} className="font-semibold underline">Refresh</button></div>}
-    <section className="border border-border bg-surface"><header className="flex min-h-11 items-center gap-3 border-b border-border bg-surface-2 px-4 py-3"><h2 className="font-semibold">Overview</h2>{fetching && <span className="ml-auto text-xs text-[var(--text-muted)]">Refreshing…</span>}</header><OverviewCards stats={stats} viewMode={mode} /></section>
+    <section className="border border-border bg-surface"><header className="flex min-h-11 items-center gap-3 border-b border-border bg-surface-2 px-4 py-3"><h2 className="font-semibold">Overview</h2>{fetching && <span role="status" className="ml-auto text-xs text-[var(--text-muted)]">Refreshing…</span>}</header><OverviewCards stats={stats} viewMode={mode} density="compact" /></section>
     <section className="border border-border bg-surface"><header className="flex min-h-11 items-center gap-3 border-b border-border bg-surface-2 px-4 py-3"><h2 className="font-semibold">Route activity</h2><span className="ml-auto font-mono tabular-nums text-xs text-[var(--text-muted)]">{stats.activeRequests?.length || 0} active</span></header><div className="grid min-w-0 gap-0 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]"><ProviderTopology providers={providers} activeRequests={stats.activeRequests || []} lastProvider={stats.recentRequests?.[0]?.provider || ""} errorProvider={stats.errorProvider || ""} /><RecentRequests requests={stats.recentRequests || []} /></div></section>
-    <section className="border border-border bg-surface"><header className="flex min-h-11 items-center gap-3 border-b border-border bg-surface-2 px-4 py-3"><h2 className="font-semibold">Trend</h2><span className="ml-auto font-mono tabular-nums text-xs text-[var(--text-muted)]">{mode === "tokens" ? "Tokens" : "USD"}</span></header><UsageChart period={period} viewMode={mode} /></section>
+    <section className="border border-border bg-surface"><header className="flex min-h-11 items-center gap-3 border-b border-border bg-surface-2 px-4 py-3"><h2 className="font-semibold">Trend</h2><span className="ml-auto font-mono tabular-nums text-xs text-[var(--text-muted)]">{mode === "tokens" ? "Tokens" : "USD"}</span></header><UsageChart period={period} viewMode={mode} scopeQuery={query} /></section>
     <section className="border border-border bg-surface"><header className="flex min-h-11 items-center gap-3 border-b border-border bg-surface-2 px-4 py-3 flex-wrap"><h2 className="font-semibold">Breakdown</h2><div className="ml-auto flex items-center gap-2"><label htmlFor="usage-breakdown" className="sr-only">Break down usage by</label><select id="usage-breakdown" value={tableView} onChange={(event) => { setTableView(event.target.value); const params = new URLSearchParams(searchParams.toString()); params.set("table", event.target.value); router.replace(`?${params.toString()}`, { scroll: false }); }} className="h-9 rounded-[var(--radius-control)] border border-[var(--input-border)] bg-[var(--surface)] px-3 text-sm">{TABLE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div></header>{config && <UsageTable title="" columns={config.columns} groupedData={config.groups} tableType={tableView} sortBy={sortBy} sortOrder={sortOrder} onToggleSort={toggleSort} viewMode={mode} storageKey={`usage-ledger:${tableView}`} renderSummaryCells={config.summary} renderDetailCells={config.detail} emptyMessage={config.empty} />}{tableView === "apiKey" && config?.groups?.length > 0 && <div className="border-t border-[var(--ledger-rule)] p-3 text-xs text-[var(--text-muted)]">Deep-link a key group without copying credentials: {config.groups.slice(0, 3).map((group, index) => <Fragment key={group.groupKey}>{index ? " · " : ""}<Link className="text-[var(--primary)] underline" href={`?tab=overview&table=apiKey&key=${encodeURIComponent(group.groupKey)}`}>{group.groupKey}</Link></Fragment>)}</div>}</section>
   </div>;
 }
