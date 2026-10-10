@@ -83,6 +83,12 @@ export async function parseUpstreamError(response, executor = null) {
   }
 
   const messageStr = typeof message === "string" ? message : JSON.stringify(message);
+  // Relay/edge timeouts (Vercel FUNCTION_INVOCATION_TIMEOUT, gateway timeouts,
+  // ETIMEDOUT) surface as 504 with a retry-safe message. The raw body can embed
+  // the relay URL — never forward it to the client.
+  if (/function_invocation_timeout|gateway.timeout|timed out|etimedout/i.test(messageStr)) {
+    return { statusCode: 504, message: "Upstream timed out (gateway timeout). Safe to retry." };
+  }
   const finalMessage = messageStr || DEFAULT_ERROR_MESSAGES[response.status] || `Upstream error: ${response.status}`;
 
   return { statusCode: response.status, message: finalMessage };

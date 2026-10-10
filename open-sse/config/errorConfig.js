@@ -67,6 +67,8 @@ export const ERROR_RULES = [
   { text: "quota exceeded",           backoff: true },
   { text: "capacity",                 backoff: true },
   { text: "overloaded",               backoff: true },
+  // Relay/edge timeouts are transient: brief cooldown, keep rotating.
+  { text: "timeout",                  cooldownMs: COOLDOWN.short },
 
   // Account-dead signals: Antigravity / Gemini-Code-Assist eligibility failures
   // need human intervention (re-auth, age/selfie verification), so a generic-403
