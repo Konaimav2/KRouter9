@@ -3,7 +3,7 @@ import { getProviderConnections } from "@/lib/localDb";
 import { backfillCodexEmails } from "@/lib/oauth/providers";
 import { USAGE_APIKEY_PROVIDERS, USAGE_SUPPORTED_PROVIDERS } from "@/shared/constants/providers";
 import { maskProxyUrl, hasProxyAuth } from "@/lib/proxyMask.js";
-import { isQuotaSort, sortConnectionsByQuota } from "./quotaSort.js";
+import { isNameSort, isQuotaSort, sortConnectionsAlpha, sortConnectionsByQuota } from "./quotaSort.js";
 
 const SAFE_FIELDS = [
   "id", "provider", "authType", "name", "email", "displayName",
@@ -73,12 +73,19 @@ function sortConnections(connections, sort) {
     });
   }
 
-  return list.sort((a, b) => {
-    const priorityA = a.priority ?? Number.MAX_SAFE_INTEGER;
-    const priorityB = b.priority ?? Number.MAX_SAFE_INTEGER;
-    if (priorityA !== priorityB) return priorityA - priorityB;
-    return (a.provider || "").localeCompare(b.provider || "");
-  });
+  // Default sort is A-Z by account label, global and pre-pagination so it is
+  // stable across pages. "priority" keeps the legacy priority order for
+  // backward compatibility; "expiring" (opt-in) and "name" route elsewhere.
+  if (sort === "priority") {
+    return list.sort((a, b) => {
+      const priorityA = a.priority ?? Number.MAX_SAFE_INTEGER;
+      const priorityB = b.priority ?? Number.MAX_SAFE_INTEGER;
+      if (priorityA !== priorityB) return priorityA - priorityB;
+      return (a.provider || "").localeCompare(b.provider || "");
+    });
+  }
+
+  return sortConnectionsAlpha(list);
 }
 
 export async function GET(request) {
@@ -88,7 +95,7 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const provider = searchParams.get("provider") || "all";
     const accountStatus = searchParams.get("accountStatus") || "all";
-    const sort = searchParams.get("sort") || "priority";
+    const sort = searchParams.get("sort") || "name";
     const page = parsePositiveInt(searchParams.get("page"), 1);
     const pageSize = Math.min(parsePositiveInt(searchParams.get("pageSize"), DEFAULT_PAGE_SIZE), MAX_PAGE_SIZE);
 
@@ -108,9 +115,12 @@ export async function GET(request) {
 
     // F12-API: quota sorts run against the COMPLETE filtered set (fetch quota
     // for every eligible row), THEN paginate. Non-quota sorts are unchanged.
+    // "name" sorts the complete filtered set A-Z without fetching quota.
     const sortedConnections = isQuotaSort(sort)
       ? await sortConnectionsByQuota(accountFilteredConnections, sort)
-      : sortConnections(accountFilteredConnections, sort);
+      : isNameSort(sort)
+        ? sortConnectionsAlpha(accountFilteredConnections)
+        : sortConnections(accountFilteredConnections, sort);
     const total = sortedConnections.length;
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
     const currentPage = Math.min(page, totalPages);

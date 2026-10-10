@@ -80,7 +80,7 @@ export async function fetchConnectionsPage(
     page: String(targetPage),
     pageSize: String(pageSize),
     accountStatus: accountFilter,
-    sort: expiringFirst ? "expiring" : "priority",
+    sort: expiringFirst ? "expiring" : "name",
   });
 
   if (providerFilter !== "all") {
@@ -156,7 +156,7 @@ function formatTimeRemaining(value) {
   return days > 0 ? `${days}d ${hours}h` : `${hours}h`;
 }
 
-export default function ProviderLimits({ sort } = {}) {
+export default function ProviderLimits() {
   const { copied, copy } = useCopyToClipboard();
   const [connections, setConnections] = useState([]);
   const [quotaData, setQuotaData] = useState({});
@@ -185,7 +185,8 @@ export default function ProviderLimits({ sort } = {}) {
   const [accountFilter, setAccountFilter] = useState("all");
   const [quotaSortMode, setQuotaSortMode] = useState("default");
   const [quotaVisibility, setQuotaVisibility] = useState({});
-  const [expiringFirst, setExpiringFirst] = useState(sort === "expiring");
+  const [expiringFirst, setExpiringFirst] = useState(false);
+  const [collapsedAccounts, setCollapsedAccounts] = useState({});
   const [providerMenuOpen, setProviderMenuOpen] = useState(false);
   const [bulkToggling, setBulkToggling] = useState(false);
   const [page, setPage] = useState(1);
@@ -986,10 +987,11 @@ export default function ProviderLimits({ sort } = {}) {
             onClick={() => toggleExpiringSort(setPage, setExpiringFirst)}
             aria-pressed={expiringFirst}
             className={`flex h-8 shrink-0 items-center gap-1 rounded-lg border px-2 text-xs transition-colors ${expiringFirst ? "border-amber-500/40 bg-amber-500/10 text-amber-500" : "border-black/10 text-text-primary hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"}`}
-            title="Sort accounts by earliest quota reset time"
+            aria-label={expiringFirst ? "Switch to A-Z account order" : "Switch to expiring account order"}
+            title={expiringFirst ? "Switch to A-Z account order" : "Switch to expiring account order"}
           >
             <Icon name="hourglass_top" size={14} />
-            <span className="hidden sm:inline">Expiring first</span>
+            <span>{expiringFirst ? "Expiring first" : "A-Z"}</span>
           </button>
 
           {/* Bulk: disable depleted */}
@@ -1071,7 +1073,10 @@ export default function ProviderLimits({ sort } = {}) {
           const rawQuotas = quota?.quotas || [];
           const visibleQuotas = filterQuotasByVisibility(conn.provider, rawQuotas, quotaVisibility);
           const hiddenQuotaRows = getHiddenQuotaRows(conn.provider, rawQuotas, quotaVisibility);
-          const hasNoQuotas = visibleQuotas.length === 0;
+          const noQuotaRows = visibleQuotas.filter((row) => row.total === 0 && row.unlimited !== true);
+          const reportedQuotas = visibleQuotas.filter((row) => row.total !== 0 || row.unlimited === true);
+          const hasNoQuotas = reportedQuotas.length === 0;
+          const isCollapsed = collapsedAccounts[conn.id] === true;
           const isDepleted = rawQuotas.length > 0 && rawQuotas.every((q) => {
             if (!q.total || q.total <= 0) return false;
             return calculatePercentage(q.used, q.total) <= DEPLETED_QUOTA_THRESHOLD;
@@ -1084,8 +1089,8 @@ export default function ProviderLimits({ sort } = {}) {
             >
               <span className="absolute -left-[1.32rem] top-5 size-2.5 border-2 border-primary bg-surface" aria-hidden="true" />
               <div className="px-3 py-2 border-b border-black/10 dark:border-white/10">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-1 items-center gap-2 min-w-0">
                     <div className="w-8 h-8 shrink-0 rounded-md flex items-center justify-center overflow-hidden">
                       <ProviderIcon
                         src={`/providers/${conn.provider}.png`}
@@ -1155,7 +1160,17 @@ export default function ProviderLimits({ sort } = {}) {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex flex-wrap items-center gap-1">
+                    <button
+                      type="button"
+                      aria-label={isCollapsed ? "Expand quota details" : "Collapse quota details"}
+                      aria-expanded={!isCollapsed}
+                      aria-controls={`quota-body-${conn.id}`}
+                      onClick={() => setCollapsedAccounts((current) => ({ ...current, [conn.id]: !isCollapsed }))}
+                      className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-border text-text-muted hover:bg-surface-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                    >
+                      <Icon name={isCollapsed ? "expand_more" : "expand_less"} size={18} />
+                    </button>
                     {isCodex && (
                       <>
                         <Tooltip
@@ -1266,7 +1281,8 @@ export default function ProviderLimits({ sort } = {}) {
                 </div>
               </div>
 
-              <div className="px-2 py-1.5">
+              <div id={`quota-body-${conn.id}`} hidden={isCollapsed} className="px-2 py-1.5">
+                {!isCollapsed && <>
                 {isLoading ? (
                   <div className="text-center py-5 text-text-muted">
                     <Icon name="progress_activity" size={28} className="animate-spin" />
@@ -1274,11 +1290,11 @@ export default function ProviderLimits({ sort } = {}) {
                 ) : error ? (
                   <div className="text-center py-5">
                     <Icon name="error" size={28} className="text-red-500" />
-                    <p className="mt-1.5 text-xs text-text-muted">{error}</p>
+                    <p className="mt-1.5 break-words line-clamp-3 text-xs text-text-muted" title={error}>{error}</p>
                   </div>
                 ) : quota?.message ? (
                   <div className="text-center py-5">
-                    <p className="text-xs text-text-muted">{quota.message}</p>
+                    <p className="break-words line-clamp-3 text-xs text-text-muted" title={quota.message}>{quota.message}</p>
                   </div>
                 ) : hasNoQuotas ? (
                   <div className="text-center py-5">
@@ -1292,8 +1308,9 @@ export default function ProviderLimits({ sort } = {}) {
                         Quota depleted — resets at the time shown below
                       </div>
                     )}
+                    {noQuotaRows.map((row) => <p key={getQuotaVisibilityKey(row) || row.name} className="break-words px-1 py-2 text-xs text-text-muted">{row.name}: No quota reported by this provider</p>)}
                     <QuotaTable
-                      quotas={visibleQuotas}
+                      quotas={reportedQuotas}
                       compact
                       sortMode="default"
                       showSortLabel={
@@ -1327,6 +1344,7 @@ export default function ProviderLimits({ sort } = {}) {
                     </div>
                   </div>
                 )}
+                </>}
               </div>
             </div>
           );

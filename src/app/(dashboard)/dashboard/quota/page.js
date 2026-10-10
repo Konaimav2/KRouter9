@@ -9,12 +9,12 @@ export default function QuotaPage() {
       <header className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-[length:var(--text-xl)] font-semibold tracking-[-0.02em]">Quota</h1>
-          <p className="mt-1 max-w-2xl text-sm text-text-muted">Accounts are ordered globally by their next reset.</p>
+          <p className="mt-1 max-w-2xl text-sm text-text-muted">Accounts are ordered A–Z. Switch to Expiring-first to sort by next reset.</p>
         </div>
         <div className="flex items-center gap-2 text-xs text-text-muted"><ShieldCheck aria-hidden="true" className="size-4 text-success" />Account identities are masked by default</div>
       </header>
       <Suspense fallback={<CardSkeleton />}>
-        <ProviderLimits sort="expiring" />
+        <ProviderLimits />
       </Suspense>
     </main>
   );

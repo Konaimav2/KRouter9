@@ -74,6 +74,14 @@ export const MITM_TOOLS = {
 
 // CLI Tools configuration
 export const CLI_TOOLS = {
+  krouter9: {
+    id: "krouter9",
+    name: "KRouter9",
+    icon: "terminal",
+    description: "Install the local KRouter9 gateway with a reviewed setup script",
+    configType: "guide",
+    settingsFile: "~/.krouter9/start-local.sh",
+  },
   claude: {
     id: "claude",
     name: "Claude Code",
