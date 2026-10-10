@@ -34,7 +34,7 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
   const resolveForSelection = useCallback((id) => {
     const seq = ++revealSeqRef.current;
     setSelectedApiKey("");
-    if (!id) return;
+    if (!id) { setResolvingKey(false); return; }
     setResolvingKey(true);
     setKeyError("");
     revealKeyById(id)
@@ -80,7 +80,9 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMaskedKeys(keys);
     const id = pickDefaultKeyId(keys);
-    if (!id) return;
+    // Empty / no-default: invalidate any in-flight reveal and clear stale
+    // selection + credential so manual entry starts clean.
+    if (!id) { setSelectedKeyId(""); resolveForSelection(""); setKeyError(""); return; }
     setSelectedKeyId(id);
     resolveForSelection(id);
   }, [apiKeys, resolveForSelection]);

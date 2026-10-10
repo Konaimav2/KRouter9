@@ -95,7 +95,7 @@ export function TtsExampleCard({ providerId }) {
   useEffect(() => {
     setLocalEndpoint(window.location.origin);
     fetch("/api/keys")
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error("Failed to load API keys"); return r.json(); })
       .then((d) => {
         const keys = d.keys || [];
         setMaskedKeys(keys);
@@ -219,7 +219,10 @@ export function TtsExampleCard({ providerId }) {
     : languages;
 
   const endpoint = useTunnel ? tunnelEndpoint : localEndpoint;
-  const keyBlocked = isKeyActionBlocked({ keys: maskedKeys, rawKey: apiKey, resolving: resolvingKey, error: keyError, loading: keysLoading, keysError });
+  // Explicit keyless mode: stored server-side connections satisfy auth without
+  // a dashboard key, so settled-empty is usable in that mode only.
+  const keyless = connectionCount > 0;
+  const keyBlocked = isKeyActionBlocked({ keys: maskedKeys, rawKey: apiKey, resolving: resolvingKey, error: keyError, loading: keysLoading, keysError }) || (maskedKeys.length === 0 && !apiKey && !keyless);
   // For ElevenLabs/config-driven: prefer manual voiceId (if any), else fall back to selectedVoice
   const activeVoiceId = config.hasVoiceIdInput ? (voiceId || selectedVoice) : selectedVoice;
   const modelFull = (() => {

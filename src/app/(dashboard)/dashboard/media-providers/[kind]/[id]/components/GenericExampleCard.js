@@ -98,7 +98,7 @@ export function GenericExampleCard({ providerId, kind }) {
   useEffect(() => {
     setLocalEndpoint(window.location.origin);
     fetch("/api/keys")
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error("Failed to load API keys"); return r.json(); })
       .then((d) => {
         const keys = d.keys || [];
         setMaskedKeys(keys);
@@ -133,7 +133,10 @@ export function GenericExampleCard({ providerId, kind }) {
   const modelFull = !needsModel
     ? safeProviderAlias
     : (selectedModel ? `${safeProviderAlias}/${selectedModel}` : (allowManualModel ? "" : safeProviderAlias));
-  const keyBlocked = isKeyActionBlocked({ keys: maskedKeys, rawKey: apiKey, resolving: resolvingKey, error: keyError, loading: keysLoading, keysError });
+  // Settled-empty is not a manual-entry state here (no manual input): without
+  // a resolved credential the action stays blocked.
+  const listEmptyOk = maskedKeys.length > 0 || !!apiKey;
+  const keyBlocked = isKeyActionBlocked({ keys: maskedKeys, rawKey: apiKey, resolving: resolvingKey, error: keyError, loading: keysLoading, keysError }) || !listEmptyOk;
   const imageEditDefaults = getImageEditDefaults(providerId, selectedModel);
   const effectiveRefImage = refImage.trim() || imageEditDefaults.image || "";
   const effectiveMaskImage = maskImage.trim() || imageEditDefaults.mask_image || "";
