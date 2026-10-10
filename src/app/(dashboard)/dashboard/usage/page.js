@@ -39,11 +39,11 @@ const VALUE_MODES = [
 function UsagePageSkeleton() {
   return (
     <div className="space-y-6" aria-label="Loading usage">
-      <div className="h-10 w-full animate-pulse border border-[var(--ledger-border)] bg-[var(--color-surface-strong)] sm:w-96" />
+      <div className="h-10 w-full opacity-100 starting:opacity-50 motion-reduce:transition-none transition-opacity duration-[var(--duration-base)] ease-[var(--ease-enter)] border border-[var(--ledger-border)] bg-[var(--color-surface-strong)] sm:w-96" />
       <section className="border border-border bg-surface">
-        <div className="flex min-h-11 items-center gap-3 border-b border-border bg-surface-2 px-4 py-3"><span className="font-mono text-xs tabular-nums text-text-muted">01</span><span className="h-4 w-24 animate-pulse bg-[var(--color-surface-strong)]" /></div>
+        <div className="flex min-h-11 items-center gap-3 border-b border-border bg-surface-2 px-4 py-3"><span className="font-mono text-xs tabular-nums text-text-muted">01</span><span className="h-4 w-24 opacity-100 starting:opacity-50 motion-reduce:transition-none transition-opacity duration-[var(--duration-base)] ease-[var(--ease-enter)] bg-[var(--color-surface-strong)]" /></div>
         <div className="divide-y divide-[var(--ledger-rule)]">
-          {Array.from({ length: 5 }, (_, index) => <div key={index} className="h-14 animate-pulse bg-[var(--ledger-bg)]" />)}
+          {Array.from({ length: 5 }, (_, index) => <div key={index} className="h-14 opacity-100 starting:opacity-50 motion-reduce:transition-none transition-opacity duration-[var(--duration-base)] ease-[var(--ease-enter)] bg-[var(--ledger-bg)]" />)}
         </div>
       </section>
     </div>
@@ -132,12 +132,12 @@ function UsageContent() {
           ]}
           value={activeTab}
           onChange={handleTabChange}
-          className="w-full sm:w-auto"
+          className="w-full sm:w-auto [&>button]:duration-[var(--duration-base)] [&>button]:ease-[var(--ease-standard)] [&>button:focus-visible]:transition-none"
         />
         {["overview", "keys"].includes(activeTab) && (
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end" aria-label="Usage scope controls">
-            {activeTab === "overview" && <SegmentedControl options={VALUE_MODES} value={mode} onChange={handleModeChange} size="sm" className="w-full sm:w-auto" />}
-            <SegmentedControl options={PERIODS} value={customRange ? "" : period} onChange={handlePeriodChange} size="sm" className="w-full sm:w-auto" />
+            {activeTab === "overview" && <SegmentedControl options={VALUE_MODES} value={mode} onChange={handleModeChange} size="sm" className="w-full sm:w-auto [&>button]:duration-[var(--duration-base)] [&>button]:ease-[var(--ease-standard)] [&>button:focus-visible]:transition-none" />}
+            <SegmentedControl options={PERIODS} value={customRange ? "" : period} onChange={handlePeriodChange} size="sm" className="w-full sm:w-auto [&>button]:duration-[var(--duration-base)] [&>button]:ease-[var(--ease-standard)] [&>button:focus-visible]:transition-none" />
           </div>
         )}
       </div>

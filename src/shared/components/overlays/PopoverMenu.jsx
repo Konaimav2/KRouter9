@@ -26,7 +26,7 @@ export default function PopoverMenu({ open, onDismiss, label, children, align = 
     <OverlayLayer>
       <div className={`overlay-menu-root${mobileSheet ? " overlay-menu-root--mobile-sheet" : ""}`} data-overlay="menu">
         <button className="overlay-menu-dismiss" type="button" tabIndex={-1} aria-label="Close menu" onClick={() => onDismiss?.("click-away")} />
-        <div ref={panelRef} className={`overlay-menu overlay-menu--${align} ${className}`} role="menu" aria-labelledby={titleId} tabIndex={-1} onKeyDown={onKeyDown}>
+        <div style={{ animation: "none", transition: "opacity var(--duration-base) var(--ease-enter)" }} ref={panelRef} className={`overlay-menu opacity-100 starting:opacity-0 [&:has(:focus-visible)]:transition-none! overlay-menu--${align} ${className}`} role="menu" aria-labelledby={titleId} tabIndex={-1} onKeyDown={onKeyDown}>
           <span id={titleId} className="sr-only">{label}</span>
           <OverlayErrorBoundary onDismiss={onDismiss}>{children}</OverlayErrorBoundary>
         </div>

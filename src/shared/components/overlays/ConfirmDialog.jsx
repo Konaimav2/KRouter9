@@ -12,8 +12,8 @@ export default function ConfirmDialog({ open, onCancel, onConfirm, title, descri
   return (
     <OverlayLayer allowSecondLayer>
       <div className="overlay-root overlay-root--confirm" data-overlay="confirm">
-        <div className="overlay-scrim" aria-hidden="true" />
-        <section ref={panelRef} className="overlay-shell overlay-confirm" role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} tabIndex={-1} onKeyDown={onKeyDown}>
+        <div className="overlay-scrim opacity-100 starting:opacity-0 [&:has(:focus-visible)]:transition-none!" style={{ animation: "none", transition: "opacity var(--duration-base) var(--ease-enter)" }} aria-hidden="true" />
+        <section style={{ animation: "none", transition: "opacity var(--duration-base) var(--ease-enter)" }} ref={panelRef} className="overlay-shell opacity-100 starting:opacity-0 [&:has(:focus-visible)]:transition-none! overlay-confirm" role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} tabIndex={-1} onKeyDown={onKeyDown}>
           <header className="overlay-header"><div><h2 id={titleId}>{title}</h2>{description ? <p id={descriptionId}>{description}</p> : null}</div></header>
           <div className="overlay-body"><OverlayErrorBoundary onDismiss={onCancel}>{children}</OverlayErrorBoundary></div>
           <footer className="overlay-footer">
