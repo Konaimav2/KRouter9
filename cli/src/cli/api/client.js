@@ -310,6 +310,18 @@ async function deleteApiKey(id) {
   return makeRequest("DELETE", `/api/keys/${id}`);
 }
 
+/**
+ * Reveal ONE API key by id via the guarded single-record endpoint
+ * (GET /api/keys/:id/reveal?confirm=true). List responses carry maskedKey
+ * only — raw secrets are never read from list payloads. CLI-token authed
+ * server-side, rate-limited, audited, no-store.
+ * @param {string} id - Key ID
+ * @returns {Promise<Object>} { success, data: { id, name, key } }
+ */
+async function revealApiKey(id) {
+  return makeRequest("GET", `/api/keys/${encodeURIComponent(id)}/reveal?confirm=true`);
+}
+
 // ============================================================================
 // COMBOS API
 // ============================================================================
@@ -522,6 +534,7 @@ module.exports = {
   getApiKeys,
   createApiKey,
   deleteApiKey,
+  revealApiKey,
   
   // Combos
   getCombos,

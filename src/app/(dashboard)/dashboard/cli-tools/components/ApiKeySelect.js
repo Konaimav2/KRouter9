@@ -1,17 +1,36 @@
 "use client";
 
 import Icon from "@/shared/components/Icon";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { readKeyPresets, upsertKeyPreset, deleteKeyPreset, subscribeKeyPresets } from "./cliEndpointPresets";
 
 const CUSTOM_VALUE = "__custom__";
 const SAVE_VALUE = "__save_key__";
+
+// Resolve exactly ONE chosen key id to its raw secret via the guarded
+// single-record reveal endpoint. List responses carry maskedKey only —
+// raw secrets are never read from list payloads.
+async function revealKeyById(id) {
+  const res = await fetch(`/api/keys/${encodeURIComponent(id)}/reveal?confirm=true`, { cache: "no-store" });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Failed to reveal API key");
+  if (!data.key) throw new Error("Reveal returned no key");
+  return data.key;
+}
+
+function labelForKey(k) {
+  return `${k.name || k.id} (${k.maskedKey || "masked"})`;
+}
 
 export default function ApiKeySelect({ value, onChange, apiKeys = [], cloudEnabled = false, className = "" }) {
   const [savedKeys, setSavedKeys] = useState([]);
   // Custom mode is sticky once the user types, so an emptied input doesn't jump back to a dropdown option
   const [customMode, setCustomMode] = useState(false);
   const [customInput, setCustomInput] = useState("");
+  const [selectedId, setSelectedId] = useState(null);
+  const [resolving, setResolving] = useState(false);
+  const [resolveError, setResolveError] = useState(null);
+  const autoPickedRef = useRef(false);
 
   useEffect(() => {
     const sync = () => setSavedKeys(readKeyPresets());
@@ -21,20 +40,48 @@ export default function ApiKeySelect({ value, onChange, apiKeys = [], cloudEnabl
 
   const options = useMemo(
     () => [
-      ...apiKeys.map((k) => ({ value: k.key, label: k.key })),
+      ...apiKeys.map((k) => ({ value: k.id, label: labelForKey(k), keyId: k.id })),
       ...savedKeys.map((p) => ({ value: `saved:${p.name}`, label: p.key, url: p.key, saved: true })),
       { value: CUSTOM_VALUE, label: "Custom...", url: "" },
     ],
     [apiKeys, savedKeys]
   );
 
-  // Derive the active option from value — no sync effects needed when the parent updates it
-  const matched = value ? options.find((o) => o.value === value || o.url === value) : null;
-  const mode = matched ? matched.value : (customMode || value ? CUSTOM_VALUE : (options[0]?.value ?? CUSTOM_VALUE));
+  const selectKeyId = async (id) => {
+    setSelectedId(id);
+    setCustomMode(false);
+    setCustomInput("");
+    setResolveError(null);
+    setResolving(true);
+    try {
+      const raw = await revealKeyById(id);
+      onChange(raw);
+    } catch (e) {
+      onChange("");
+      setResolveError(e.message);
+    } finally {
+      setResolving(false);
+    }
+  };
+
+  // Default to the first list key (resolved via guarded reveal, once).
+  useEffect(() => {
+    if (!autoPickedRef.current && !value && !customMode && !selectedId && apiKeys.length > 0) {
+      autoPickedRef.current = true;
+      selectKeyId(apiKeys[0].id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiKeys]);
+
+  // Derive the active option from selection — no sync effects needed when the parent updates it
+  const matched = selectedId ? options.find((o) => o.value === selectedId) : null;
+  const savedMatch = !matched && value ? options.find((o) => o.value === value || o.url === value) : null;
+  const active = matched || savedMatch;
+  const mode = active ? active.value : (customMode || value ? CUSTOM_VALUE : (options[0]?.value ?? CUSTOM_VALUE));
   const inputValue = customMode ? customInput : (value || "");
   const isSaved = typeof mode === "string" && mode.startsWith("saved:");
   const isCustom = mode === CUSTOM_VALUE;
-  const canSave = isCustom && (value || "").trim().length > 0 && !apiKeys.some((k) => k.key === value);
+  const canSave = isCustom && (value || "").trim().length > 0;
   const noKeys = apiKeys.length === 0 && savedKeys.length === 0 && !customMode && !value;
 
   const handleSelect = (e) => {
@@ -46,19 +93,27 @@ export default function ApiKeySelect({ value, onChange, apiKeys = [], cloudEnabl
     if (next === CUSTOM_VALUE) {
       setCustomMode(true);
       setCustomInput("");
+      setSelectedId(null);
       onChange("");
       return;
     }
     setCustomMode(false);
     setCustomInput("");
     const opt = options.find((o) => o.value === next);
-    if (opt) onChange(opt.url ?? opt.value);
+    if (!opt) return;
+    if (opt.keyId) {
+      selectKeyId(opt.keyId);
+      return;
+    }
+    setSelectedId(null);
+    onChange(opt.url ?? opt.value);
   };
 
   const handleCustomInput = (e) => {
     const v = e.target.value;
     setCustomMode(true);
     setCustomInput(v);
+    setSelectedId(null);
     onChange(v);
   };
 
@@ -67,7 +122,9 @@ export default function ApiKeySelect({ value, onChange, apiKeys = [], cloudEnabl
     deleteKeyPreset(mode.slice(6));
     setCustomMode(false);
     setCustomInput("");
+    setSelectedId(null);
     const fallback = options.find((o) => o.value !== CUSTOM_VALUE && o.value !== mode);
+    if (fallback?.keyId) { selectKeyId(fallback.keyId); return; }
     onChange(fallback ? (fallback.url ?? fallback.value) : "");
   };
 
@@ -85,6 +142,7 @@ export default function ApiKeySelect({ value, onChange, apiKeys = [], cloudEnabl
         <select
           value={mode}
           onChange={handleSelect}
+          disabled={resolving}
           className="flex-1 min-w-0 px-2 py-2 bg-surface rounded text-xs border border-border focus:outline-none focus:ring-1 focus:ring-primary/50 sm:py-1.5"
         >
           {options.map((o) => (
@@ -98,6 +156,8 @@ export default function ApiKeySelect({ value, onChange, apiKeys = [], cloudEnabl
           </button>
         )}
       </div>
+      {resolving && <span className="text-[11px] text-text-muted">Resolving selected key…</span>}
+      {resolveError && <span className="text-[11px] text-red-500" role="alert">{resolveError}</span>}
       {isCustom && (
         <input
           type="text"
