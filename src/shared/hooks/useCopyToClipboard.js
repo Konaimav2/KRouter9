@@ -26,7 +26,7 @@ export function useCopyToClipboard(resetDelay = 2000) {
         document.body.removeChild(textarea);
       }
     };
-    write();
+    const writePromise = write();
     setCopied(id);
 
     if (timeoutRef.current) {
@@ -36,6 +36,7 @@ export function useCopyToClipboard(resetDelay = 2000) {
     timeoutRef.current = setTimeout(() => {
       setCopied(null);
     }, resetDelay);
+    return writePromise;
   }, [resetDelay]);
 
   return { copied, copy };

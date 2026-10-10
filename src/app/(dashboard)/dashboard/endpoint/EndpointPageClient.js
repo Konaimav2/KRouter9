@@ -6,6 +6,7 @@ import PropTypes from "prop-types";
 import { Button, Input, CardSkeleton, Toggle } from "@/shared/components";
 import { Dialog, ConfirmDialog } from "@/shared/components/overlays";
 import { AlertCircle, Check, CheckCircle2, CloudUpload, Copy, Eye, EyeOff, KeyRound, LoaderCircle, Power, Search, Settings, ShieldCheck, Trash2 } from "lucide-react";
+import { useNotificationStore } from "@/store/notificationStore";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import {
   TUNNEL_BENEFITS,
@@ -137,7 +138,31 @@ export default function APIPageClient({ machineId }) {
     }, 15_000));
   }, []);
 
+  const [newKeyExpiresAt, setNewKeyExpiresAt] = useState("");
+  const [expiryNow, setExpiryNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setExpiryNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
   const { copied, copy } = useCopyToClipboard();
+  const notify = useNotificationStore.getState();
+  const copyWithFeedback = async (text, id) => {
+    try {
+      await copy(text, id);
+    } catch {
+      notify.error("Copy failed. Check clipboard permissions and try again.");
+    }
+  };
+  const reportTunnelStatus = (status) => {
+    setTunnelStatus(status);
+    if (status?.type === "success") notify.success(status.message);
+    else if (status?.type === "error") notify.error("Cloudflare action failed. Check the endpoint details and try again.");
+  };
+  const reportTsStatus = (status) => {
+    setTsStatus(status);
+    if (status?.type === "success") notify.success(status.message);
+    else if (status?.type === "error") notify.error("Tailscale action failed. Check the endpoint details and try again.");
+  };
 
   // Guarded single-record read: the raw secret lives in state for <=15s,
   // cleared on hide/delete/toggle/unmount. List/detail APIs carry maskedKey
@@ -176,20 +201,23 @@ export default function APIPageClient({ machineId }) {
       const res = await fetch(`/api/keys/${keyId}/reveal?confirm=true`, { cache: "no-store" });
       if (!res.ok) {
         setRevealError(res.status === 404 ? "Key not found." : "Copy failed.");
+        notify.error("Copy failed. Check clipboard permissions and try again.");
         return;
       }
       const data = await res.json();
       if (!data || typeof data.key !== "string" || !data.key) {
         setRevealError("Copy failed.");
+        notify.error("Copy failed. Check clipboard permissions and try again.");
         return;
       }
-      copy(data.key, keyId);
+      await copy(data.key, keyId);
       // Discard: never retain a copy-transient; drop any prior reveal too.
       clearRevealedKey(keyId);
     } catch {
       setRevealError("Copy failed.");
+      notify.error("Copy failed. Check clipboard permissions and try again.");
     }
-  }, [clearRevealedKey, copy]);
+  }, [clearRevealedKey, copy, notify]);
 
   // Security gate: block remote exposure while dashboard uses default password or login is off.
   const isLoginUnsafe = !requireLogin || !hasPassword;
@@ -339,9 +367,12 @@ export default function APIPageClient({ machineId }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tunnelDashboardAccess: value }),
       });
-      if (res.ok) setTunnelDashboardAccess(value);
-    } catch (error) {
-      console.log("Error updating tunnelDashboardAccess:", error);
+      if (res.ok) {
+        setTunnelDashboardAccess(value);
+        notify.success(`Remote dashboard access ${value ? "enabled" : "disabled"}.`);
+      } else notify.error("Could not update remote dashboard access. Try again.");
+    } catch {
+      notify.error("Could not update remote dashboard access. Try again.");
     }
   };
 
@@ -352,9 +383,12 @@ export default function APIPageClient({ machineId }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ requireApiKey: value }),
       });
-      if (res.ok) setRequireApiKey(value);
-    } catch (error) {
-      console.log("Error updating requireApiKey:", error);
+      if (res.ok) {
+        setRequireApiKey(value);
+        notify.success(`API key requirement ${value ? "enabled" : "disabled"}.`);
+      } else notify.error("Could not update API key requirement. Try again.");
+    } catch {
+      notify.error("Could not update API key requirement. Try again.");
     }
   };
 
@@ -405,6 +439,7 @@ export default function APIPageClient({ machineId }) {
         setTunnelEnabled(true);
         setTunnelLoading(false);
         setTunnelProgress("");
+        reportTunnelStatus({ type: "success", message: "Tunnel enabled" });
         return true;
       }
       // Every 5 pings (~10s), check if backend process still alive
@@ -414,7 +449,7 @@ export default function APIPageClient({ machineId }) {
           if (statusRes.ok) {
             const status = await statusRes.json();
             if (!status.tunnel?.enabled) {
-              setTunnelStatus({ type: "error", message: "Tunnel process stopped unexpectedly." });
+              reportTunnelStatus({ type: "error", message: "Tunnel process stopped unexpectedly." });
               setTunnelLoading(false);
               setTunnelProgress("");
               return false;
@@ -423,7 +458,7 @@ export default function APIPageClient({ machineId }) {
         } catch { /* ignore */ }
       }
     }
-    setTunnelStatus({ type: "error", message: "Tunnel created but not reachable. Please try again." });
+    reportTunnelStatus({ type: "error", message: "Tunnel created but not reachable. Please try again." });
     setTunnelLoading(false);
     setTunnelProgress("");
     return false;
@@ -460,13 +495,13 @@ export default function APIPageClient({ machineId }) {
       polling = false;
       const data = await res.json();
       if (!res.ok) {
-        setTunnelStatus({ type: "error", message: data.error || "Failed to enable tunnel" });
+        reportTunnelStatus({ type: "error", message: data.error || "Failed to enable tunnel" });
         return;
       }
 
       const url = data.tunnelUrl;
       if (!url) {
-        setTunnelStatus({ type: "error", message: "No tunnel URL returned" });
+        reportTunnelStatus({ type: "error", message: "No tunnel URL returned" });
         return;
       }
 
@@ -474,7 +509,7 @@ export default function APIPageClient({ machineId }) {
       setTunnelPublicUrl(data.publicUrl || "");
       await pingTunnelHealth(data.publicUrl, url);
     } catch (error) {
-      setTunnelStatus({ type: "error", message: error.message });
+      reportTunnelStatus({ type: "error", message: error.message });
     } finally {
       polling = false;
       setTunnelLoading(false);
@@ -492,12 +527,12 @@ export default function APIPageClient({ machineId }) {
         setTunnelEnabled(false);
         setTunnelUrl("");
         setShowDisableTunnelModal(false);
-        setTunnelStatus({ type: "success", message: "Tunnel disabled" });
+        reportTunnelStatus({ type: "success", message: "Tunnel disabled" });
       } else {
-        setTunnelStatus({ type: "error", message: data.error || "Failed to disable tunnel" });
+        reportTunnelStatus({ type: "error", message: data.error || "Failed to disable tunnel" });
       }
     } catch (error) {
-      setTunnelStatus({ type: "error", message: error.message });
+      reportTunnelStatus({ type: "error", message: error.message });
     } finally {
       setTunnelLoading(false);
     }
@@ -560,12 +595,12 @@ export default function APIPageClient({ machineId }) {
             handleConnectTailscale();
             return;
           } else if (event === "error") {
-            setTsStatus({ type: "error", message: data.error || "Install failed" });
+            reportTsStatus({ type: "error", message: data.error || "Install failed" });
           }
         }
       }
     } catch (e) {
-      setTsStatus({ type: "error", message: e.message });
+      reportTsStatus({ type: "error", message: e.message });
     } finally {
       setTsInstalling(false);
     }
@@ -613,7 +648,7 @@ export default function APIPageClient({ machineId }) {
         setTsUrl(data.tunnelUrl || "");
         const reachable = await pingTsHealth(data.tunnelUrl);
         setTsEnabled(true);
-        setTsStatus(reachable ? null : { type: "warning", message: "Connected but not reachable yet." });
+        reportTsStatus(reachable ? { type: "success", message: "Tailscale enabled" } : { type: "warning", message: "Connected but not reachable yet." });
         return;
       }
 
@@ -635,11 +670,11 @@ export default function APIPageClient({ machineId }) {
                   setTsUrl(data2.tunnelUrl || "");
                   const ok2 = await pingTsHealth(data2.tunnelUrl);
                   setTsEnabled(true);
-                  setTsStatus(ok2 ? null : { type: "warning", message: "Connected but not reachable yet." });
+                  reportTsStatus(ok2 ? { type: "success", message: "Tailscale enabled" } : { type: "warning", message: "Connected but not reachable yet." });
                 } else if (data2.funnelNotEnabled && data2.enableUrl) {
                   await pollFunnelEnable(data2.enableUrl);
                 } else {
-                  setTsStatus({ type: "error", message: data2.error || "Failed to start funnel" });
+                  reportTsStatus({ type: "error", message: data2.error || "Failed to start funnel" });
                 }
                 return;
               }
@@ -647,7 +682,7 @@ export default function APIPageClient({ machineId }) {
           } catch { /* retry */ }
         }
         clearUserAuth();
-        setTsStatus({ type: "error", message: "Login timed out. Please try again." });
+        reportTsStatus({ type: "error", message: "Login timed out. Please try again." });
         return;
       }
 
@@ -656,9 +691,9 @@ export default function APIPageClient({ machineId }) {
         return;
       }
 
-      setTsStatus({ type: "error", message: data.error || "Failed to connect" });
+      reportTsStatus({ type: "error", message: data.error || "Failed to connect" });
     } catch (error) {
-      setTsStatus({ type: "error", message: error.message });
+      reportTsStatus({ type: "error", message: error.message });
     } finally {
       setTsLoading(false);
       setTsConnecting(false);
@@ -680,19 +715,19 @@ export default function APIPageClient({ machineId }) {
           setTsUrl(data.tunnelUrl || "");
           const ok3 = await pingTsHealth(data.tunnelUrl);
           setTsEnabled(true);
-          setTsStatus(ok3 ? null : { type: "warning", message: "Connected but not reachable yet." });
+          reportTsStatus(ok3 ? { type: "success", message: "Tailscale enabled" } : { type: "warning", message: "Connected but not reachable yet." });
           return;
         }
         if (data.funnelNotEnabled) continue;
         if (data.error) {
           clearUserAuth();
-          setTsStatus({ type: "error", message: data.error });
+          reportTsStatus({ type: "error", message: data.error });
           return;
         }
       } catch { /* retry */ }
     }
     clearUserAuth();
-    setTsStatus({ type: "error", message: "Timed out waiting for Funnel to be enabled." });
+    reportTsStatus({ type: "error", message: "Timed out waiting for Funnel to be enabled." });
   };
 
   const handleDisableTailscale = async () => {
@@ -705,12 +740,12 @@ export default function APIPageClient({ machineId }) {
         setTsEnabled(false);
         setTsUrl("");
         setShowDisableTsModal(false);
-        setTsStatus({ type: "success", message: "Tailscale disabled" });
+        reportTsStatus({ type: "success", message: "Tailscale disabled" });
       } else {
-        setTsStatus({ type: "error", message: data.error || "Failed to disable Tailscale" });
+        reportTsStatus({ type: "error", message: data.error || "Failed to disable Tailscale" });
       }
     } catch (e) {
-      setTsStatus({ type: "error", message: e.message });
+      reportTsStatus({ type: "error", message: e.message });
     } finally {
       setTsLoading(false);
     }
@@ -730,11 +765,16 @@ export default function APIPageClient({ machineId }) {
   const handleCreateKey = async () => {
     if (!newKeyName.trim()) return;
 
+    const expiry = newKeyExpiresAt ? new Date(newKeyExpiresAt) : null;
+    if (expiry && (!Number.isFinite(expiry.getTime()) || expiry.getTime() <= Date.now())) {
+      notify.error("Choose an expiry in the future, or leave it blank.");
+      return;
+    }
     try {
       const res = await fetch("/api/keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newKeyName }),
+        body: JSON.stringify({ name: newKeyName, expiresAt: expiry ? expiry.toISOString() : null }),
       });
       const data = await res.json();
 
@@ -742,10 +782,11 @@ export default function APIPageClient({ machineId }) {
         setCreatedKey(data.key);
         await fetchData();
         setNewKeyName("");
+        setNewKeyExpiresAt("");
         setShowAddModal(false);
-      }
-    } catch (error) {
-      console.log("Error creating key:", error);
+      } else notify.error("Could not create API key. Check the expiry and try again.");
+    } catch {
+      notify.error("Could not create API key. Try again.");
     }
   };
 
@@ -779,9 +820,10 @@ export default function APIPageClient({ machineId }) {
         // Pause/resume invalidates any transient reveal for that key.
         clearRevealedKey(id);
         setKeys(prev => prev.map(k => k.id === id ? { ...k, isActive } : k));
-      }
-    } catch (error) {
-      console.log("Error toggling key:", error);
+        notify.success(`API key ${isActive ? "resumed" : "paused"}.`);
+      } else notify.error("Could not update API key status. Try again.");
+    } catch {
+      notify.error("Could not update API key status. Try again.");
     }
   };
 
@@ -841,11 +883,13 @@ export default function APIPageClient({ machineId }) {
 
       <section className="overflow-hidden rounded-[var(--radius-field)] border border-border bg-surface" aria-labelledby="endpoints-title">
         <header className="border-b border-border px-4 py-3"><h2 id="endpoints-title" className="font-semibold">Endpoints</h2></header>
-        <div className="hidden grid-cols-[7rem_8rem_minmax(0,1fr)_7rem_7rem] border-b border-border bg-surface-2 px-4 py-2 text-xs font-semibold text-text-muted md:grid"><span>Route</span><span>Status</span><span>Base URL</span><span>Access</span><span>Actions</span></div>
-        <EndpointRow label="Local" url={currentEndpoint} copyId="local_url" copied={copied} onCopy={copy} status="Reachable" access="Host" />
-        <EndpointRow label="Cloudflare" url={tunnelEnabled ? `${tunnelPublicUrl || tunnelUrl}/v1` : "Not configured"} copyId="tunnel_url" copied={copied} onCopy={copy} status={tunnelLoading ? tunnelProgress || "Connecting" : tunnelEnabled ? (tunnelReachable ? "Connected" : "Reconnecting") : "Off"} access={tunnelDashboardAccess ? "Dashboard and API" : "API only"} disabled={!tunnelEnabled} actions={<Button size="sm" variant="secondary" disabled={tunnelLoading} onClick={() => tunnelEnabled ? setShowDisableTunnelModal(true) : setShowEnableTunnelModal(true)}>{tunnelEnabled ? "Disable" : "Enable"}</Button>} />
-        <EndpointRow label="Tailscale" url={tsEnabled ? `${tsUrl}/v1` : "Not configured"} copyId="ts_url" copied={copied} onCopy={copy} status={tsLoading ? tsProgress || "Connecting" : tsEnabled ? (tsReachable ? "Connected" : "Reconnecting") : "Off"} access={tunnelDashboardAccess ? "Dashboard and API" : "API only"} disabled={!tsEnabled} actions={<Button size="sm" variant="secondary" disabled={tsLoading} onClick={() => tsEnabled ? setShowDisableTsModal(true) : handleOpenTsModal()}>{tsEnabled ? "Disable" : "Enable"}</Button>} />
+        <div className="hidden grid-cols-[7rem_8rem_minmax(0,1fr)_7rem_minmax(9rem,auto)] border-b border-border bg-surface-2 px-4 py-2 text-xs font-semibold text-text-muted md:grid"><span>Route</span><span>Status</span><span>Base URL</span><span>Access</span><span>Actions</span></div>
+        <EndpointRow label="Local" url={currentEndpoint} copyId="local_url" copied={copied} onCopy={copyWithFeedback} status="Reachable" access="Host" />
+        <EndpointRow label="Cloudflare" url={tunnelEnabled ? `${tunnelPublicUrl || tunnelUrl}/v1` : "Not configured"} copyId="tunnel_url" copied={copied} onCopy={copyWithFeedback} status={tunnelLoading ? tunnelProgress || "Connecting" : tunnelEnabled ? (tunnelReachable ? "Connected" : "Reconnecting") : "Off"} access={tunnelDashboardAccess ? "Dashboard and API" : "API only"} disabled={!tunnelEnabled} actions={<Button size="sm" variant="secondary" disabled={tunnelLoading} onClick={() => tunnelEnabled ? setShowDisableTunnelModal(true) : setShowEnableTunnelModal(true)}>{tunnelEnabled ? "Disable" : "Enable"}</Button>} />
+        <EndpointRow label="Tailscale" url={tsEnabled ? `${tsUrl}/v1` : "Not configured"} copyId="ts_url" copied={copied} onCopy={copyWithFeedback} status={tsLoading ? tsProgress || "Connecting" : tsEnabled ? (tsReachable ? "Connected" : "Reconnecting") : "Off"} access={tunnelDashboardAccess ? "Dashboard and API" : "API only"} disabled={!tsEnabled} actions={<Button size="sm" variant="secondary" disabled={tsLoading} onClick={() => tsEnabled ? setShowDisableTsModal(true) : handleOpenTsModal()}>{tsEnabled ? "Disable" : "Enable"}</Button>} />
         {(tunnelEnabled || tsEnabled) && <div className="flex items-center justify-between gap-4 border-t border-border px-4 py-3"><div><p className="text-sm font-medium">Dashboard access</p><p className="text-xs text-text-muted">Allow authenticated dashboard access through remote routes.</p></div><Toggle checked={tunnelDashboardAccess} onChange={() => handleTunnelDashboardAccess(!tunnelDashboardAccess)} /></div>}
+        {tunnelStatus && <div className="border-t border-border px-4 py-3"><StatusAlert status={tunnelStatus} /></div>}
+        {tsStatus && <div className="border-t border-border px-4 py-3"><StatusAlert status={tsStatus} /></div>}
       </section>
 
       <section id="require-api-key" className="overflow-hidden rounded-[var(--radius-field)] border border-border bg-surface" aria-labelledby="keys-title">
@@ -861,7 +905,7 @@ export default function APIPageClient({ machineId }) {
         {revealError && <p className="border-b border-border px-4 py-2 text-sm text-danger" role="alert">{revealError}</p>}
         <div className="hidden grid-cols-[minmax(9rem,1fr)_minmax(12rem,1.5fr)_minmax(8rem,1fr)_8rem_7rem_7rem] border-b border-border bg-surface-2 px-4 py-2 text-xs font-semibold text-text-muted md:grid"><span>Name</span><span>Key</span><span>Policy</span><span>Limits</span><span>Created</span><span>Status / actions</span></div>
         {!filteredKeys.length ? <div className="px-4 py-12 text-center"><KeyRound className="mx-auto size-7 text-text-muted"/><p className="mt-3 font-semibold">{keys.length ? "No keys match this search." : "No API keys yet"}</p><p className="mt-1 text-sm text-text-muted">{keys.length ? "Clear search or change the status filter." : "Create a named key before sending requests to /v1."}</p>{keys.length ? <button type="button" className="mt-3 text-sm text-primary hover:underline" onClick={() => { setKeyQuery(""); setKeyStatus("all"); }}>Clear search</button> : <Button className="mt-4" onClick={() => setShowAddModal(true)}>Create API key</Button>}</div> : filteredKeys.map((key) => <div key={key.id} className="grid min-w-0 gap-2 border-b border-border px-4 py-3 last:border-b-0 hover:bg-surface-hover md:grid-cols-[minmax(9rem,1fr)_minmax(12rem,1.5fr)_minmax(8rem,1fr)_8rem_7rem_7rem] md:items-center">
-          <div className="min-w-0"><p className="line-clamp-2 text-sm font-medium">{key.name}</p></div>
+          <div className="min-w-0"><p className="line-clamp-2 text-sm font-medium">{key.name}</p>{key.expiresAt && Date.parse(key.expiresAt) > expiryNow && Date.parse(key.expiresAt) - expiryNow < 24 * 60 * 60 * 1000 && <span className="text-xs text-warning">Expires within 24h</span>}</div>
           <div className="flex min-w-0 items-center gap-1"><code className="min-w-0 truncate font-[var(--font-data)] text-xs text-text-muted" title={revealedKeys[key.id] || displayMask(key)}>{revealedKeys[key.id] || displayMask(key)}</code><button type="button" onClick={() => revealKey(key.id)} className="grid size-9 shrink-0 place-content-center rounded-[var(--radius-control)] hover:bg-surface-active" aria-label={revealedKeys[key.id] ? `Hide ${key.name} key` : `Show ${key.name} key`}>{revealedKeys[key.id] ? <EyeOff size={14}/> : <Eye size={14}/>}</button><button type="button" onClick={() => copyKeyViaReveal(key.id)} className="grid size-9 shrink-0 place-content-center rounded-[var(--radius-control)] text-primary hover:bg-surface-active" aria-label={`Copy ${key.name} key`}>{copied === key.id ? <Check size={14}/> : <Copy size={14}/>}</button></div>
           <div className="text-xs text-text-muted">{key.modelPolicy === "whitelist" ? `${parsePolicyCount(key.allowedModels)} allowed` : key.modelPolicy === "blacklist" ? `${parsePolicyCount(key.blockedModels)} blocked` : "All models"}</div>
           <div className="text-xs text-text-muted">{key.rpmLimit > 0 ? `${key.rpmLimit} RPM` : "Unlimited"}</div>
@@ -877,6 +921,7 @@ export default function APIPageClient({ machineId }) {
         onClose={() => {
           setShowAddModal(false);
           setNewKeyName("");
+        setNewKeyExpiresAt("");
         }}
       >
         <div className="flex flex-col gap-4">
@@ -886,6 +931,13 @@ export default function APIPageClient({ machineId }) {
             onChange={(e) => setNewKeyName(e.target.value)}
             placeholder="Production Key"
           />
+          <Input
+            label="Expires at (optional)"
+            type="datetime-local"
+            value={newKeyExpiresAt}
+            onChange={(event) => setNewKeyExpiresAt(event.target.value)}
+          />
+          <p className="text-xs text-text-muted">Uses your local timezone. Leave blank for a non-expiring key.</p>
           <div className="flex gap-2">
             <Button onClick={handleCreateKey} fullWidth disabled={!newKeyName.trim()}>
               Create
@@ -894,6 +946,7 @@ export default function APIPageClient({ machineId }) {
               onClick={() => {
                 setShowAddModal(false);
                 setNewKeyName("");
+                setNewKeyExpiresAt("");
               }}
               variant="ghost"
               fullWidth
@@ -928,7 +981,7 @@ export default function APIPageClient({ machineId }) {
             <Button
               variant="secondary"
               icon={copied === "created_key" ? "check" : "content_copy"}
-              onClick={() => copy(createdKey, "created_key")}
+              onClick={() => copyWithFeedback(createdKey, "created_key")}
             >
               {copied === "created_key" ? "Copied!" : "Copy"}
             </Button>
@@ -984,7 +1037,7 @@ export default function APIPageClient({ machineId }) {
             <Button
               variant="secondary"
               icon={copied === "rotated_key" ? "check" : "content_copy"}
-              onClick={() => copy(rotatedKey, "rotated_key")}
+              onClick={() => copyWithFeedback(rotatedKey, "rotated_key")}
             >
               {copied === "rotated_key" ? "Copied!" : "Copy"}
             </Button>
