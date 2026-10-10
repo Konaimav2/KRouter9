@@ -6,6 +6,7 @@ import { Card } from "@/shared/components";
 import { AI_PROVIDERS, getProviderAlias } from "@/shared/constants/providers";
 import { getModelsByProviderId, getModelKind } from "@/shared/constants/models";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
+import { revealKeyById, pickDefaultKeyId, labelForMaskedKey, isKeyActionBlocked } from "@/lib/maskedKeyClient";
 import { TTS_PROVIDER_CONFIG } from "@/shared/constants/ttsProviders";
 import { translate } from "@/i18n/runtime";
 import { getTtsVoicesForModel } from "open-sse/config/ttsModels.js";
@@ -44,6 +45,10 @@ export function TtsExampleCard({ providerId }) {
   const [input, setInput]               = useState("Hello, this is a text to speech test.");
   const [style, setStyle]               = useState(""); // style/voice instructions (e.g. MiMo voicedesign)
   const [apiKey, setApiKey]             = useState("");
+  const [maskedKeys, setMaskedKeys]   = useState([]);
+  const [selectedKeyId, setSelectedKeyId] = useState("");
+  const [resolvingKey, setResolvingKey] = useState(false);
+  const [keyError, setKeyError]       = useState("");
   const [useTunnel, setUseTunnel]       = useState(false);
   const [localEndpoint, setLocalEndpoint]   = useState("");
   const [tunnelEndpoint, setTunnelEndpoint] = useState("");
@@ -71,16 +76,28 @@ export function TtsExampleCard({ providerId }) {
     setLocalEndpoint(window.location.origin);
     fetch("/api/keys")
       .then((r) => r.json())
-      .then((d) => { setApiKey((d.keys || []).find((k) => k.isActive !== false)?.key || ""); })
-      .catch(() => {});
+      .then((d) => {
+        const keys = d.keys || [];
+        setMaskedKeys(keys);
+        const id = pickDefaultKeyId(keys);
+        if (!id) return;
+        setSelectedKeyId(id);
+        setResolvingKey(true);
+        setKeyError("");
+        revealKeyById(id)
+          .then((raw) => setApiKey(raw))
+          .catch((e) => setKeyError(e.message || "Failed to resolve API key"))
+          .finally(() => setResolvingKey(false));
+      })
+      .catch((e) => setKeyError(e.message || "Failed to load API keys"));
     fetch("/api/providers?mode=full", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => { setConnectionCount((d.connections || []).filter((c) => c.provider === providerId && c.isActive !== false).length); })
-      .catch(() => {});
+      .catch(() => { setConnectionCount(0); });
     fetch("/api/tunnel/status")
       .then((r) => r.json())
       .then((d) => { if (d.publicUrl) setTunnelEndpoint(d.publicUrl); })
-      .catch(() => {});
+      .catch(() => { setTunnelEndpoint(""); });
 
     // Pre-select default voice based on provider config
     if (config.voiceSource === "hardcoded") {
@@ -185,6 +202,7 @@ export function TtsExampleCard({ providerId }) {
     : languages;
 
   const endpoint = useTunnel ? tunnelEndpoint : localEndpoint;
+  const keyBlocked = isKeyActionBlocked({ keys: maskedKeys, rawKey: apiKey, resolving: resolvingKey, error: keyError });
   // For ElevenLabs/config-driven: prefer manual voiceId (if any), else fall back to selectedVoice
   const activeVoiceId = config.hasVoiceIdInput ? (voiceId || selectedVoice) : selectedVoice;
   const modelFull = (() => {
@@ -272,15 +290,42 @@ export function TtsExampleCard({ providerId }) {
               )}
             </div>
           </Row>
+          {/* API Key (masked — raw resolves via guarded reveal only) */}
           <Row label="API Key">
             <span className="px-3 py-1.5 text-sm font-mono text-text-main bg-sidebar rounded-lg truncate block">
-              {apiKey
-                ? `${apiKey.slice(0, 8)}${"•".repeat(Math.min(20, Math.max(0, apiKey.length - 8)))}`
-                : connectionCount > 0
-                  ? <span className="text-text-muted italic">Using stored key(s) · {connectionCount} connection{connectionCount > 1 ? "s" : ""}</span>
-                  : <span className="text-text-muted italic">No key configured</span>}
+              {resolvingKey
+                ? <span className="text-text-muted italic">Resolving selected key…</span>
+                : (selectedKeyId
+                  ? labelForMaskedKey(maskedKeys.find((k) => k.id === selectedKeyId) || { id: selectedKeyId })
+                  : (connectionCount > 0
+                    ? <span className="text-text-muted italic">Using stored key(s) · {connectionCount} connection{connectionCount > 1 ? "s" : ""}</span>
+                    : <span className="text-text-muted italic">No key configured</span>))}
             </span>
           </Row>
+          {maskedKeys.length > 1 && (
+            <Row label="Key">
+              <select
+                value={selectedKeyId}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setSelectedKeyId(id);
+                  if (!id) { setApiKey(""); return; }
+                  setResolvingKey(true);
+                  setKeyError("");
+                  revealKeyById(id)
+                    .then((raw) => setApiKey(raw))
+                    .catch((err) => { setApiKey(""); setKeyError(err.message || "Failed to resolve API key"); })
+                    .finally(() => setResolvingKey(false));
+                }}
+                className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+              >
+                {maskedKeys.map((k) => (
+                  <option key={k.id} value={k.id}>{labelForMaskedKey(k)}</option>
+                ))}
+              </select>
+            </Row>
+          )}
+          {keyError && <p role="alert" className="text-xs text-red-500 break-words">{keyError}</p>}
 
           {/* Model selector — prefer PROVIDER_MODELS[kind=tts], else providerModels via modelKey */}
           {config.hasModelSelector && (config.modelKey || getModelsByProviderId(providerId).some(m => getModelKind(m) === "tts")) && (
@@ -484,14 +529,15 @@ export function TtsExampleCard({ providerId }) {
               <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
                 <button
                   onClick={() => copyCurl(curlSnippet)}
-                  className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-primary transition-colors"
+                  disabled={keyBlocked}
+                  className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Icon name={copiedCurl ? "check" : "content_copy"} size={14} />
                   {copiedCurl ? "Copied" : "Copy"}
                 </button>
                 <button
                   onClick={handleRun}
-                  disabled={running || !input.trim() || !modelFull}
+                  disabled={running || !input.trim() || !modelFull || keyBlocked}
                   className="flex w-full sm:w-auto items-center justify-center gap-1.5 px-3 py-1 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Icon name="play_arrow" size={14} style={running ? { animation: "spin 1s linear infinite" } : undefined} />

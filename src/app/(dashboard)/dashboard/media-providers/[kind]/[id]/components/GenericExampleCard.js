@@ -6,6 +6,7 @@ import { Card } from "@/shared/components";
 import { MEDIA_PROVIDER_KINDS, getProviderAlias, resolveProviderId } from "@/shared/constants/providers";
 import { getModelsByProviderId, getModelKind } from "@/shared/constants/models";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
+import { revealKeyById, pickDefaultKeyId, labelForMaskedKey, isKeyActionBlocked } from "@/lib/maskedKeyClient";
 import { Row, KIND_EXAMPLE_CONFIG } from "./exampleShared";
 
 const CLOUDFLARE_TEST_IMAGE_URL = "https://pub-1fb693cb11cc46b2b2f656f51e015a2c.r2.dev/dog.png";
@@ -55,6 +56,10 @@ export function GenericExampleCard({ providerId, kind }) {
     (safeExConfig.extraFields || []).reduce((acc, f) => { acc[f.key] = f.default ?? ""; return acc; }, {})
   );
   const [apiKey, setApiKey] = useState("");
+  const [maskedKeys, setMaskedKeys] = useState([]);
+  const [selectedKeyId, setSelectedKeyId] = useState("");
+  const [resolvingKey, setResolvingKey] = useState(false);
+  const [keyError, setKeyError] = useState("");
   const [useTunnel, setUseTunnel] = useState(false);
   const [localEndpoint, setLocalEndpoint] = useState("");
   const [tunnelEndpoint, setTunnelEndpoint] = useState("");
@@ -74,12 +79,24 @@ export function GenericExampleCard({ providerId, kind }) {
     setLocalEndpoint(window.location.origin);
     fetch("/api/keys")
       .then((r) => r.json())
-      .then((d) => { setApiKey((d.keys || []).find((k) => k.isActive !== false)?.key || ""); })
-      .catch(() => {});
+      .then((d) => {
+        const keys = d.keys || [];
+        setMaskedKeys(keys);
+        const id = pickDefaultKeyId(keys);
+        if (!id) return;
+        setSelectedKeyId(id);
+        setResolvingKey(true);
+        setKeyError("");
+        revealKeyById(id)
+          .then((raw) => setApiKey(raw))
+          .catch((e) => setKeyError(e.message || "Failed to resolve API key"))
+          .finally(() => setResolvingKey(false));
+      })
+      .catch((e) => setKeyError(e.message || "Failed to load API keys"));
     fetch("/api/tunnel/status")
       .then((r) => r.json())
       .then((d) => { if (d.publicUrl) setTunnelEndpoint(d.publicUrl); })
-      .catch(() => {});
+      .catch(() => { setTunnelEndpoint(""); });
     // Load active connections of this provider for pinning
     fetch("/api/providers/client")
       .then((r) => r.json())
@@ -87,7 +104,7 @@ export function GenericExampleCard({ providerId, kind }) {
         const conns = (d.connections || []).filter((c) => c.provider === providerId && c.isActive !== false);
         setConnections(conns);
       })
-      .catch(() => {});
+      .catch(() => { setConnections([]); });
   }, [providerId]);
 
   // Safe to early-return now that all hooks are declared
@@ -99,6 +116,7 @@ export function GenericExampleCard({ providerId, kind }) {
   const modelFull = !needsModel
     ? safeProviderAlias
     : (selectedModel ? `${safeProviderAlias}/${selectedModel}` : (allowManualModel ? "" : safeProviderAlias));
+  const keyBlocked = isKeyActionBlocked({ keys: maskedKeys, rawKey: apiKey, resolving: resolvingKey, error: keyError });
   const imageEditDefaults = getImageEditDefaults(providerId, selectedModel);
   const effectiveRefImage = refImage.trim() || imageEditDefaults.image || "";
   const effectiveMaskImage = maskImage.trim() || imageEditDefaults.mask_image || "";
@@ -273,14 +291,40 @@ export function GenericExampleCard({ providerId, kind }) {
           </div>
         </Row>
 
-        {/* API Key */}
+        {/* API Key (masked — raw resolves via guarded reveal only) */}
         <Row label="API Key">
           <span className="px-3 py-1.5 text-sm font-mono text-text-main bg-sidebar rounded-lg truncate block">
-            {apiKey ? `${apiKey.slice(0, 8)}${"\u2022".repeat(Math.min(20, Math.max(0, apiKey.length - 8)))}` : <span className="text-text-muted italic">No key configured</span>}
+            {resolvingKey
+              ? <span className="text-text-muted italic">Resolving selected key…</span>
+              : (selectedKeyId
+                ? labelForMaskedKey(maskedKeys.find((k) => k.id === selectedKeyId) || { id: selectedKeyId })
+                : <span className="text-text-muted italic">No key configured</span>)}
           </span>
         </Row>
-
-        {/* Connection picker - only show when 2+ connections (or any with email) */}
+        {maskedKeys.length > 1 && (
+          <Row label="Key">
+            <select
+              value={selectedKeyId}
+              onChange={(e) => {
+                const id = e.target.value;
+                setSelectedKeyId(id);
+                if (!id) { setApiKey(""); return; }
+                setResolvingKey(true);
+                setKeyError("");
+                revealKeyById(id)
+                  .then((raw) => setApiKey(raw))
+                  .catch((err) => { setApiKey(""); setKeyError(err.message || "Failed to resolve API key"); })
+                  .finally(() => setResolvingKey(false));
+              }}
+              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+            >
+              {maskedKeys.map((k) => (
+                <option key={k.id} value={k.id}>{labelForMaskedKey(k)}</option>
+              ))}
+            </select>
+          </Row>
+        )}
+        {keyError && <p role="alert" className="text-xs text-red-500 break-words">{keyError}</p>}
         {connections.length > 0 && (
           <Row label="Connection">
             <select
@@ -451,14 +495,15 @@ export function GenericExampleCard({ providerId, kind }) {
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
               <button
                 onClick={() => copyCurl(curlSnippet)}
-                className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-primary transition-colors"
+                disabled={keyBlocked}
+                className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Icon name={copiedCurl ? "check" : "content_copy"} size={14} />
                 {copiedCurl ? "Copied" : "Copy"}
               </button>
             <button
               onClick={handleRun}
-              disabled={running || !input.trim() || !modelFull}
+              disabled={running || !input.trim() || !modelFull || keyBlocked}
               className="flex w-full sm:w-auto items-center justify-center gap-1.5 px-3 py-1 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 <Icon name="play_arrow" size={14} style={running ? { animation: "spin 1s linear infinite" } : undefined} />

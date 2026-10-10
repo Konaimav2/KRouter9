@@ -125,29 +125,101 @@ export async function GET(request) {
         redirect: "manual",
         signal: controller.signal,
       });
+      // Never follow redirects: a registry URL that redirects (301/302/307/308,
+      // or meta-refresh style) off-registry would re-open the SSRF.
+      if (!res.ok || (res.status >= 300 && res.status < 400)) {
+        return NextResponse.json({ data: [] });
+      }
+      const declared = Number(res.headers?.get?.("content-length"));
+      if (Number.isFinite(declared) && declared > MAX_CATALOG_BYTES) {
+        // Declared oversize: cancel the body immediately instead of draining
+        // it — no point pulling 10MB+ we will discard.
+        try {
+          await res.body?.cancel?.();
+        } catch {
+          // ignore cancel errors on the oversize fail-open path
+        }
+        return NextResponse.json({ data: [] });
+      }
+      // Bounded streaming read: content-length is absent on chunked bodies
+      // (and untrusted anyway), so enforce the byte cap while consuming.
+      // The abort timer above stays armed through body consumption, so a
+      // slow/stalled body is cut at FETCH_TIMEOUT_MS too.
+      const rawBytes = await readBoundedBody(res, controller.signal);
+      if (rawBytes === null) {
+        return NextResponse.json({ data: [] });
+      }
+      const json = parseCatalogBytes(rawBytes);
+      const raw = json?.data ?? json?.models ?? json;
+      const list = Array.isArray(raw) ? raw.slice(0, MAX_CATALOG_MODELS) : [];
+      const data = filter(list);
+      return NextResponse.json({ data });
     } finally {
       clearTimeout(tid);
     }
-    // Never follow redirects: a registry URL that redirects (301/302/307/308,
-    // or meta-refresh style) off-registry would re-open the SSRF.
-    if (!res.ok || (res.status >= 300 && res.status < 400)) {
-      return NextResponse.json({ data: [] });
-    }
-    const declared = Number(res.headers?.get?.("content-length"));
-    if (Number.isFinite(declared) && declared > MAX_CATALOG_BYTES) {
-      try {
-        await res.arrayBuffer?.();
-      } catch {
-        // ignore body-drain errors on the oversize fail-open path
-      }
-      return NextResponse.json({ data: [] });
-    }
-    const json = await res.json().catch(() => null);
-    const raw = json?.data ?? json?.models ?? json;
-    const list = Array.isArray(raw) ? raw.slice(0, MAX_CATALOG_MODELS) : [];
-    const data = filter(list);
-    return NextResponse.json({ data });
   } catch {
     return NextResponse.json({ data: [] });
+  }
+}
+
+// Read at most MAX_CATALOG_BYTES from the response body, cancelling the
+// stream as soon as the cap trips. Returns null on oversize (body already
+// cancelled) or when the body is unavailable. AbortError from the caller's
+// timer propagates to the caller's fail-open catch.
+async function readBoundedBody(res, signal) {
+  const body = res?.body;
+  if (!body || typeof body.getReader !== "function") {
+    // No streaming body (test doubles / edge transports): fall back to the
+    // buffered json() path, still honoring the byte cap when a declared
+    // length is present.
+    const json = await res.json().catch(() => null);
+    return json === null ? null : new TextEncoder().encode(JSON.stringify(json));
+  }
+  const reader = body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        total += value.byteLength ?? value.length ?? 0;
+        if (total > MAX_CATALOG_BYTES) {
+          try {
+            await reader.cancel();
+          } catch {
+            // ignore cancel errors on the oversize path
+          }
+          return null;
+        }
+        chunks.push(value);
+      }
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // ignore lock-release errors
+    }
+  }
+  if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+  return concatChunks(chunks, total);
+}
+
+function concatChunks(chunks, total) {
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) {
+    out.set(c, off);
+    off += c.byteLength ?? c.length ?? 0;
+  }
+  return out;
+}
+
+function parseCatalogBytes(bytes) {
+  try {
+    return JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    return null;
   }
 }

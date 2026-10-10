@@ -7,6 +7,7 @@ import Link from "next/link";
 import { Card, Button, Input, Toggle, ModelSelectModal } from "@/shared/components";
 import ProviderIcon from "@/shared/components/ProviderIcon";
 import { AI_PROVIDERS, MEDIA_PROVIDER_KINDS } from "@/shared/constants/providers";
+import { revealKeyById, pickDefaultKeyId, isKeyActionBlocked } from "@/lib/maskedKeyClient";
 
 // Parse "providerId/model" or just "providerId" → { providerId, model }
 function parseModelEntry(entry) {
@@ -60,6 +61,9 @@ export default function ComboDetailPage() {
   const [testResult, setTestResult] = useState(null);
   const [testError, setTestError] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [maskedKeys, setMaskedKeys] = useState([]);
+  const [resolvingKey, setResolvingKey] = useState(false);
+  const [keyError, setKeyError] = useState("");
   const [connections, setConnections] = useState([]);
   const [modelAliases, setModelAliases] = useState({});
 
@@ -76,7 +80,22 @@ export default function ComboDetailPage() {
       if (aliasesRes.ok) setModelAliases((await aliasesRes.json()).aliases || {});
       if (keysRes.ok) {
         const k = await keysRes.json();
-        setApiKey((k.keys || []).find((x) => x.isActive !== false)?.key || "");
+        const keys = k.keys || [];
+        setMaskedKeys(keys);
+        const keyId = pickDefaultKeyId(keys);
+        if (keyId) {
+          setResolvingKey(true);
+          setKeyError("");
+          try {
+            setApiKey(await revealKeyById(keyId));
+          } catch (e) {
+            setKeyError(e.message || "Failed to resolve API key");
+          } finally {
+            setResolvingKey(false);
+          }
+        }
+      } else {
+        setKeyError("Failed to load API keys");
       }
       if (connsRes.ok) setConnections((await connsRes.json()).connections || []);
       if (!comboRes.ok) { setCombo(null); setLoading(false); return; }
@@ -235,6 +254,7 @@ export default function ComboDetailPage() {
   const kindLabel = KIND_LABELS[combo.kind] || MEDIA_PROVIDER_KINDS.find((k) => k.id === combo.kind)?.label || "Combo";
   const examplePath = EXAMPLE_PATHS[combo.kind];
   const exampleBody = combo.kind && EXAMPLE_BODIES[combo.kind] ? EXAMPLE_BODIES[combo.kind](combo.name) : null;
+  const keyBlocked = isKeyActionBlocked({ keys: maskedKeys, rawKey: apiKey, resolving: resolvingKey, error: keyError });
   const curlExample = examplePath
     ? `curl -X POST http://localhost:20128${examplePath} \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer ${apiKey || "YOUR_KEY"}" \\\n  -d '${JSON.stringify(exampleBody)}'`
     : "";
@@ -335,13 +355,15 @@ export default function ComboDetailPage() {
         <Card>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
             <h2 className="text-lg font-semibold">Test Example</h2>
-            <Button size="sm" icon="play_arrow" onClick={handleTest} disabled={testing || providers.length === 0}>
+            <Button size="sm" icon="play_arrow" onClick={handleTest} disabled={testing || providers.length === 0 || keyBlocked}>
               {testing ? "Running..." : "Run"}
             </Button>
           </div>
           <pre className="text-xs font-mono bg-black/[0.03] dark:bg-white/[0.03] p-3 rounded-lg overflow-x-auto whitespace-pre-wrap break-all">
             {curlExample}
           </pre>
+          {resolvingKey && <p className="text-xs text-text-muted">Resolving selected key…</p>}
+          {keyError && <p role="alert" className="text-xs text-red-500 break-words">{keyError}</p>}
           {testError && (
             <p className="mt-3 text-xs text-red-500 break-words">{testError}</p>
           )}

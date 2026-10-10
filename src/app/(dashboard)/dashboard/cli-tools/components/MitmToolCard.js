@@ -21,7 +21,6 @@ export default function MitmToolCard({
   hasCachedPassword,
   needsSudoPassword,
   isWin,
-  apiKeys,
   activeProviders,
   hasActiveProviders,
   modelAliases = {},

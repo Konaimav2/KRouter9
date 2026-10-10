@@ -3,6 +3,7 @@
 import Icon from "@/shared/components/Icon";
 import { useState, useEffect, useCallback } from "react";
 import { Card, Button, Badge, Input } from "@/shared/components";
+import { revealKeyById, pickDefaultKeyId, labelForMaskedKey, isKeyActionBlocked } from "@/lib/maskedKeyClient";
 
 const DEFAULT_MITM_ROUTER_BASE = "http://localhost:20128";
 
@@ -15,7 +16,11 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
   const [loading, setLoading] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [sudoPassword, setSudoPassword] = useState("");
-  const [selectedApiKey, setSelectedApiKey] = useState(() => apiKeys?.[0]?.key || "");
+  const [maskedKeys, setMaskedKeys] = useState(() => apiKeys || []);
+  const [selectedKeyId, setSelectedKeyId] = useState(() => pickDefaultKeyId(apiKeys || []));
+  const [selectedApiKey, setSelectedApiKey] = useState("");
+  const [resolvingKey, setResolvingKey] = useState(false);
+  const [keyError, setKeyError] = useState("");
   const [pendingAction, setPendingAction] = useState(null);
   const [modalError, setModalError] = useState(null);
   const [actionError, setActionError] = useState(null);
@@ -50,6 +55,21 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
     });
   }, [fetchStatus]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => {
+    const keys = apiKeys || [];
+    setMaskedKeys(keys);
+    const id = pickDefaultKeyId(keys);
+    if (!id) return;
+    setSelectedKeyId(id);
+    setResolvingKey(true);
+    setKeyError("");
+    revealKeyById(id)
+      .then((raw) => setSelectedApiKey(raw))
+      .catch((e) => setKeyError(e.message || "Failed to resolve API key"))
+      .finally(() => setResolvingKey(false));
+  }, [apiKeys]);
+
   const handleAction = (action) => {
     setActionError(null);
     // Wait for status to load before deciding whether to show sudo modal
@@ -75,9 +95,24 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
           body: JSON.stringify({ action: "trust-cert", sudoPassword: password }),
         });
       } else if (action === "start") {
-        const keyToUse = selectedApiKey?.trim()
-          || (apiKeys?.length > 0 ? apiKeys[0].key : null)
-          || (!cloudEnabled ? "sk_krouter9" : null);
+        let keyToUse = selectedApiKey?.trim() || null;
+        if (!keyToUse && selectedKeyId) {
+          try {
+            keyToUse = await revealKeyById(selectedKeyId);
+            setSelectedApiKey(keyToUse);
+          } catch (e) {
+            setKeyError(e.message || "Failed to resolve API key");
+            setLoading(false);
+            setPendingAction(null);
+            return;
+          }
+        }
+        if (!keyToUse) {
+          setKeyError("No API key selected — pick a key or enter one manually");
+          setLoading(false);
+          setPendingAction(null);
+          return;
+        }
         res = await fetch("/api/cli-tools/antigravity-mitm", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -131,6 +166,7 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
   };
 
   const isRunning = status?.running;
+  const keyBlocked = isKeyActionBlocked({ keys: maskedKeys, rawKey: selectedApiKey, resolving: resolvingKey, error: keyError });
 
   return (
     <>
@@ -189,21 +225,40 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
               <div className="grid gap-1 sm:grid-cols-[8rem_auto_1fr] sm:items-center sm:gap-2">
                 <span className="text-xs font-semibold text-text-main sm:text-right sm:text-sm">API Key</span>
                 <Icon name="arrow_forward" className="hidden text-text-muted text-[14px] sm:inline" />
-                <input
-                  type="text"
-                  list="mitm-api-keys"
-                  value={selectedApiKey}
-                  onChange={(e) => setSelectedApiKey(e.target.value)}
-                  placeholder={cloudEnabled ? "Enter or pick API key" : "sk_krouter9 (default)"}
-                  className="flex-1 min-w-0 px-2 py-1.5 bg-surface rounded border border-border text-xs text-text-main focus:outline-none focus:ring-1 focus:ring-primary/50"
-                />
-                {apiKeys?.length > 0 && (
-                  <datalist id="mitm-api-keys">
-                    {apiKeys.map((key) => (
-                      <option key={key.id} value={key.key}>{key.name || key.key}</option>
-                    ))}
-                  </datalist>
-                )}
+                <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                  {maskedKeys.length > 0 ? (
+                    <select
+                      value={selectedKeyId}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        setSelectedKeyId(id);
+                        if (!id) { setSelectedApiKey(""); return; }
+                        setResolvingKey(true);
+                        setKeyError("");
+                        revealKeyById(id)
+                          .then((raw) => setSelectedApiKey(raw))
+                          .catch((err) => { setSelectedApiKey(""); setKeyError(err.message || "Failed to resolve API key"); })
+                          .finally(() => setResolvingKey(false));
+                      }}
+                      className="flex-1 min-w-0 px-2 py-1.5 bg-surface rounded border border-border text-xs text-text-main focus:outline-none focus:ring-1 focus:ring-primary/50"
+                    >
+                      <option value="">{cloudEnabled ? "Select API key" : "Select API key (or type below)"}</option>
+                      {maskedKeys.map((key) => (
+                        <option key={key.id} value={key.id}>{labelForMaskedKey(key)}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={selectedApiKey}
+                      onChange={(e) => setSelectedApiKey(e.target.value)}
+                      placeholder={cloudEnabled ? "Enter API key" : "Enter API key manually"}
+                      className="flex-1 min-w-0 px-2 py-1.5 bg-surface rounded border border-border text-xs text-text-main focus:outline-none focus:ring-1 focus:ring-primary/50"
+                    />
+                  )}
+                  {resolvingKey && <span className="text-[11px] text-text-muted">Resolving selected key…</span>}
+                  {keyError && <span role="alert" className="text-[11px] text-red-500 break-words">{keyError}</span>}
+                </div>
               </div>
             )}
           </div>
@@ -232,7 +287,7 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
             ) : (
               <button
                 onClick={() => handleAction("start")}
-                disabled={loading || !status || (serverIsWindows && !isAdmin)}
+                disabled={loading || !status || (serverIsWindows && !isAdmin) || keyBlocked}
                 title={serverIsWindows && !isAdmin ? "Administrator required" : undefined}
                 className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-xs font-medium text-primary transition-colors hover:bg-primary/20 disabled:opacity-50 sm:w-auto sm:py-1.5"
               >
