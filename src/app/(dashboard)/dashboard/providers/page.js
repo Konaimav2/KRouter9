@@ -372,18 +372,20 @@ export default function ProvidersPage() {
       if (ca !== cb) return ca - cb;
       return (a.name || "").localeCompare(b.name || "");
     });
-  // API Key: connected providers first, then alphabetical by name
+  // API Key: connected providers first, then alphabetical by name.
+  // Dual-variant lane (mirrors the card stats below): API keys are stored as
+  // "apikey" or "api_key" — count both so the grid matches the error tiles.
   const apikeyEntries = Object.entries(APIKEY_PROVIDERS)
     .filter(
       ([key, info]) =>
         !info.hidden &&
         (info.serviceKinds ?? ["llm"]).includes("llm") &&
         matchSearch(info.name) &&
-        matchStatus(getProviderStats(key, "apikey"), info.noAuth),
+        matchStatus(getProviderStats(key, ["apikey", "api_key"]), info.noAuth),
     )
     .sort(([ka, a], [kb, b]) => {
-      const ca = getProviderStats(ka, "apikey").total > 0 ? 0 : 1;
-      const cb = getProviderStats(kb, "apikey").total > 0 ? 0 : 1;
+      const ca = getProviderStats(ka, ["apikey", "api_key"]).total > 0 ? 0 : 1;
+      const cb = getProviderStats(kb, ["apikey", "api_key"]).total > 0 ? 0 : 1;
       if (ca !== cb) return ca - cb;
       return (a.name || "").localeCompare(b.name || "");
     });
