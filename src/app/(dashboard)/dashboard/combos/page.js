@@ -1,7 +1,7 @@
 "use client";
 
 import Icon from "@/shared/components/Icon";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -317,6 +317,29 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
   const [showAddModel, setShowAddModel] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
+  const commandRef = useRef(null);
+  const dragSourceRef = useRef(-1);
+  const [dropPosition, setDropPosition] = useState(null);
+
+  useEffect(() => {
+    if (!commandOpen) return undefined;
+    const handleOutside = (event) => {
+      if (commandRef.current && !commandRef.current.contains(event.target)) setCommandOpen(false);
+    };
+    const handleKey = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setCommandOpen(false);
+        commandRef.current?.querySelector("button")?.focus();
+      }
+    };
+    document.addEventListener("mousedown", handleOutside);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleOutside);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [commandOpen]);
   const [draftModels, setDraftModels] = useState(combo.models);
   const [draftName, setDraftName] = useState(combo.name);
   const [nameError, setNameError] = useState("");
@@ -408,7 +431,7 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
         <div className="flex items-center justify-end gap-1">
           <ActionButton icon={copied === `combo-${combo.id}` ? "check" : "copy"} label="Copy" onClick={() => onCopy(combo.name, `combo-${combo.id}`)} />
           <ActionButton icon={testing ? "progress_activity" : "play_arrow"} label={testing ? "Testing" : "Test"} onClick={testCombo} disabled={testing || combo.models.length === 0} spin={testing} />
-          <div className="relative">
+          <div ref={commandRef} className="relative">
             <ActionButton icon="more_horiz" label="Manage" onClick={() => setCommandOpen((value) => !value)} />
             {commandOpen ? <div role="menu" className="absolute right-0 top-full z-[var(--z-menu)] mt-1 w-48 border border-[var(--color-border-strong)] bg-[var(--color-surface-raised)] py-1 shadow-[var(--shadow-tray)]"><button type="button" role="menuitem" onClick={() => { setExpanded(true); setCommandOpen(false); }} className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm hover:bg-[var(--color-surface-hover)]"><Icon name="tune" size={16} />Manage route</button><button type="button" role="menuitem" onClick={() => { setCommandOpen(false); onDelete(); }} className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger-wash)]"><Icon name="delete" size={16} />Delete combo</button></div> : null}
           </div>
@@ -442,17 +465,37 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
               <div
                 key={`${model}-${index}`}
                 draggable
-                onDragStart={(event) => event.dataTransfer.setData("text/plain", String(index))}
-                onDragOver={(event) => event.preventDefault()}
+                onDragStart={(event) => {
+                  dragSourceRef.current = index;
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData("text/plain", String(index));
+                }}
+                onDragOver={(event) => {
+                  if (dragSourceRef.current < 0) return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  setDropPosition(index + (event.clientY >= rect.top + rect.height / 2 ? 1 : 0));
+                }}
+                onDragLeave={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget)) setDropPosition(null);
+                }}
+                onDragEnd={() => { dragSourceRef.current = -1; setDropPosition(null); }}
                 onDrop={(event) => {
                   event.preventDefault();
-                  const source = Number.parseInt(event.dataTransfer.getData("text/plain"), 10);
-                  if (!Number.isInteger(source) || source === index) return;
-                  setDraftModels(arrayMove(draftModels, source, index));
-                  setAnnouncement(`${draftModels[source]} moved from position ${source + 1} to ${index + 1}`);
+                  const source = dragSourceRef.current;
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  const slot = index + (event.clientY >= rect.top + rect.height / 2 ? 1 : 0);
+                  const target = slot - (source < slot ? 1 : 0);
+                  dragSourceRef.current = -1;
+                  setDropPosition(null);
+                  if (source < 0 || source >= draftModels.length || source === target) return;
+                  setDraftModels(arrayMove(draftModels, source, target));
+                  setAnnouncement(`${draftModels[source]} moved from position ${source + 1} to ${target + 1}`);
                 }}
-                className="grid min-h-14 cursor-grab grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 active:cursor-grabbing"
+                className="relative grid min-h-14 cursor-grab grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 active:cursor-grabbing"
               >
+                {dropPosition === index || (index === draftModels.length - 1 && dropPosition === draftModels.length) ? <span data-testid="combo-drop-indicator" aria-hidden="true" className={`pointer-events-none absolute inset-x-0 z-10 h-0.5 bg-[var(--color-primary)] ${dropPosition === index ? "top-0" : "bottom-0"}`} /> : null}
                 <div className="flex h-full flex-col items-center justify-center border-r border-[var(--route-line)] pr-3 font-mono text-xs tabular-nums text-[var(--color-primary)]">{String(index + 1).padStart(2, "0")}</div>
                 <div className="min-w-0"><code className="block break-all font-mono text-xs text-[var(--color-text)]">{model}</code><div className="mt-1 flex flex-wrap items-center gap-2"><span className="inline-flex items-center gap-1 text-[11px] text-[var(--color-text-muted)]"><span className="size-2 rounded-full border border-[var(--color-text-subtle)]" />Not tested</span><CapacityBadges caps={getCaps?.(model)} /></div></div>
                 <div className="flex items-center gap-1">
