@@ -9,6 +9,7 @@ import {
   PROVIDER_ID_TO_ALIAS,
 } from "@/shared/constants/models";
 import {
+  KRouter9ToolCard,
   ClaudeToolCard,
   CodexToolCard,
   DroidToolCard,
@@ -296,6 +297,8 @@ export default function ToolDetailClient({ toolId, machineId }) {
     };
 
     switch (toolId) {
+      case "krouter9":
+        return <KRouter9ToolCard />;
       case "claude":
         return (
           <ClaudeToolCard

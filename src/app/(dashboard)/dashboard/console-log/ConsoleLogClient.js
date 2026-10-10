@@ -139,7 +139,7 @@ export default function ConsoleLogClient() {
             {[true, false].map((value) => <button key={String(value)} type="button" role="radio" aria-checked={live === value} className={`min-h-9 rounded-[var(--radius-status)] px-3 text-sm ${live === value ? "bg-surface-active text-primary" : "text-text-muted hover:bg-surface-hover"}`} onClick={() => setLiveMode(value)}>{value ? "Live" : "Pause"}</button>)}
           </div>
           <div className="relative">
-            <button type="button" aria-haspopup="menu" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)} className="flex min-h-9 items-center gap-2 rounded-[var(--radius-control)] border border-border-strong px-3 text-sm hover:bg-surface-hover">Levels <ChevronDown size={14} /></button>
+            <button type="button" aria-haspopup="menu" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)} className="flex min-h-9 items-center gap-2 rounded-[var(--radius-control)] border border-border-strong px-3 text-sm hover:bg-surface-hover">Levels ({levels.size}/{LEVELS.length}) <ChevronDown size={14} /></button>
             <PopoverMenu open={filtersOpen} onDismiss={() => setFiltersOpen(false)} label="Log level filters">
               {LEVELS.map((level) => <label key={level} role="menuitemcheckbox" aria-checked={levels.has(level)} className="flex min-h-9 cursor-pointer items-center gap-2 px-3 text-sm hover:bg-surface-hover"><input type="checkbox" checked={levels.has(level)} onChange={() => setLevels((current) => { const next = new Set(current); if (next.has(level)) next.delete(level); else next.add(level); return next; })} />{level}</label>)}
             </PopoverMenu>

@@ -11,7 +11,10 @@ import {
 } from "../endpoint/endpointConstants";
 
 export default function TokenSaverClient() {
-  const [rtkEnabled, setRtkEnabledState] = useState(true);
+  const [rtkEnabled, setRtkEnabledState] = useState(false);
+  const [settingsLoading, setSettingsLoading] = useState(true);
+  const [settingsError, setSettingsError] = useState(false);
+  const [settingsRetry, setSettingsRetry] = useState(0);
   const [headroomEnabled, setHeadroomEnabled] = useState(false);
   const [headroomUrl, setHeadroomUrl] = useState("http://localhost:8787");
   const [headroomTimeoutMs, setHeadroomTimeoutMs] = useState(3000);
@@ -53,7 +56,6 @@ export default function TokenSaverClient() {
     loading: true,
   });
   const [pxpipeHealth, setPxpipeHealth] = useState(null);
-  const [showPxpipeModal, setShowPxpipeModal] = useState(false);
   const [pxpipeActionLoading, setPxpipeActionLoading] = useState(false);
   const [pxpipeActionError, setPxpipeActionError] = useState("");
   const [locale, setLocale] = useState("en");
@@ -87,12 +89,12 @@ export default function TokenSaverClient() {
   // Leaving a Wenyan locale restores the supported non-Wenyan level.
   useEffect(() => {
     const current = CAVEMAN_LEVELS.find((lvl) => lvl.id === cavemanLevel);
-    if (current?.wenyan && !isWenyanLocale) {
+    if (!settingsLoading && !settingsError && current?.wenyan && !isWenyanLocale) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setCavemanLevel("ultra");
       patchSetting({ cavemanLevel: "ultra" });
     }
-  }, [isWenyanLocale, cavemanLevel]);
+  }, [isWenyanLocale, cavemanLevel, settingsLoading, settingsError]);
 
   const handleRtkEnabled = async (value) => {
     try {
@@ -423,6 +425,7 @@ export default function TokenSaverClient() {
     const loadSettings = async () => {
       try {
         const res = await fetch("/api/settings");
+        if (!res.ok) throw new Error("Settings unavailable");
         if (res.ok) {
           const data = await res.json();
           setRtkEnabledState(data.rtkEnabled !== false);
@@ -437,25 +440,21 @@ export default function TokenSaverClient() {
           setPonytailLevel(data.ponytailLevel || "full");
           setPxpipeEnabled(!!data.pxpipeEnabled);
           if (typeof data.pxpipeMinChars === "number") setPxpipeMinChars(data.pxpipeMinChars);
+          setSettingsError(false);
+          setSettingsLoading(false);
           refreshHeadroomStatus();
           // PRD: run the PXPIPE health check automatically when the page opens
           refreshPxpipeStatus().then(runPxpipeHealth);
         }
-      } catch {}
+      } catch {
+        setSettingsError(true);
+        setSettingsLoading(false);
+      }
     };
     loadSettings();
-  }, [refreshHeadroomStatus, refreshPxpipeStatus, runPxpipeHealth]);
+  }, [refreshHeadroomStatus, refreshPxpipeStatus, runPxpipeHealth, settingsRetry]);
 
   const headroomRunning = !!headroomStatus.running;
-  const headroomStatusLabel = headroomStatus.loading
-    ? "Checking…"
-    : headroomRunning
-      ? "Running"
-      : headroomStatus.localUrl !== false && !headroomStatus.installed
-        ? "Not installed"
-        : headroomStatus.localUrl !== false
-          ? "Stopped"
-          : "External";
   const headroomLocalUrl = headroomStatus.localUrl !== false;
   const headroomCanStart = !!headroomStatus.canStart;
   const headroomManaged =
@@ -489,10 +488,12 @@ export default function TokenSaverClient() {
     {
       id: "install",
       label: "Install",
-      state: headroomStatus.installed ? "Complete" : "Approval required",
-      body: 'Package source: PyPI package headroom-ai with the proxy extra. Installation never runs on page load.',
-      command: 'pip install "headroom-ai[proxy]"',
-      recovery: !headroomStatus.installed ? "Run the reviewed command externally, then re-check." : null,
+      state: !headroomLocalUrl ? "External service" : headroomStatus.installed ? "Complete" : "Approval required",
+      body: !headroomLocalUrl
+        ? "For an external URL, install and start Headroom on that host yourself. Save its URL below, then Re-check before enabling. Local setup cannot manage an external service."
+        : 'Package source: PyPI package headroom-ai with the proxy extra. Installation never runs on page load.',
+      command: headroomLocalUrl ? 'pip install "headroom-ai[proxy]"' : null,
+      recovery: headroomLocalUrl && !headroomStatus.installed ? "Run the reviewed command externally, then re-check." : null,
     },
     {
       id: "verify",
@@ -509,13 +510,22 @@ export default function TokenSaverClient() {
     },
   ];
 
+  if (settingsLoading || settingsError) {
+    return (
+      <section className="space-y-4 p-4 sm:p-6" aria-busy={settingsLoading}>
+        <p role={settingsError ? "alert" : "status"} className="text-sm text-text-muted">
+          {settingsError ? "Unable to load token saver settings. Retry before changing stages." : "Loading token saver settings"}
+        </p>
+        {settingsError ? <Button variant="secondary" onClick={() => { setSettingsLoading(true); setSettingsError(false); setSettingsRetry((value) => value + 1); }}>Retry</Button>
+          : <div aria-hidden="true" className="h-48 border border-border bg-surface-2 motion-safe:animate-pulse" />}
+      </section>
+    );
+  }
+
   return (
     <div className="space-y-4 p-4 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
-        <div role="tablist" aria-label="Token saver workspace" className="inline-flex border border-border bg-surface-2 p-1">
-          <button type="button" role="tab" aria-selected="true" className="min-h-10 bg-primary px-4 text-sm font-semibold text-white">Context</button>
-          <button type="button" role="tab" aria-selected="false" className="min-h-10 px-4 text-sm text-text-muted">Output</button>
-        </div>
+        <h2 className="font-semibold">Token saver stages</h2>
         <p className="font-mono text-xs tabular-nums text-text-muted">{[rtkEnabled, headroomEnabled, cavemanEnabled, ponytailEnabled].filter(Boolean).length} / 4 stages enabled</p>
       </div>
 
@@ -527,14 +537,15 @@ export default function TokenSaverClient() {
           </header>
           {[
             { index: "01", title: "Tool output · RTK", detail: "git, grep, trees, and logs → 60–90% fewer input tokens", enabled: rtkEnabled, toggle: handleRtkEnabled },
-            { index: "02", title: "Context · Headroom", detail: "Prompt compression through the verified Headroom service", enabled: headroomEnabled, toggle: handleHeadroomEnabled, disabled: !headroomRunning },
+            { index: "02", title: "Context · Headroom", detail: "Prompt compression through the verified Headroom service", enabled: headroomEnabled, href: "#headroom-install", disabled: !headroomRunning },
             { index: "03", title: "LLM output · Caveman", detail: "Terse response posture → fewer output tokens", enabled: cavemanEnabled, toggle: handleCavemanEnabled },
             { index: "04", title: "Coding posture · Ponytail", detail: "YAGNI, reuse, and deletion-over-addition guidance", enabled: ponytailEnabled, toggle: handlePonytailEnabled },
           ].map((stage) => (
-            <div key={stage.index} className="grid gap-3 border-b border-border p-4 last:border-b-0 sm:grid-cols-[2rem_minmax(0,1fr)_auto] sm:items-center">
+            <div id={stage.index === "01" ? "rtk-stage" : undefined} key={stage.index} className="scroll-mt-24 grid gap-3 border-b border-border p-4 last:border-b-0 sm:grid-cols-[2rem_minmax(0,1fr)_auto] sm:items-center">
               <span className="font-mono text-xs tabular-nums text-primary">{stage.index}</span>
               <div><h3 className="font-semibold">{stage.title}</h3><p className="mt-1 text-sm text-text-muted">{stage.detail}</p><p className={`mt-1 text-xs ${stage.enabled ? "text-success" : "text-text-muted"}`}>{stage.enabled ? "Enabled" : stage.disabled ? "Waiting for verification" : "Disabled"}</p></div>
-              <Toggle checked={stage.enabled} disabled={stage.disabled} onChange={() => stage.toggle(!stage.enabled)} />
+              {stage.href ? <a href={stage.href} className="inline-flex min-h-11 items-center px-3 text-sm text-primary underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">Set up Headroom</a>
+                : <Toggle checked={stage.enabled} disabled={stage.disabled} onChange={() => stage.toggle(!stage.enabled)} />}
             </div>
           ))}
         </section>
@@ -557,7 +568,7 @@ export default function TokenSaverClient() {
         </header>
         <ol className="relative divide-y divide-border">
           {headroomSteps.map((step, index) => (
-            <li key={step.id} className="grid gap-3 p-4 sm:grid-cols-[2.5rem_minmax(0,1fr)]">
+            <li id={`headroom-${step.id}`} key={step.id} className="scroll-mt-24 grid gap-3 p-4 sm:grid-cols-[2.5rem_minmax(0,1fr)]">
               <span className="grid size-9 place-items-center border-2 border-primary font-mono text-sm text-primary">{index + 1}</span>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{step.label}</h3><span className="text-xs font-semibold text-text-muted">{step.state}</span></div>

@@ -46,15 +46,25 @@ export function getConnectionQuotaRemaining(connection, quotaData) {
   return Number.POSITIVE_INFINITY;
 }
 
-// Stable group-by-provider: first-seen provider order, original order within group.
-function groupByProviderStable(connections) {
-  const seen = new Map();
-  for (const conn of connections) {
-    const key = conn.provider || "";
-    if (!seen.has(key)) seen.set(key, []);
-    seen.get(key).push(conn);
-  }
-  return Array.from(seen.values()).flat();
+// A-Z label order: the default account order across pages (mirrors the
+// server's name sort, which makes client + server order identical).
+export function compareConnectionsByName(a, b) {
+  return (getConnectionLabel(a) || "").localeCompare(getConnectionLabel(b) || "")
+    || (a.provider || "").localeCompare(b.provider || "")
+    || String(a.id || "").localeCompare(String(b.id || ""));
+}
+
+// Null-reset rule for the expiring comparator: rows with no valid reset
+// rank behind every valid reset; within null-reset rows the ones that
+// still show quota come first (including `total:0`, which reads "no
+// quota", not depleted), with null-reset zero/depleted rows last.
+function nullResetRankFor(connection, quotaData) {
+  const quotas = quotaData[connection.id]?.quotas;
+  if (!Array.isArray(quotas) || quotas.length === 0) return 1;
+  // `total:0` reads "no quota", not depleted — ranks with quota-showing rows.
+  if (quotas[0]?.total === 0) return 0;
+  const remaining = getConnectionQuotaRemaining(connection, quotaData);
+  return remaining > 0 ? 0 : 1;
 }
 
 export function sortVisibleConnections(
@@ -79,7 +89,7 @@ export function sortVisibleConnections(
     });
   }
 
-  if (!expiringFirst) return groupByProviderStable(connections);
+  if (!expiringFirst) return [...connections].sort(compareConnectionsByName);
 
   const getEarliestResetTime = (connection) => {
     const resetTimes = (quotaData[connection.id]?.quotas || [])
@@ -88,14 +98,23 @@ export function sortVisibleConnections(
           ? new Date(quota.resetAt).getTime()
           : Number.POSITIVE_INFINITY,
       )
-      .filter((time) => Number.isFinite(time));
+      .filter((time) => Number.isFinite(time) && time !== Number.POSITIVE_INFINITY);
     return resetTimes.length > 0
       ? Math.min(...resetTimes)
       : Number.POSITIVE_INFINITY;
   };
 
   return [...connections].sort((a, b) => {
-    const expiryDiff = getEarliestResetTime(a) - getEarliestResetTime(b);
+    const ra = getEarliestResetTime(a);
+    const rb = getEarliestResetTime(b);
+    const aNull = ra === Number.POSITIVE_INFINITY;
+    const bNull = rb === Number.POSITIVE_INFINITY;
+    if (aNull && bNull) {
+      const rankDiff = nullResetRankFor(a, quotaData) - nullResetRankFor(b, quotaData);
+      if (rankDiff !== 0) return rankDiff;
+      return compareConnectionsByName(a, b);
+    }
+    const expiryDiff = ra - rb;
     if (expiryDiff !== 0) return expiryDiff;
     return (
       (a.provider || "").localeCompare(b.provider || "") ||
@@ -156,7 +175,7 @@ export function getConnectionsEmptyMessage(totals, providerFilter, accountFilter
 }
 
 export function sortRequestFromExpiringFirst(expiringFirst) {
-  return expiringFirst ? "expiring" : "priority";
+  return expiringFirst ? "expiring" : "name";
 }
 
 export function getPageSizeLabel(pageSize, isCustomPageSize) {

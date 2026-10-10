@@ -73,7 +73,7 @@ describe("ProviderLimits server sort", () => {
     expect(url.searchParams.get("sort")).toBe("expiring");
   });
 
-  it("requests priority order when expiring-first is off", async () => {
+  it("requests A-Z name order when expiring-first is off", async () => {
     const fetchMock = successfulFetch();
 
     await fetchConnectionsPage(
@@ -82,7 +82,7 @@ describe("ProviderLimits server sort", () => {
     );
 
     const url = new URL(fetchMock.mock.calls[0][0], "http://localhost");
-    expect(url.searchParams.get("sort")).toBe("priority");
+    expect(url.searchParams.get("sort")).toBe("name");
   });
 
   it("resets pagination to page one when toggled", () => {

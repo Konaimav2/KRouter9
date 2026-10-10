@@ -123,11 +123,12 @@ describe("GET /api/providers/client global quota sort (F12-API)", () => {
     expect(body.pagination.total).toBe(5);
   });
 
-  it("default (no sort) behavior is unchanged and fetches no quota", async () => {
+  it("default (no sort) is A-Z by label and fetches no quota", async () => {
     const { GET } = await import("../../src/app/api/providers/client/route.js");
     const res = await GET(get("/api/providers/client?page=1&pageSize=2"));
     const body = await res.json();
-    expect(body.connections.map((c) => c.id)).toEqual(["a1", "a2"]);
+    // A-Z by label: "Claude One"(a2), "Claude Two"(a4), "Codex One"(a1), ...
+    expect(body.connections.map((c) => c.id)).toEqual(["a2", "a4"]);
     expect(body.pagination).toEqual({ page: 1, pageSize: 2, total: 5, totalPages: 3 });
     expect(getUsageForProvider).not.toHaveBeenCalled();
   });

@@ -7,8 +7,11 @@
 //   remaining      <-> getConnectionQuotaRemaining (first quota row .remaining)
 //   label          <-> getConnectionLabel
 // Unknown/missing quota (fetch failure, { message } payload, no quotas,
-// invalid resetAt) sorts last for expiring; for remaining sorts the UI's
-// plain-subtraction semantics apply (see compareRemainingQuota).
+// invalid resetAt) has no valid reset: it ranks behind every valid reset.
+// Within null-reset rows the null-reset rule applies (see nullResetRank):
+// rows that still show quota first, then null-reset zero/depleted last.
+// For remaining sorts the UI's plain-subtraction semantics apply
+// (see compareRemainingQuota).
 //
 // Per-account fetches are fail-open (never reject) and TTL-cached (45s,
 // mirrors settings quotaCacheTtlMs) with in-flight dedup so paginating a
@@ -18,6 +21,7 @@ import { getUsageForProvider } from "open-sse/services/usage.js";
 import { resolveConnectionProxyConfig } from "@/lib/network/connectionProxy";
 
 export const QUOTA_SORT_EXPIRING = "expiring";
+export const QUOTA_SORT_NAME = "name";
 export const QUOTA_SORT_REMAINING_ASC = "remaining-asc";
 export const QUOTA_SORT_REMAINING_DESC = "remaining-desc";
 
@@ -36,6 +40,10 @@ export function isQuotaSort(sort) {
   return sort === QUOTA_SORT_EXPIRING
     || sort === QUOTA_SORT_REMAINING_ASC
     || sort === QUOTA_SORT_REMAINING_DESC;
+}
+
+export function isNameSort(sort) {
+  return sort === QUOTA_SORT_NAME;
 }
 
 function toMs(value) {
@@ -85,10 +93,37 @@ function tieBreak(a, b) {
     || String(a.id || "").localeCompare(String(b.id || ""));
 }
 
+function compareByName(a, b) {
+  return connectionLabel(a).localeCompare(connectionLabel(b))
+    || (a.provider || "").localeCompare(b.provider || "")
+    || String(a.id || "").localeCompare(String(b.id || ""));
+}
+
+// Null-reset rule for the expiring sort: rows with no valid reset rank
+// behind every valid reset; within null-reset rows the ones that still
+// show quota come first (including `total:0`, which reads "no quota",
+// not depleted), with null-reset zero/depleted rows last.
+export function nullResetRank(usage) {
+  const quotas = usage?.quotas && typeof usage.quotas === "object"
+    ? Object.values(usage.quotas)
+    : [];
+  // Unknown (fetch failure, no rows): still sorts last, as before.
+  if (quotas.length === 0) return 1;
+  const first = quotas[0];
+  // `total:0` reads "no quota", not depleted — ranks with quota-showing rows.
+  if (first && typeof first === "object" && first.total === 0) return 0;
+  const remaining = remainingOf(usage);
+  return remaining > 0 ? 0 : 1;
+}
+
 function compareByExpiring(a, b) {
   const ra = earliestResetMs(a.snapshot);
   const rb = earliestResetMs(b.snapshot);
-  if (ra === null && rb === null) return tieBreak(a.connection, b.connection);
+  if (ra === null && rb === null) {
+    const rankDiff = nullResetRank(a.snapshot) - nullResetRank(b.snapshot);
+    if (rankDiff !== 0) return rankDiff;
+    return tieBreak(a.connection, b.connection);
+  }
   if (ra === null) return 1;
   if (rb === null) return -1;
   if (ra !== rb) return ra - rb;
@@ -153,7 +188,14 @@ function getCachedSnapshot(connection) {
 }
 
 // Sort the COMPLETE filtered set by quota; caller paginates AFTER this.
+// `name` is a non-quota sort (no snapshot fetch); the route handles it,
+// but sortConnectionsByQuota accepts it so callers can route uniformly.
+export function sortConnectionsAlpha(connections) {
+  return [...(connections || [])].sort(compareByName);
+}
+
 export async function sortConnectionsByQuota(connections, sort) {
+  if (sort === QUOTA_SORT_NAME) return sortConnectionsAlpha(connections);
   const rows = await Promise.all(
     (connections || []).map(async (connection) => ({
       connection,
