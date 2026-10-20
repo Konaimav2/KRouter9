@@ -8,6 +8,85 @@ let fs = null;
 let path = null;
 let LOGS_DIR = null;
 
+let lastPruneAt = null;
+let pruneInProgress = false;
+
+function positiveLimit(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : fallback;
+}
+
+export function _resetPruneThrottle() {
+  lastPruneAt = null;
+}
+
+// All traversal/deletion is asynchronous and serialized. Only directory entries
+// are sessions: legacy daily .log files and symlinks are left untouched.
+export async function pruneLogSessions(opts = {}) {
+  let started = false;
+  try {
+    if (!isNode || pruneInProgress) return;
+    const now = Date.now();
+    const intervalMs = positiveLimit(opts.intervalMs ?? process.env.REQUEST_LOG_PRUNE_INTERVAL_MS, 300000);
+    if (lastPruneAt !== null && now - lastPruneAt < intervalMs) return;
+    lastPruneAt = now;
+    pruneInProgress = true;
+    started = true;
+
+    const { promises: files } = await import("fs");
+    const paths = await import("path");
+    const dir = opts.dir ?? (process.env.REQUEST_LOG_DIR || paths.join(process.cwd(), "logs"));
+    const retentionHours = positiveLimit(opts.retentionHours ?? process.env.REQUEST_LOG_RETENTION_HOURS, 24);
+    const maxSessions = Math.floor(positiveLimit(opts.maxSessions ?? process.env.REQUEST_LOG_MAX_SESSIONS, 2000));
+    const maxBytes = positiveLimit(opts.maxBytes ?? process.env.REQUEST_LOG_MAX_BYTES, 2147483648);
+    const sessions = [];
+    for (const entry of await files.readdir(dir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const sessionPath = paths.join(dir, entry.name);
+      try {
+        const stat = await files.lstat(sessionPath);
+        if (stat.isDirectory()) sessions.push({ sessionPath, mtimeMs: stat.mtimeMs });
+      } catch { /* A concurrent prune or operator may have removed it. */ }
+    }
+    sessions.sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+    async function directoryBytes(directory) {
+      let bytes = 0;
+      for (const entry of await files.readdir(directory, { withFileTypes: true })) {
+        const target = paths.join(directory, entry.name);
+        if (entry.isDirectory()) bytes += await directoryBytes(target);
+        else if (entry.isFile()) bytes += (await files.lstat(target)).size;
+      }
+      return bytes;
+    }
+
+    const retained = [];
+    let totalBytes = 0;
+    for (const [index, session] of sessions.entries()) {
+      try {
+        if (session.mtimeMs < now - retentionHours * 3600000 || index >= maxSessions) {
+          await files.rm(session.sessionPath, { recursive: true, force: true });
+        } else {
+          session.bytes = await directoryBytes(session.sessionPath);
+          totalBytes += session.bytes;
+          retained.push(session);
+        }
+      } catch { /* One unreadable session must not stop other cleanup. */ }
+    }
+    // Newest first above; evict from the tail until the retained bytes fit.
+    for (let i = retained.length - 1; i >= 0 && totalBytes > maxBytes; i--) {
+      try {
+        await files.rm(retained[i].sessionPath, { recursive: true, force: true });
+        totalBytes -= retained[i].bytes;
+      } catch { /* Fail open, including a read-only/full filesystem. */ }
+    }
+  } catch {
+    // Debug logging maintenance must never reject into the request path.
+  } finally {
+    if (started) pruneInProgress = false;
+  }
+}
+
 // P3: queue append writes so streaming chunks don't block the event loop with
 // synchronous fs calls mid-stream. Order per file is preserved by chaining.
 // Backpressure: cap pending bytes/entries per file so a slow disk cannot grow
@@ -40,7 +119,7 @@ async function ensureNodeModules() {
   try {
     fs = await import("fs");
     path = await import("path");
-    LOGS_DIR = path.join(typeof process !== "undefined" && process.cwd ? process.cwd() : ".", "logs");
+    LOGS_DIR = process.env.REQUEST_LOG_DIR || path.join(typeof process !== "undefined" && process.cwd ? process.cwd() : ".", "logs");
   } catch {
     // Running in non-Node environment (Worker, Browser, etc.)
   }
@@ -163,6 +242,8 @@ export async function createRequestLogger(sourceFormat, targetFormat, model) {
   if (!LOGGING_ENABLED) {
     return createNoOpLogger();
   }
+
+  void pruneLogSessions();
   
   // Wait for session to be created before returning logger
   const sessionPath = await createLogSession(sourceFormat, targetFormat, model);

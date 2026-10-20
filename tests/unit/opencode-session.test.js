@@ -72,6 +72,7 @@ describe("OpenCode Free Session ID Format", () => {
       const translated = translateSessionId(raw, "claude");
       expect(translated).toMatch(OPENCODE_SESSION_RE);
       expect(translated).toHaveLength(30);
+      expect((~BigInt(`0x${translated.slice(4, 16)}`)) & 0xfffn).toBe(1n);
     }
   });
 
@@ -150,6 +151,11 @@ describe("OpenCode Free Executor Session Resolution", () => {
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock.mock.calls[0][1].headers["x-opencode-session"]).toBe(result.headers["x-opencode-session"]);
     expect(fetchMock.mock.calls[0][1].headers["Authorization"]).toBe("Bearer public");
+    expect(fetchMock.mock.calls[0][0]).toBe("https://opencode.ai/inference/v1/responses");
+    for (const name of ["x-opencode-session-id", "x-session-affinity", "x-session-id"]) {
+      expect(fetchMock.mock.calls[0][1].headers[name]).toBe(result.headers["x-opencode-session"]);
+    }
+    expect(result.headers).not.toHaveProperty("x-opencode-request");
     expect(credentials).not.toHaveProperty("_opencodeSession");
   });
 
@@ -168,35 +174,53 @@ describe("OpenCode Free Executor Session Resolution", () => {
 });
 
 describe("OpenCode Free User-Agent Validation", () => {
-  it("defaults User-Agent to opencode/1.18.31 for non-opencode downstream clients", () => {
+  it("defaults User-Agent to opencode/latest/2.0.26/cli for non-opencode downstream clients", () => {
     const executor = getExecutor("opencode");
     const headersNoUa = executor.buildHeaders({});
-    expect(headersNoUa["User-Agent"]).toBe("opencode/1.18.31");
+    expect(headersNoUa["User-Agent"]).toBe("opencode/latest/2.0.26/cli");
 
     const headersClaude = executor.buildHeaders({ rawHeaders: { "user-agent": "Claude-Code/1.0" } });
-    expect(headersClaude["User-Agent"]).toBe("opencode/1.18.31");
+    expect(headersClaude["User-Agent"]).toBe("opencode/latest/2.0.26/cli");
   });
 
-  it("replaces bare opencode with versioned opencode/1.18.31 to prevent 403 FreeTierError", () => {
+  it("replaces bare opencode with the v2 identity to prevent 403 FreeTierError", () => {
     const executor = getExecutor("opencode");
     const headers = executor.buildHeaders({ rawHeaders: { "user-agent": "opencode" } });
-    expect(headers["User-Agent"]).toBe("opencode/1.18.31");
+    expect(headers["User-Agent"]).toBe("opencode/latest/2.0.26/cli");
   });
 
-  it("upgrades outdated opencode versions (< 1.17) to prevent 426 Upgrade Required", () => {
+  it("upgrades outdated opencode versions to the v2 identity", () => {
     const executor = getExecutor("opencode");
     const headers = executor.buildHeaders({ rawHeaders: { "user-agent": "opencode/1.15.0" } });
-    expect(headers["User-Agent"]).toBe("opencode/1.18.31");
+    expect(headers["User-Agent"]).toBe("opencode/latest/2.0.26/cli");
   });
 
-  it("preserves valid opencode versions (>= 1.17)", () => {
+  it("replaces v1 identities, including previously valid versions", () => {
     const executor = getExecutor("opencode");
     const headers118 = executor.buildHeaders({
       rawHeaders: { "user-agent": "opencode/1.18.31 ai-sdk/provider-utils/4.0.40 runtime/bun/1.3.14" },
     });
-    expect(headers118["User-Agent"]).toBe("opencode/1.18.31 ai-sdk/provider-utils/4.0.40 runtime/bun/1.3.14");
+    expect(headers118["User-Agent"]).toBe("opencode/latest/2.0.26/cli");
 
     const headersFuture = executor.buildHeaders({ rawHeaders: { "user-agent": "opencode/1.19.0" } });
-    expect(headersFuture["User-Agent"]).toBe("opencode/1.19.0");
+    expect(headersFuture["User-Agent"]).toBe("opencode/latest/2.0.26/cli");
+  });
+
+  it("preserves valid v2 identities and forwards client and project case-insensitively", () => {
+    const headers = getExecutor("opencode").buildHeaders({ rawHeaders: {
+      "User-Agent": "opencode/latest/2.1.0/desktop", "X-OpenCode-Client": "desktop", "X-OpenCode-Project": "test-project",
+    } });
+    expect(headers["User-Agent"]).toBe("opencode/latest/2.1.0/desktop");
+    expect(headers["x-opencode-client"]).toBe("desktop");
+    expect(headers["x-opencode-project"]).toBe("test-project");
+  });
+
+  it("defaults to cli and never forwards a v1 request header", () => {
+    const headers = getExecutor("opencode").buildHeaders({ rawHeaders: {
+      "X-OpenCode-Request": generateRequestId(),
+    } }, false);
+    expect(headers["x-opencode-client"]).toBe("cli");
+    expect(headers).not.toHaveProperty("x-opencode-request");
+    expect(headers.Accept).toBe("*/*");
   });
 });

@@ -23,6 +23,8 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
     organization: "",
   });
   const [cloudflareData, setCloudflareData] = useState({ accountId: "" });
+  const [awsData, setAwsData] = useState({ profile: "", region: "", accessKeyId: "", sessionToken: "" });
+  const [clearAwsSessionToken, setClearAwsSessionToken] = useState(false);
   const [region, setRegion] = useState("");
   const [customHeadersText, setCustomHeadersText] = useState("");
   const [uaPreset, setUaPreset] = useState("default");
@@ -55,6 +57,10 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
       }
       // Load custom headers / UA overrides
       const psd = connection.providerSpecificData || {};
+      if (AI_PROVIDERS?.[connection.provider]?.credentialForm === "aws") {
+        setAwsData({ profile: psd.profile || "", region: psd.region || "", accessKeyId: psd.accessKeyId || "", sessionToken: "" });
+        setClearAwsSessionToken(false);
+      }
       setCustomHeadersText(psd.customHeaders ? JSON.stringify(psd.customHeaders, null, 2) : "");
       const ua = presetForUserAgent(psd.userAgent || "");
       setUaPreset(ua.preset);
@@ -69,11 +75,12 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
       setTestResult(null);
       setValidationResult(null);
     }
-  }, [connection]);
+  }, [connection, isOpen]);
 
   const isOAuth = connection?.authType === "oauth";
   const isAzure = connection?.provider === "azure";
   const isCloudflareAi = connection?.provider === "cloudflare-ai";
+  const usesAwsCredentialForm = AI_PROVIDERS?.[connection?.provider]?.credentialForm === "aws";
   const isCompatible = connection
     ? (isOpenAICompatibleProvider(connection.provider) || isAnthropicCompatibleProvider(connection.provider))
     : false;
@@ -84,6 +91,14 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
     if (providerRegions && region) return { ...((connection?.providerSpecificData) || {}), region };
     return undefined;
   };
+
+  // Blank keeps the saved session token; null explicitly removes it.
+  const buildAwsSpecificData = () => ({
+    profile: awsData.profile.trim(),
+    region: awsData.region.trim(),
+    accessKeyId: awsData.accessKeyId.trim(),
+    sessionToken: clearAwsSessionToken ? null : awsData.sessionToken.trim(),
+  });
 
   const handleTest = async () => {
     if (!connection?.provider) return;
@@ -101,7 +116,7 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
   };
 
   const handleValidate = async () => {
-    if (!connection?.provider || !formData.apiKey) return;
+    if (!connection?.provider || (!formData.apiKey && !(usesAwsCredentialForm && awsData.profile.trim()))) return;
     setValidating(true);
     setValidationResult(null);
     try {
@@ -113,6 +128,7 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
           apiKey: formData.apiKey,
           ...(isAzure ? { providerSpecificData: azureData } : {}),
           ...(isCloudflareAi ? { providerSpecificData: cloudflareData } : {}),
+          ...(usesAwsCredentialForm ? { providerSpecificData: buildAwsSpecificData() } : {}),
           ...(providerRegions ? { providerSpecificData: buildRegionSpecificData() } : {}),
         }),
       });
@@ -148,6 +164,7 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
                 apiKey: formData.apiKey,
                 ...(isAzure ? { providerSpecificData: azureData } : {}),
                 ...(isCloudflareAi ? { providerSpecificData: cloudflareData } : {}),
+                ...(usesAwsCredentialForm ? { providerSpecificData: buildAwsSpecificData() } : {}),
                 ...(providerRegions ? { providerSpecificData: buildRegionSpecificData() } : {}),
               }),
             });
@@ -178,6 +195,9 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
       }
       if (isCloudflareAi) {
         updates.providerSpecificData = { accountId: cloudflareData.accountId };
+      }
+      if (usesAwsCredentialForm) {
+        updates.providerSpecificData = buildAwsSpecificData();
       }
       // Persist updated region for region-aware providers
       if (providerRegions && region) {
@@ -244,7 +264,7 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
                 className="flex-1"
               />
               <div className="pt-6">
-                <Button onClick={handleValidate} disabled={!formData.apiKey || validating || saving} variant="secondary">
+                <Button onClick={handleValidate} disabled={(!formData.apiKey && !(usesAwsCredentialForm && awsData.profile.trim())) || validating || saving} variant="secondary">
                   {validating ? "Checking..." : "Check"}
                 </Button>
               </div>
@@ -289,6 +309,53 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
                 placeholder="Organization ID"
                 hint="Required for billing"
               />
+            </div>
+          </div>
+        )}
+
+        {usesAwsCredentialForm && (
+          <div className="bg-sidebar/50 p-4 rounded-lg border border-accent/20">
+            <h3 className="font-semibold mb-3 text-sm">AWS Bedrock Credentials</h3>
+            <div className="flex flex-col gap-3">
+              <Input
+                label="AWS Profile (SSO — recommended)"
+                value={awsData.profile}
+                onChange={(e) => setAwsData({ ...awsData, profile: e.target.value })}
+                placeholder="my-sso-profile"
+                hint="Clear this to use static keys instead; a profile takes precedence. The profile must exist on the gateway host."
+              />
+              <Input
+                label="Region"
+                value={awsData.region}
+                onChange={(e) => setAwsData({ ...awsData, region: e.target.value })}
+                placeholder="us-east-1"
+              />
+              <Input
+                label="Access Key ID (only for static keys)"
+                value={awsData.accessKeyId}
+                onChange={(e) => setAwsData({ ...awsData, accessKeyId: e.target.value })}
+                placeholder="AKIA..."
+              />
+              <Input
+                label="Session Token (only for temporary ASIA… keys)"
+                type="password"
+                value={awsData.sessionToken}
+                onChange={(e) => setAwsData({ ...awsData, sessionToken: e.target.value })}
+                placeholder="FwoGZXIvYXdz..."
+                hint="Leave blank to keep the saved token. Enter a new token to replace it."
+                disabled={clearAwsSessionToken}
+              />
+              <label className="flex items-center gap-2 text-sm text-text-muted">
+                <input
+                  type="checkbox"
+                  checked={clearAwsSessionToken}
+                  onChange={(e) => {
+                    setClearAwsSessionToken(e.target.checked);
+                    if (e.target.checked) setAwsData({ ...awsData, sessionToken: "" });
+                  }}
+                />
+                Remove saved session token
+              </label>
             </div>
           </div>
         )}
@@ -371,4 +438,3 @@ EditConnectionModal.propTypes = {
   onSave: PropTypes.func.isRequired,
   onClose: PropTypes.func.isRequired,
 };
-

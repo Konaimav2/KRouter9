@@ -116,10 +116,40 @@ function applyActiveStrikeBlocks(connectionId, quotas) {
   return quotas;
 }
 
+// Shared quota families exclude image models, which have separate pools.
+export function getAntigravityModelFamily(model) {
+  if (typeof model !== "string") return null;
+  const clean = model.slice(model.indexOf("/") + 1).toLowerCase();
+  if (clean.startsWith("claude-") || clean.startsWith("gpt-") || clean === "claude") return "claude_gpt";
+  if ((clean.startsWith("gemini-") && !clean.includes("image")) || clean === "gemini") return "gemini";
+  return null;
+}
+
+// Per-model, tier-alias and shared session/weekly limits all constrain a request.
+export function getAntigravityModelQuota(quotas, model) {
+  if (!quotas || typeof quotas !== "object" || typeof model !== "string") return null;
+  const clean = model.slice(model.indexOf("/") + 1).replace(/\([^()]+\)\s*$/, "").trim();
+  const candidates = [quotas[clean]];
+  if (clean === "claude-sonnet-5-5" || clean === "claude-opus-5-5") candidates.push(quotas[`${clean}-high`]);
+  if (/^gemini-3\.[678]-flash$/.test(clean)) candidates.push(quotas[`${clean}-medium`]);
+  const family = getAntigravityModelFamily(clean);
+  if (family) candidates.push(quotas[`${family}_session`], quotas[`${family}_weekly`]);
+  const now = Date.now();
+  const valid = candidates.filter(c => c && Number.isFinite(c.remainingPercentage)
+    && !(c.remainingPercentage <= 0 && c.resetAt && Date.parse(c.resetAt) <= now));
+  const exhausted = valid.filter(c => c.remainingPercentage <= 0 && (!c.resetAt || Date.parse(c.resetAt) > now));
+  if (exhausted.length) {
+    exhausted.sort((a, b) => (Date.parse(b.resetAt) || 0) - (Date.parse(a.resetAt) || 0));
+    const primary = exhausted[0];
+    return { used: primary.used ?? 1000, total: primary.total ?? 1000, remainingPercentage: 0, resetAt: primary.resetAt, displayName: primary.displayName || clean };
+  }
+  valid.sort((a, b) => a.remainingPercentage - b.remainingPercentage);
+  return valid[0] || null;
+}
+
 /**
- * Clear strike state for a connection|model after a successful request, so
- * "consecutive" strikes means consecutive. Only removes a synthesized cache
- * entry (resetAt == our block deadline); a real upstream 0% reading stays.
+ * Clear strike state after success. Only remove our synthesized model block;
+ * upstream family/session readings remain authoritative and must not be cleared.
  */
 export function clearAntigravityStrikes(connectionId, model) {
   const key = `${connectionId}|${model}`;
@@ -214,7 +244,7 @@ export async function handleAntigravityQuotaError(connectionId, status, model, a
 
   // Throttle applies to error paths too: one quota request per account/30s.
   // The first 409/429 populates cache; concurrent or repeated errors reuse it.
-  const quota = (await refreshAntigravityQuota(connectionId, accessToken, providerSpecificData))?.[model];
+  const quota = getAntigravityModelQuota(await refreshAntigravityQuota(connectionId, accessToken, providerSpecificData), model);
 
   // Strike breaker: count every 429 whose quota reading is either optimistic
   // (remaining > 0) or unavailable (quota API 403/error). 3 within the window
@@ -259,6 +289,10 @@ export async function handleAntigravityQuotaError(connectionId, status, model, a
   const resetMs = new Date(quota.resetAt).getTime();
   if (resetMs <= Date.now()) return null;
 
+  const cached = quotaCache.get(connectionId) || {};
+  cached[model] = { remainingPercentage: 0, resetAt: quota.resetAt };
+  quotaCache.set(connectionId, cached);
+  sweepQuotaCache(Date.now());
   log.warn("AG_QUOTA", `${connectionId.slice(0, 8)} | UPSTREAM_${status} ${model} — quota exhausted; CACHE_BLOCK until ${quota.resetAt}`);
   return resetMs;
 }

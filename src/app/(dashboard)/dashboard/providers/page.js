@@ -169,34 +169,30 @@ export default function ProvidersPage() {
     return map;
   }, [connections]);
 
+  const getEffectiveStatus = (conn) => {
+    const isCooldown = Object.entries(conn).some(
+      ([k, v]) =>
+        k.startsWith("modelLock_") && v && new Date(v).getTime() > Date.now(),
+    );
+    return conn.testStatus === "unavailable" && !isCooldown
+      ? "active"
+      : conn.testStatus;
+  };
+  const isErrorStatus = (conn) =>
+    ["error", "expired", "unavailable", "refresh-invalid"].includes(getEffectiveStatus(conn));
+
   const getProviderStats = (providerId, authType) => {
     const authTypes = Array.isArray(authType) ? authType : [authType];
     const providerConnections = (connectionsByProvider.get(providerId) || []).filter(
       (c) => authTypes.includes(c.authType),
     );
 
-    const getEffectiveStatus = (conn) => {
-      const isCooldown = Object.entries(conn).some(
-        ([k, v]) =>
-          k.startsWith("modelLock_") && v && new Date(v).getTime() > Date.now(),
-      );
-      return conn.testStatus === "unavailable" && !isCooldown
-        ? "active"
-        : conn.testStatus;
-    };
-
     const connected = providerConnections.filter((c) => {
       const status = getEffectiveStatus(c);
       return status === "active" || status === "success";
     }).length;
 
-    const errorConns = providerConnections.filter((c) => {
-      const status = getEffectiveStatus(c);
-      return (
-        status === "error" || status === "expired" || status === "unavailable" ||
-        status === "refresh-invalid"
-      );
-    });
+    const errorConns = providerConnections.filter(isErrorStatus);
 
     const error = errorConns.length;
     const total = providerConnections.length;
@@ -216,13 +212,17 @@ export default function ProvidersPage() {
       ? getRelativeTime(latestError.lastErrorAt)
       : null;
 
-    return { connected, error, total, errorCode, errorClass, errorClasses, errorTime, allDisabled };
+    return { connected, error, total, errorCode, errorClass, errorClasses, errorTime, allDisabled, providerConnections };
   };
 
-  const matchStatus = (stats, isNoAuth) =>
-    matchesStatusFilter(statusFilter, stats, isNoAuth) &&
-    (errorClassFilter === "all" ||
-      (stats?.errorClasses || []).includes(errorClassFilter));
+  // Collect the same provider/auth-type lanes that the grid considers, before
+  // the active tile filter narrows them. Error counts stay selectable.
+  const eligibleConnections = new Set();
+  const matchStatus = (stats, isNoAuth) => {
+    for (const connection of stats.providerConnections) eligibleConnections.add(connection);
+    return matchesStatusFilter(statusFilter, stats, isNoAuth) &&
+      (errorClassFilter === "all" || stats.errorClasses.includes(errorClassFilter));
+  };
 
   // Toggle all connections for a provider on/off. authType may be a single
   // string or an array (kiro counts oauth + api_key/apikey together).
@@ -389,7 +389,7 @@ export default function ProvidersPage() {
       if (ca !== cb) return ca - cb;
       return (a.name || "").localeCompare(b.name || "");
     });
-  const isApikeySearching = !!searchQuery.trim() || statusFilter !== "all";
+  const isApikeySearching = !!searchQuery.trim() || statusFilter !== "all" || errorClassFilter !== "all";
   const visibleApikeyEntries =
     isApikeySearching || showAllApikey
       ? apikeyEntries
@@ -428,6 +428,7 @@ export default function ProvidersPage() {
   const healthCounts = connections.reduce((acc, connection) => {
     if (connection.isActive === false) acc.disabled += 1;
     else if (["active", "success"].includes(connection.testStatus)) acc.connected += 1;
+    if (!eligibleConnections.has(connection) || !isErrorStatus(connection)) return acc;
     const errorClass = normalizeErrorClass(connection);
     if (errorClass === "auth-invalid") acc.authInvalid += 1;
     if (errorClass === "refresh-invalid") acc.refreshInvalid += 1;

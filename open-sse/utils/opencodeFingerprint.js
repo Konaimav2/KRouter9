@@ -1,25 +1,55 @@
 /**
- * Helpers for the OpenCode Zen free-tier client fingerprint.
+ * Helpers for the OpenCode free-tier client fingerprint.
  *
- * Live upstream probes show that free-tier requests must include the lowercase
- * file-search quartet (bash/glob/grep/read). Agent clients such as Claude Code
- * may declare the same tools with different casing, so those case variants must
- * be renamed instead of duplicated. The response side restores the caller's
- * original spelling so downstream clients still recognise their own tool calls.
+ * The v2 free lane requires exact read/shell definitions. Conflicting caller
+ * names travel under aliases, restored on responses. The keyed append-only
+ * helper retains its legacy quartet and array-returning contract.
  */
 
-/** Canonical names required by the upstream free-tier gate. */
-export const OPENCODE_FINGERPRINT_TOOLS = ["bash", "glob", "grep", "read"];
+/** Names required by the v2 free-tier gate. */
+export const OPENCODE_FINGERPRINT_TOOLS = ["read", "shell"];
+const KEYED_FINGERPRINT_TOOLS = ["bash", "glob", "grep", "read"];
+
+// Verbatim OpenCode v2.0.26 definitions: upstream compares descriptions/schemas.
+const FINGERPRINT_TOOL_DEFINITIONS = {
+  read: {
+    description: "Read the contents of a file or directory. Supports text files, images, and PDFs. Images and PDFs are presented directly to the model. Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line. Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "File or directory to read" },
+        offset: { type: "integer", minimum: 0, description: "The line or directory entry to start reading from (1-based)" },
+        limit: { type: "integer", minimum: 0, description: "The maximum number of lines or directory entries to read (defaults to and capped at 2000)" },
+      },
+      required: ["path"],
+      additionalProperties: false,
+    },
+  },
+  shell: {
+    description: "Execute a shell command and return its output. Commands run on Linux using bash. Quote file paths containing spaces or special characters. Prefer dedicated tools over shell commands when possible. When output is large, the full result is saved to a file and a truncated preview is returned. Rely on automatic truncation unless filtering the output is more useful. Commands accept an optional timeout, background commands have no timeout by default. Background commands return immediately, and you will be notified when they complete.",
+    parameters: {
+      type: "object",
+      properties: {
+        command: { type: "string", description: "Shell command string to execute" },
+        workdir: { type: "string", description: "Working directory to execute the command in. Defaults to the current working directory. When possible, avoid changing directories in the command and set the working directory here instead." },
+        timeout: { type: "integer", minimum: 0, description: "Timeout in milliseconds. Set to 0 to disable the timeout. Defaults to 120000 for foreground commands. Background commands have no timeout by default." },
+        background: { type: "boolean", description: "Run the command in the background and return immediately (useful for dev servers and long-running builds). You do not need to use '&' at the end of the command when using this parameter. You will be notified when it completes. DO NOT poll for completion." },
+      },
+      required: ["command"],
+      additionalProperties: false,
+    },
+  },
+};
 
 // Request body -> names renamed for that request. transformRequest() mutates the
 // same body object that chatCore passed into the executor, so a WeakMap keeps the
 // mapping request-local without putting transport metadata on the wire.
 const renamedToolNames = new WeakMap();
 
-/** Canonical lowercase name when `name` is a quartet member; "" otherwise. */
+/** Match exact v2 names, not caller case variants. */
 export function fingerprintToolKey(name) {
-  const lower = String(name ?? "").trim().toLowerCase();
-  return OPENCODE_FINGERPRINT_TOOLS.includes(lower) ? lower : "";
+  const trimmed = String(name ?? "").trim();
+  return OPENCODE_FINGERPRINT_TOOLS.includes(trimmed) ? trimmed : "";
 }
 
 /** Read a tool name from either flat ({name}) or chat ({function:{name}}) shape. */
@@ -33,10 +63,20 @@ function toolNameOf(tool) {
   return "";
 }
 
+function chatFunctionOf(tool) {
+  const fn = tool?.function;
+  return fn && typeof fn === "object" && !Array.isArray(fn) ? fn : null;
+}
+
+function isFingerprintDefinition(tool, key) {
+  const def = chatFunctionOf(tool) || tool;
+  const want = FINGERPRINT_TOOL_DEFINITIONS[key];
+  return def.description === want.description
+    && JSON.stringify(def.parameters) === JSON.stringify(want.parameters);
+}
+
 /**
- * Canonicalise only the fingerprint quartet and remove duplicate quartet
- * variants. Non-fingerprint tools are preserved verbatim, including tools whose
- * names differ only by case; they are outside OpenCode's fingerprint contract.
+ * Alias exact-name conflicts while preserving unrelated caller tools verbatim.
  *
  * @param {Array} tools
  * @returns {{ tools: Array, map: Map<string,string> }} map: sent name -> original name
@@ -45,7 +85,8 @@ export function concealFingerprintToolNames(tools) {
   const map = new Map();
   if (!Array.isArray(tools) || tools.length === 0) return { tools, map };
 
-  const seenQuartet = new Set();
+  const taken = new Set(tools.map(toolNameOf));
+  const seen = new Set();
   const out = [];
   for (const tool of tools) {
     if (!tool || typeof tool !== "object" || Array.isArray(tool)) {
@@ -60,29 +101,27 @@ export function concealFingerprintToolNames(tools) {
       continue;
     }
 
-    // `Bash` + `bash` is rejected upstream as a duplicate. Keep exactly one
-    // declaration for each quartet member.
-    if (seenQuartet.has(key)) continue;
-    seenQuartet.add(key);
-
-    if (current !== key) {
-      map.set(key, current);
-      const fn = tool.function && typeof tool.function === "object" && !Array.isArray(tool.function)
-        ? tool.function
-        : null;
-      out.push(fn ? { ...tool, function: { ...fn, name: key } } : { ...tool, name: key });
-    } else {
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (isFingerprintDefinition(tool, key)) {
       out.push(tool);
+      continue;
     }
+    let alias = `${key}_client`;
+    for (let i = 2; taken.has(alias); i++) alias = `${key}_client${i}`;
+    taken.add(alias);
+    map.set(alias, current);
+    const fn = chatFunctionOf(tool);
+    out.push(fn ? { ...tool, function: { ...fn, name: alias } } : { ...tool, name: alias });
   }
   return { tools: out, map };
 }
 
-/** Append only genuinely missing quartet declarations. */
+/** Keyed lanes retain their existing append-only quartet and return value. */
 export function appendMissingFingerprintTools(tools, flat) {
   const list = Array.isArray(tools) ? tools : [];
-  for (const name of OPENCODE_FINGERPRINT_TOOLS) {
-    if (list.some((tool) => fingerprintToolKey(toolNameOf(tool)) === name)) continue;
+  for (const name of KEYED_FINGERPRINT_TOOLS) {
+    if (list.some((tool) => toolNameOf(tool).toLowerCase() === name)) continue;
     list.push(flat ? {
       type: "function",
       name,
@@ -100,31 +139,75 @@ export function appendMissingFingerprintTools(tools, flat) {
   return list;
 }
 
-/** Point an explicit tool_choice at a quartet member after canonicalisation. */
+function appendV2FingerprintTools(tools, flat) {
+  const appended = [];
+  for (const name of OPENCODE_FINGERPRINT_TOOLS) {
+    if (tools.some((tool) => fingerprintToolKey(toolNameOf(tool)) === name)) continue;
+    const { description, parameters } = FINGERPRINT_TOOL_DEFINITIONS[name];
+    tools.push(flat
+      ? { type: "function", name, description, parameters, strict: false }
+      : { type: "function", function: { name, description, parameters } });
+    appended.push(name);
+  }
+  return appended;
+}
+
+/** Point an explicit tool_choice at a concealed caller tool's alias. */
 export function retargetToolChoice(body, map) {
   if (!body || typeof body !== "object" || !map?.size) return;
   const choice = body.tool_choice;
   if (!choice || typeof choice !== "object" || Array.isArray(choice)) return;
+  const aliases = new Map([...map].map(([alias, original]) => [original, alias]));
 
   if (typeof choice.name === "string") {
-    const key = fingerprintToolKey(choice.name);
-    if (key && map.has(key)) body.tool_choice = { ...choice, name: key };
+    const alias = aliases.get(choice.name.trim());
+    if (alias) body.tool_choice = { ...choice, name: alias };
     return;
   }
 
   const fn = choice.function;
   if (fn && typeof fn === "object" && !Array.isArray(fn) && typeof fn.name === "string") {
-    const key = fingerprintToolKey(fn.name);
-    if (key && map.has(key)) {
-      body.tool_choice = { ...choice, function: { ...fn, name: key } };
+    const alias = aliases.get(fn.name.trim());
+    if (alias) {
+      body.tool_choice = { ...choice, function: { ...fn, name: alias } };
     }
   }
 }
 
+function aliasHistoryToolCalls(body, map) {
+  if (!map.size) return;
+  const aliases = new Map([...map].map(([alias, original]) => [original, alias]));
+  if (Array.isArray(body.input)) {
+    body.input = body.input.map((item) => item?.type === "function_call" && aliases.has(item.name)
+      ? { ...item, name: aliases.get(item.name) } : item);
+  }
+  if (Array.isArray(body.messages)) {
+    body.messages = body.messages.map((msg) => !Array.isArray(msg?.tool_calls) ? msg : {
+      ...msg,
+      tool_calls: msg.tool_calls.map((call) => aliases.has(call?.function?.name)
+        ? { ...call, function: { ...call.function, name: aliases.get(call.function.name) } } : call),
+    });
+  }
+}
+
+function noteUnavailableTools(body, flat, names) {
+  const list = names.map((name) => `\`${name}\``).join(" or ");
+  const note = names.length > 1
+    ? `Do not call the ${list} tools; they are placeholders that do nothing. Use the other tools you have been given instead.`
+    : `Do not call the ${list} tool; it is a placeholder that does nothing. Use the other tools you have been given instead.`;
+  if (flat) {
+    body.instructions = typeof body.instructions === "string" && body.instructions.trim()
+      ? `${body.instructions}\n\n${note}` : note;
+  } else if (Array.isArray(body.messages) && body.system === undefined) {
+    const first = body.messages[0];
+    body.messages = first?.role === "system" && typeof first.content === "string"
+      ? [{ ...first, content: `${first.content}\n\n${note}` }, ...body.messages.slice(1)]
+      : [{ role: "system", content: note }, ...body.messages];
+  }
+}
+
 /**
- * Full request-side pass: canonicalise quartet case variants, remove duplicate
- * quartet declarations, append missing members and preserve the legacy
- * tool_choice defaults used by the OpenCode executor.
+ * Free v2 pass: alias conflicts, append exact tools, and discourage their use.
  *
  * @param {object} body
  * @param {boolean} flat - true for Responses tools ({name}), false for chat tools
@@ -133,18 +216,15 @@ export function retargetToolChoice(body, map) {
 export function applyFingerprintTools(body, flat) {
   if (!body || typeof body !== "object") return new Map();
 
-  const hadClientTools = Array.isArray(body.tools) && body.tools.length > 0;
   const { tools, map } = concealFingerprintToolNames(body.tools);
-  body.tools = appendMissingFingerprintTools(tools, flat);
+  body.tools = Array.isArray(tools) ? tools : [];
+  const appended = appendV2FingerprintTools(body.tools, flat);
   retargetToolChoice(body, map);
+  aliasHistoryToolCalls(body, map);
+  if (appended.length) noteUnavailableTools(body, flat, appended);
 
-  // Preserve the existing executor semantics. Responses uses auto when the
-  // fingerprint helper supplies tools; chat requests with no caller tools use
-  // none so the injected decoys cannot be selected.
-  if (!body.tool_choice) {
-    if (flat) body.tool_choice = "auto";
-    else if (!hadClientTools) body.tool_choice = "none";
-  }
+  // The v2 gate rejects none; leave chat defaults to upstream.
+  if (!body.tool_choice && flat) body.tool_choice = "auto";
 
   recordRenamedToolNames(body, map);
   return map;

@@ -1,3 +1,36 @@
+# v3.2.1 (2026-10-20) — Fork merge: Bedrock, request-log retention, resilience
+
+## Ship blocker
+- Request-log retention: session logs are now bounded on disk
+  (`REQUEST_LOG_RETENTION_HOURS`, `REQUEST_LOG_MAX_SESSIONS`, `REQUEST_LOG_MAX_BYTES`)
+  with a throttled, fail-open, oldest-first pruner — a container can no longer fill its
+  writable layer with request logs
+
+## New providers
+- AWS Bedrock + AWS Bedrock (xAI): SigV4 request signing, EventStream response framing,
+  static access keys, profile/SSO via the optional `@aws-sdk/credential-providers`,
+  a dedicated AWS credential form (Add + Edit), and masked/redacted provider API responses
+- Nous Research (`nous`): OAuth and API-key auth modes
+- OpenCode Zen (`opencode-zen`); AgentRouter (`agentrouter`), B.AI (`bai`),
+  TokenHarbor (`tkhb`) registry entries
+
+## Resilience & correctness
+- Content-policy refusals no longer trigger cooldown, key rotation, or the breaker
+- `410` and persistent `403` are request-scoped; distinct `refresh-invalid` error class
+- Dated-build pricing fallback (`-MMDD` / `-YYYYMMDD`) for dated model ids
+- SSRF guard resolves DNS fail-closed and bounded
+- Combo fallback when an upstream returns HTTP 200 with zero content (JSON path)
+
+## Catalog
+- Gemini 4 Argon across Gemini/Vertex/Antigravity; Vertex API-key project + location
+- Claude Sonnet 5.5 / Opus 5.5 with Antigravity quota + routing; retire Codex `gpt-5.5`
+- OpenCode free tier targets `/inference/v1` with the v2 attested fingerprint;
+  keyed lanes unchanged
+
+## Other
+- RTK (token saver) runs in-process under `open-sse/rtk/`, so it works inside the Alpine
+  image without the Headroom proxy (Alpine has no python/pip)
+
 # v3.2.0 (2026-10-08) — Route Matrix recomposition + picker truth
 
 ## New UI

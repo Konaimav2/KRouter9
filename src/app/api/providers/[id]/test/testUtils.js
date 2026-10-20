@@ -1,10 +1,12 @@
 import { getProviderConnectionById, updateProviderConnection } from "@/lib/localDb";
 import { resolveConnectionProxyConfig } from "@/lib/network/connectionProxy";
 import { testProxyUrl } from "@/lib/network/proxyTest";
-import { isOpenAICompatibleProvider, isAnthropicCompatibleProvider } from "@/shared/constants/providers";
+import { isOpenAICompatibleProvider, isAnthropicCompatibleProvider, AI_PROVIDERS } from "@/shared/constants/providers";
+import { probeBedrockCredentials } from "open-sse/executors/bedrock.js";
 import { getDefaultModel } from "open-sse/config/providerModels.js";
 import { resolveOllamaLocalHost, PROVIDERS } from "open-sse/config/providers.js";
 import { CODEX_CLI_VERSION } from "open-sse/config/appConstants.js";
+import { NOUS_PROVIDER_ID, createNousApiKeyProbe, isNousApiKeyAccepted, getNousApiKeyValidationError } from "open-sse/services/nous.js";
 import {
   refreshProviderCredentials,
   shouldRefreshCredentials,
@@ -22,6 +24,16 @@ import { buildClineHeaders } from "@/shared/utils/clineAuth";
 
 // OAuth provider test endpoints
 const OAUTH_TEST_CONFIG = {
+  [NOUS_PROVIDER_ID]: {
+    url: createNousApiKeyProbe("").url,
+    method: "POST",
+    authHeader: "Authorization",
+    authPrefix: "Bearer ",
+    extraHeaders: { "Content-Type": "application/json" },
+    body: createNousApiKeyProbe("").options.body,
+    refreshable: true,
+    useApiKey: true,
+  },
   claude: { checkExpiry: true, refreshable: true },
   codex: {
     url: "https://chatgpt.com/backend-api/codex/responses",
@@ -239,7 +251,7 @@ async function refreshOAuthToken(connection) {
       return { accessToken: data.access_token, expiresIn: data.expires_in, refreshToken: data.refresh_token || refreshToken };
     }
 
-    if (provider === "codex" || provider === "grok-cli" || provider === "xai") {
+    if (provider === "codex" || provider === "grok-cli" || provider === "xai" || provider === NOUS_PROVIDER_ID) {
       return await refreshProviderCredentials(provider, connection, console);
     }
 
@@ -328,7 +340,7 @@ async function testOAuthConnection(connection, effectiveProxy = null) {
     return { valid: true, error: null, refreshed: false, newTokens: null };
   }
 
-  let accessToken = connection.accessToken;
+  let accessToken = config.useApiKey ? (connection.apiKey || connection.accessToken) : connection.accessToken;
   let refreshed = false;
   let newTokens = null;
 
@@ -336,7 +348,7 @@ async function testOAuthConnection(connection, effectiveProxy = null) {
   if (config.refreshable && tokenExpired && connection.refreshToken) {
     const tokens = await refreshOAuthToken(connection);
     if (tokens) {
-      accessToken = tokens.accessToken;
+      accessToken = config.useApiKey ? (tokens.apiKey || tokens.accessToken) : tokens.accessToken;
       refreshed = true;
       newTokens = tokens;
     } else {
@@ -417,10 +429,11 @@ async function testOAuthConnection(connection, effectiveProxy = null) {
     if (res.status === 401 && config.refreshable && !refreshed && connection.refreshToken) {
       const tokens = await refreshOAuthToken(connection);
       if (tokens) {
-        const retryUrl = config.buildUrl ? config.buildUrl(tokens.accessToken) : testUrl;
+        const retryToken = config.useApiKey ? (tokens.apiKey || tokens.accessToken) : tokens.accessToken;
+        const retryUrl = config.buildUrl ? config.buildUrl(retryToken) : testUrl;
         const retryHeaders = config.noAuth
           ? { ...config.extraHeaders }
-          : { [config.authHeader]: `${config.authPrefix}${tokens.accessToken}`, ...config.extraHeaders };
+          : { [config.authHeader]: `${config.authPrefix}${retryToken}`, ...config.extraHeaders };
         const retryOpts = { method: config.method, headers: retryHeaders };
         if (config.body) retryOpts.body = config.body;
         const retryRes = await fetchWithConnectionProxy(retryUrl, retryOpts, effectiveProxy);
@@ -483,6 +496,28 @@ function isRegistryOpenAIProvider(providerId) {
 }
 
 export async function testApiKeyConnection(connection, effectiveProxy = null) {
+  if (AI_PROVIDERS[connection.provider]?.credentialForm === "aws") {
+    try {
+      return await probeBedrockCredentials(
+        connection,
+        (url, options) => fetchWithConnectionProxy(url, options, effectiveProxy),
+      );
+    } catch (error) {
+      return { valid: false, error: error.message };
+    }
+  }
+  if (connection.provider === NOUS_PROVIDER_ID) {
+    try {
+      const probe = createNousApiKeyProbe(connection.apiKey);
+      const res = await fetchWithConnectionProxy(probe.url, {
+        ...probe.options, signal: AbortSignal.timeout(8000),
+      }, effectiveProxy);
+      const valid = isNousApiKeyAccepted(res.status);
+      return { valid, error: valid ? null : getNousApiKeyValidationError(res.status) };
+    } catch (err) {
+      return { valid: false, error: err.message };
+    }
+  }
   if (isOpenAICompatibleProvider(connection.provider) || isRegistryOpenAIProvider(connection.provider)) {
     // Registry providers (e.g. tokenharbor) carry baseUrl in the registry transport;
     // migrated connections may lack psd.baseUrl — fall back to it (P-SUG).
@@ -892,6 +927,7 @@ export async function testSingleConnection(id) {
   if (result.refreshed && result.newTokens) {
     if (result.newTokens.accessToken) updateData.accessToken = result.newTokens.accessToken;
     if (result.newTokens.refreshToken) updateData.refreshToken = result.newTokens.refreshToken;
+    if (result.newTokens.apiKey) updateData.apiKey = result.newTokens.apiKey;
     if (result.newTokens.idToken) updateData.idToken = result.newTokens.idToken;
     if (result.newTokens.lastRefreshAt) updateData.lastRefreshAt = result.newTokens.lastRefreshAt;
     if (result.newTokens.expiresIn) updateData.expiresIn = result.newTokens.expiresIn;

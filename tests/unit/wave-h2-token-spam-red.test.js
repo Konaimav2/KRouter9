@@ -1,14 +1,24 @@
 import { describe, it, expect } from "vitest";
 import { filterTokenRefreshSpam } from "../../src/app/(dashboard)/dashboard/console-log/tokenRefreshSpam.js";
 
-// H2 item 1 RED: live line shape from src/sse/utils/logger.js info():
-//   `[${time}] ℹ️  [${tag}] ${message}` with tag "TOKEN",
-// e.g. log?.info?.("TOKEN", "Antigravity refreshed") in
-// open-sse/executors/antigravity.js:331 (+ default.js:251 generic
-// `${provider} refreshed`, gemini-cli/github/kiro variants).
-// Existing patterns only match [TOKEN_REFRESH]/[BG_TOKEN_REFRESH].
-describe("H2 F31-REOPENED RED: live [TOKEN] refresh lines escape Hide-refresh-noise", () => {
-  it("hides live-rendered TOKEN refresh success lines", () => {
+// H2 F31: executor log.info("TOKEN", message) can reach console capture as
+// separate arguments, joined into plain `TOKEN Antigravity refreshed`.
+// The custom logger also emits bracketed tags; both shapes must be covered.
+describe("H2 F31: exact TOKEN refresh noise filtering", () => {
+  it("hides raw plain TOKEN refresh success lines", () => {
+    const lines = [
+      "TOKEN Antigravity refreshed",
+      "TOKEN antigravity refreshed",
+      "TOKEN Gemini CLI refreshed",
+      "TOKEN Copilot token refreshed",
+      "CHAT normal request line",
+    ];
+    const { visible, hiddenCount } = filterTokenRefreshSpam(lines, true);
+    expect(visible).toEqual(["CHAT normal request line"]);
+    expect(hiddenCount).toBe(4);
+  });
+
+  it("hides compatible bracketed TOKEN refresh success lines", () => {
     const lines = [
       "[10:01:02] \u2139\uFE0F  [TOKEN] Antigravity refreshed",
       "[10:01:03] \u2139\uFE0F  [TOKEN] antigravity refreshed",
@@ -40,13 +50,40 @@ describe("H2 F31-REOPENED RED: live [TOKEN] refresh lines escape Hide-refresh-no
     expect(hiddenCount).toBe(7);
   });
 
-  it("does not hide non-refresh TOKEN lines", () => {
+  it("preserves non-refresh TOKEN lines and arbitrary TOKEN/refreshed text", () => {
     const lines = [
+      "TOKEN usage quota checkpoint saved",
+      "TOKEN CHAT normal request line",
+      "TOKEN Antigravity refresh scheduled",
+      "CHAT Antigravity refreshed",
+      "CHAT TOKEN Antigravity refreshed",
+      "message mentions TOKEN Antigravity refreshed",
+      "TOKENIZER Antigravity refreshed",
+      "[CHAT] TOKEN Antigravity refreshed",
+      "TOKEN Antigravity refreshedness",
+      "TOKEN quota checkpoint refreshed from disk",
+      "TOKEN Antigravity refreshed\nCHAT normal request line",
       "[10:03:00] \u2139\uFE0F  [TOKEN] usage quota checkpoint saved",
-      "[10:03:01] \u2139\uFE0F  [TOKEN] Antigravity refreshed",
     ];
     const { visible, hiddenCount } = filterTokenRefreshSpam(lines, true);
-    expect(visible).toEqual(["[10:03:00] \u2139\uFE0F  [TOKEN] usage quota checkpoint saved"]);
-    expect(hiddenCount).toBe(1);
+    expect(visible).toEqual(lines);
+    expect(hiddenCount).toBe(0);
+  });
+
+  it("filter off restores the original plain and bracketed lines", () => {
+    const lines = [
+      "TOKEN Antigravity refreshed",
+      "TOKEN usage quota checkpoint saved",
+      "TOKEN CHAT normal request line",
+      "[10:03:01] \u2139\uFE0F  [TOKEN] Antigravity refreshed",
+      "CHAT normal request line",
+    ];
+    const original = [...lines];
+    filterTokenRefreshSpam(lines, true);
+    const { visible, hiddenCount } = filterTokenRefreshSpam(lines, false);
+    expect(visible).toEqual(original);
+    expect(lines).toEqual(original);
+    expect(visible).not.toBe(lines);
+    expect(hiddenCount).toBe(0);
   });
 });

@@ -1,4 +1,8 @@
 import REGISTRY from "../providers/registry/index.js";
+import bedrock from "../providers/registry/bedrock.js";
+import bedrockXai from "../providers/registry/bedrock-xai.js";
+import { BEDROCK } from "../config/awsConstants.js";
+import { FORMATS } from "../translator/formats.js";
 
 // Alias→id derived from registry single-source: id→id, alias→id, aliases[]→id.
 // Media-only providers without a registry transport entry keep explicit aliases here.
@@ -124,6 +128,8 @@ export async function getModelInfoCore(modelStr, aliasesOrGetter) {
 
 // Config-driven prefix → provider inference (first match wins, fallback "openai").
 const MODEL_PREFIX_PROVIDERS = [
+  [BEDROCK.modelFamilyPatterns[FORMATS.CLAUDE], bedrock.id],
+  [BEDROCK.modelFamilyPatterns[FORMATS.OPENAI], bedrockXai.id],
   [/^claude-/, "anthropic"],
   [/^gemini-/, "gemini"],
   [/^gpt-/, "openai"],

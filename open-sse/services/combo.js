@@ -301,6 +301,37 @@ export async function partitionComboMembers(models, visited, resolveInfo) {
   return { safe, self };
 }
 
+function hasUsableContent(content) {
+  if (typeof content === "string") return content.trim().length > 0;
+  if (!Array.isArray(content)) return false;
+  return content.some((block) => {
+    if (typeof block === "string") return block.trim().length > 0;
+    if (!block || typeof block !== "object") return false;
+    if (block.type === "text" || block.type === "output_text") return hasUsableContent(block.text);
+    if (block.type === "thinking") return hasUsableContent(block.thinking);
+    if (block.type === "message") return hasUsableContent(block.content);
+    if (block.type === "reasoning") return hasUsableContent(block.summary) || hasUsableContent(block.content);
+    // Tool calls, media and unknown extensions must not be discarded as empty.
+    return true;
+  });
+}
+
+function isZeroContentResponse(data) {
+  if (!data || typeof data !== "object") return false;
+  if (Array.isArray(data.choices)) {
+    return !data.choices.some((choice) => {
+      const message = choice?.message || choice?.delta;
+      return hasUsableContent(message?.content) || hasUsableContent(message?.reasoning_content) ||
+        hasUsableContent(message?.reasoning) || hasUsableContent(message?.refusal) ||
+        (Array.isArray(message?.tool_calls) && message.tool_calls.length > 0) || Boolean(message?.function_call) ||
+        hasUsableContent(choice?.text);
+    });
+  }
+  if (Array.isArray(data.content)) return !hasUsableContent(data.content);
+  if (Array.isArray(data.output)) return !hasUsableContent(data.output);
+  return false;
+}
+
 /**
  * Handle combo chat with fallback
  * @param {Object} options
@@ -354,8 +385,22 @@ export async function handleComboChat({ body, models, handleSingleModel, log, co
     try {
       const result = await handleSingleModel(body, modelStr);
       
-      // Success (2xx) - return response
+      // Only inspect buffered JSON before handing it to the client. SSE is not
+      // replayable here: once bytes are flushed we must never switch members.
       if (result.ok) {
+        if (i < rotatedModels.length - 1 && !result.bodyUsed && !result.body?.locked &&
+            result.headers?.get("content-type")?.includes("application/json")) {
+          let empty = false;
+          try { empty = isZeroContentResponse(await result.clone().json()); } catch { /* Unknown JSON stays untouched. */ }
+          if (empty) {
+            lastError = "Zero usable content";
+            lastStatus = 502;
+            triedModels.push(`${modelStr} [200: ${lastError}]`);
+            log.warn("COMBO", `Model ${modelStr} returned HTTP 200 with zero usable content, switching to next model`);
+            if (comboFallbackDelayMs > 0) await new Promise(r => setTimeout(r, comboFallbackDelayMs));
+            continue;
+          }
+        }
         log.info("COMBO", `Model ${modelStr} succeeded`);
         return result;
       }
@@ -387,7 +432,7 @@ export async function handleComboChat({ body, models, handleSingleModel, log, co
       // members behind it may well be usable. checkFallbackError() reports no
       // fallback for generic 4xx so a request-scoped fault doesn't cool down a
       // healthy account — correct for account rotation, wrong here. #4271
-      const modelScoped = isModelScopedError(result.status, errorText);
+      const modelScoped = result.status !== 410 && isModelScopedError(result.status, errorText);
       const { shouldFallback, cooldownMs } = modelScoped
         ? { shouldFallback: true, cooldownMs: 0 }
         : checkFallbackError(result.status, errorText);

@@ -18,6 +18,8 @@ import { updateProviderCredentials } from "@/sse/services/tokenRefresh";
 import { resolveConnectionProxyConfig } from "@/lib/network/connectionProxy";
 import { capabilitiesFromServiceKind, getCapabilitiesForModel, withDeclaredCapabilities, aggregateComboCapabilities } from "open-sse/providers/capabilities.js";
 import { resolveCodexCatalog } from "@/lib/codexModels.js";
+import { getCustomModelDeclarations } from "open-sse/providers/declaredCaps.js";
+import { authorizeModelCatalog, filterModelCatalog, modelCatalogJson } from "@/lib/modelCatalogAccess.js";
 
 // Qoder shares one live resolver across intl (qoder) and CN (qoder-cn); the
 // credentials carry the provider id so qoderModels picks the right region's
@@ -211,16 +213,17 @@ const ALIAS_TO_PROVIDER_ID = {
   ...ALIAS_TO_ID,
 };
 
-function comboSeatCapabilities(seat) {
+function comboSeatCapabilities(seat, modelCapsBySeat) {
   const slash = seat.indexOf("/");
   if (slash <= 0) return null;
+  if (modelCapsBySeat?.has(seat)) return modelCapsBySeat.get(seat);
   const alias = seat.slice(0, slash);
   return getCapabilitiesForModel(ALIAS_TO_PROVIDER_ID[alias] || alias, seat.slice(slash + 1));
 }
 
 // Nested combo names are valid seats — expand them cycle-guarded so the published
 // window is the true MINIMUM across the whole chain (upstream #89ffac5a).
-function comboSeatLimits(combo, combosByName, visiting = new Set()) {
+function comboSeatLimits(combo, combosByName, modelCapsBySeat, visiting = new Set()) {
   const name = typeof combo?.name === "string" ? combo.name : null;
   if (name) {
     if (visiting.has(name)) return { contextWindow: undefined, maxOutput: undefined };
@@ -236,13 +239,13 @@ function comboSeatLimits(combo, combosByName, visiting = new Set()) {
       if (slash <= 0) {
         const nested = combosByName.get(seat);
         if (nested) {
-          const nestedLimits = comboSeatLimits(nested, combosByName, visiting);
+          const nestedLimits = comboSeatLimits(nested, combosByName, modelCapsBySeat, visiting);
           if (Number.isFinite(nestedLimits.contextWindow)) contextWindow = Math.min(contextWindow, nestedLimits.contextWindow);
           if (Number.isFinite(nestedLimits.maxOutput)) maxOutput = Math.min(maxOutput, nestedLimits.maxOutput);
           continue;
         }
       }
-      const caps = comboSeatCapabilities(seat) || getCapabilitiesForModel(null, seat);
+      const caps = comboSeatCapabilities(seat, modelCapsBySeat) || getCapabilitiesForModel(null, seat);
       if (Number.isFinite(caps?.contextWindow)) contextWindow = Math.min(contextWindow, caps.contextWindow);
       if (Number.isFinite(caps?.maxOutput)) maxOutput = Math.min(maxOutput, caps.maxOutput);
     }
@@ -311,6 +314,22 @@ export async function buildModelsList(kindFilter) {
   }
 
   const models = [];
+  const modelCapsBySeat = new Map();
+  for (const customModel of customModels) {
+    // A routed id can have separate typed KV rows. Only declarations for this
+    // catalog kind may contribute seat limits (vision chat also belongs to LLM).
+    const kind = getModelKind(customModel) || LLM_KIND;
+    if (!kindFilter.includes(kind) && !(kind === "imageToText" && kindFilter.includes(LLM_KIND))) continue;
+    const declared = getCustomModelDeclarations(customModel);
+    if (!customModel?.providerAlias || !customModel?.id || !declared) continue;
+    const alias = customModel.providerAlias;
+    const id = String(customModel.id).trim();
+    const providerId = ALIAS_TO_PROVIDER_ID[alias] || alias;
+    const caps = withDeclaredCapabilities(getCapabilitiesForModel(providerId, id), declared);
+    for (const prefix of new Set([alias, providerId, getProviderAlias(providerId)])) {
+      modelCapsBySeat.set(`${prefix}/${id}`, caps);
+    }
+  }
   const combosByName = new Map(
     combos.filter((c) => typeof c?.name === "string").map((c) => [c.name, c])
   );
@@ -339,7 +358,7 @@ export async function buildModelsList(kindFilter) {
       // default 200k. The only window a combo can promise is its smallest member
       // (nested combos expanded cycle-guarded) — max() would strand fallback on a
       // small member. Ported from upstream #89ffac5a.
-      const { contextWindow, maxOutput } = comboSeatLimits(combo, combosByName);
+      const { contextWindow, maxOutput } = comboSeatLimits(combo, combosByName, modelCapsBySeat);
       if (Number.isFinite(contextWindow)) entry.context_length = contextWindow;
       if (Number.isFinite(maxOutput)) entry.max_completion_tokens = maxOutput;
     }
@@ -348,6 +367,7 @@ export async function buildModelsList(kindFilter) {
 
   if (connections.length === 0) {
     // DB unavailable -> return static models, filtered by per-model kind
+    const staticEntriesById = new Map();
     const aliasToProviderId = Object.fromEntries(
       Object.entries(PROVIDER_ID_TO_ALIAS).map(([id, alias]) => [alias, id])
     );
@@ -358,11 +378,13 @@ export async function buildModelsList(kindFilter) {
       for (const model of providerModels) {
         if (!kindFilter.includes(modelKind(model))) continue;
         if (isDisabled(alias, model.id)) continue;
-        models.push({
+        const entry = {
           id: `${alias}/${model.id}`,
           object: "model",
           owned_by: alias,
-        });
+        };
+        staticEntriesById.set(entry.id, entry);
+        models.push(entry);
       }
     }
 
@@ -375,12 +397,25 @@ export async function buildModelsList(kindFilter) {
 
       const modelId = String(customModel.id).trim();
       if (!modelId) continue;
+      if (isDisabled(providerAlias, modelId)) continue;
 
-      models.push({
+      const entry = {
         id: `${providerAlias}/${modelId}`,
         object: "model",
         owned_by: providerAlias,
-      });
+      };
+      const declared = getCustomModelDeclarations(customModel);
+      if (Number.isFinite(declared?.contextWindow) || Number.isFinite(declared?.maxOutput)) {
+        const caps = modelCapsBySeat.get(entry.id);
+        entry.capabilities = caps;
+        if (Number.isFinite(declared.contextWindow)) entry.context_length = caps.contextWindow;
+        if (Number.isFinite(declared.maxOutput)) entry.max_completion_tokens = caps.maxOutput;
+      }
+      const staticEntry = staticEntriesById.get(entry.id);
+      // Numeric opt-in augments a matching static row instead of losing to
+      // first-wins dedupe. Undeclared rows retain their historical wire shape.
+      if (staticEntry && entry.capabilities) Object.assign(staticEntry, entry);
+      else models.push(entry);
     }
   } else {
     for (const group of activeConnectionByProvider.values()) {
@@ -503,7 +538,6 @@ export async function buildModelsList(kindFilter) {
 
       const customModelKindById = new Map();
       const customModelCapsById = new Map();
-      const customCapabilitiesById = new Map();
       const customModelIds = customModels
         .filter((m) => {
           if (!m?.id) return false;
@@ -518,15 +552,8 @@ export async function buildModelsList(kindFilter) {
           const modelId = String(m.id).trim();
           if (modelId) {
             customModelKindById.set(modelId, getModelKind(m) || LLM_KIND);
-            if (m.caps && typeof m.caps === "object") customModelCapsById.set(modelId, m.caps);
-            const cw = Number(m.contextWindow || m.context_length);
-            const mo = Number(m.maxOutput || m.max_completion_tokens);
-            if ((Number.isFinite(cw) && cw > 0) || (Number.isFinite(mo) && mo > 0)) {
-              customCapabilitiesById.set(modelId, {
-                ...(Number.isFinite(cw) && cw > 0 ? { contextWindow: cw } : {}),
-                ...(Number.isFinite(mo) && mo > 0 ? { maxOutput: mo } : {}),
-              });
-            }
+            const declared = getCustomModelDeclarations(m);
+            if (declared) customModelCapsById.set(modelId, declared);
           }
           return modelId;
         })
@@ -582,11 +609,22 @@ export async function buildModelsList(kindFilter) {
         // { id, name } — no per-model capability data. Fall back to the same
         // pattern-matched capabilities the dashboard uses (useModelCaps.js) so
         // dynamically-discovered LLM models still surface vision/reasoning/search/tools.
-        const baseCaps = liveCapabilitiesById.get(modelId)
-          || customCapabilitiesById.get(modelId)
+        const liveCaps = liveCapabilitiesById.get(modelId);
+        const baseCaps = liveCaps
           || capabilitiesFromServiceKind(customKind || liveKind)
           || (kind === LLM_KIND ? getCapabilitiesForModel(providerId, modelId) : null);
-        const caps = withDeclaredCapabilities(baseCaps, customModelCapsById.get(modelId));
+        const declared = customModelCapsById.get(modelId);
+        const resolvedBase = declared && liveCaps && (kind === LLM_KIND || allowAsLlm)
+          ? { ...getCapabilitiesForModel(providerId, modelId), ...liveCaps }
+          : baseCaps;
+        const caps = withDeclaredCapabilities(resolvedBase, declared);
+        // Partial live metadata can leave numeric gaps; explicit valid live
+        // limits stay authoritative over an operator's custom declaration.
+        if (declared && liveCaps) {
+          for (const key of ["contextWindow", "maxOutput"]) {
+            if (Number.isFinite(liveCaps[key]) && liveCaps[key] > 0) caps[key] = liveCaps[key];
+          }
+        }
         if (caps) model.capabilities = caps;
         // Token limits under the snake_case names the OpenAI/OpenRouter
         // convention uses. `capabilities.contextWindow` is camelCase and nested,
@@ -610,6 +648,9 @@ export async function buildModelsList(kindFilter) {
           if (Number.isFinite(maxOutput)) model.max_completion_tokens = maxOutput;
           const maxContextWindow = liveMaxContextById.get(modelId);
           if (Number.isFinite(maxContextWindow)) model.max_context_window = maxContextWindow;
+          for (const alias of new Set([outputAlias, staticAlias, providerId])) {
+            modelCapsBySeat.set(`${alias}/${modelId}`, { ...caps, contextWindow, maxOutput });
+          }
         }
         models.push(model);
       }
@@ -633,6 +674,15 @@ export async function buildModelsList(kindFilter) {
         });
       }
     }
+  }
+
+  // Resolvers above may refine custom seats with account-specific live limits.
+  // Re-evaluate combo minima from those same effective metadata declarations.
+  for (const entry of models) {
+    if (entry.owned_by !== "combo" || entry.kind) continue;
+    const { contextWindow, maxOutput } = comboSeatLimits(combosByName.get(entry.id), combosByName, modelCapsBySeat);
+    if (Number.isFinite(contextWindow)) entry.context_length = contextWindow;
+    if (Number.isFinite(maxOutput)) entry.max_completion_tokens = maxOutput;
   }
 
   const dedupedModels = [];
@@ -664,16 +714,12 @@ export async function OPTIONS() {
  * For other capabilities use /v1/models/{kind} (image, tts, stt, embedding, image-to-text, web).
  */
 export async function GET(request) {
+  const access = await authorizeModelCatalog(request);
+  if (access.response) return access.response;
   try {
     const data = await buildModelsList([LLM_KIND]);
-    return Response.json({ object: "list", data }, {
-      headers: { "Access-Control-Allow-Origin": "*" },
-    });
-  } catch (error) {
-    console.log("Error fetching models:", error);
-    return Response.json(
-      { error: { message: error.message, type: "server_error" } },
-      { status: 500 }
-    );
+    return modelCatalogJson({ object: "list", data: filterModelCatalog(data, access) }, access);
+  } catch {
+    return modelCatalogJson({ error: { message: "Failed to fetch models", type: "server_error" } }, access, { status: 500 });
   }
 }

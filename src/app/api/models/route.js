@@ -3,13 +3,22 @@ import { getModelAliases, setModelAlias, getCustomModels } from "@/models";
 import { getDisabledModels } from "@/lib/disabledModelsDb";
 import { AI_MODELS } from "@/shared/constants/config";
 import { getProviderAlias } from "@/shared/constants/providers";
-import { getCapabilitiesForModel } from "open-sse/providers/capabilities.js";
+import { getCapabilitiesForModel, withDeclaredCapabilities } from "open-sse/providers/capabilities.js";
+import { getCustomModelDeclarations } from "open-sse/providers/declaredCaps.js";
 
 // GET /api/models - Get models with aliases
 export async function GET() {
   try {
     const modelAliases = await getModelAliases();
     const disabled = await getDisabledModels();
+    const customModels = (await getCustomModels()).filter((m) => m?.id && (m.kind || m.type || "llm") === "llm");
+    const declarationsByRoute = new Map();
+    for (const model of customModels) {
+      const declared = getCustomModelDeclarations(model);
+      if (!model.providerAlias || !declared) continue;
+      const alias = getProviderAlias(model.providerAlias) || model.providerAlias;
+      declarationsByRoute.set(`${alias}/${model.id}`, declared);
+    }
 
     const models = AI_MODELS
       .filter((m) => {
@@ -21,7 +30,7 @@ export async function GET() {
         const fullModel = `${m.provider}/${m.model}`;
         const providerAlias = getProviderAlias(m.provider) || m.provider;
         const routedModel = `${providerAlias}/${m.model}`;
-        const c = getCapabilitiesForModel(m.provider, m.model);
+        const c = withDeclaredCapabilities(getCapabilitiesForModel(m.provider, m.model), declarationsByRoute.get(routedModel));
         return {
           ...m,
           fullModel,
@@ -38,14 +47,11 @@ export async function GET() {
       });
 
     // Custom models ride along; their stored caps override the name heuristic
-    const seenFull = new Set(models.map((m) => m.fullModel));
-    const customModels = (await getCustomModels()).filter((m) => {
-      if (!m?.id || (m.kind || m.type || "llm") !== "llm") return false;
-      return !seenFull.has(`${m.providerAlias}/${m.id}`);
-    });
+    const seenFull = new Set(models.flatMap((m) => [m.fullModel, m.routedModel]));
     for (const m of customModels) {
       const fullModel = `${m.providerAlias}/${m.id}`;
-      const c = getCapabilitiesForModel(m.providerAlias, m.id);
+      if (seenFull.has(fullModel)) continue;
+      const c = withDeclaredCapabilities(getCapabilitiesForModel(m.providerAlias, m.id), getCustomModelDeclarations(m));
       models.push({
         provider: m.providerAlias,
         model: m.id,
@@ -59,7 +65,6 @@ export async function GET() {
           reasoning: c.reasoning,
           contextWindow: c.contextWindow,
           maxOutput: c.maxOutput,
-          ...(m.caps || {}),
         },
       });
     }

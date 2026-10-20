@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { getThinkingLevels } from "../../open-sse/providers/thinkingLevels.js";
+import { getModelsByProviderId } from "../../open-sse/config/providerModels.js";
+import { QUOTA_AUTOPING_CONFIG } from "../../src/shared/constants/config.js";
 
 describe("getThinkingLevels", () => {
   it.each([
@@ -25,7 +27,12 @@ describe("getThinkingLevels", () => {
   });
 
   it("does not add max for other Codex models", () => {
-    const levels = getThinkingLevels("codex", "gpt-5.5");
+    expect(getModelsByProviderId("codex").map(m => m.id)).not.toContain("gpt-5.5");
+    expect(getModelsByProviderId("codex").map(m => m.id)).not.toContain("gpt-5.5-review");
+    expect(getModelsByProviderId("codex").map(m => m.id)).not.toContain("gpt-5.5-image");
+    expect(getModelsByProviderId("codex").map(m => m.id)).not.toContain("gpt-5.3-image");
+    expect(QUOTA_AUTOPING_CONFIG.providers.codex.pingModel).toBe("gpt-5.6-terra");
+    const levels = getThinkingLevels("codex", "gpt-daybreak-blue-latest");
     expect(levels || []).not.toContain("max");
   });
 });

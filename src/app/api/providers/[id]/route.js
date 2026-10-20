@@ -6,7 +6,7 @@ import {
   deleteProviderConnection,
 } from "@/models";
 import { applyCustomHeaders } from "open-sse/utils/customHeaders.js";
-import { sanitizeConnectionForBrowser } from "@/lib/proxyMask.js";
+import { toProviderConnectionResponse, usesAwsCredentialForm } from "@/lib/providerConnectionResponse";
 import { isOpenAICompatibleProvider, isAnthropicCompatibleProvider, isCustomEmbeddingProvider } from "@/shared/constants/providers";
 
 export function normalizeProxyConfig(body = {}, existingProxyUrl = "") {
@@ -78,7 +78,7 @@ export async function GET(request, { params }) {
     }
 
     // Hide sensitive fields
-    const result = sanitizeConnectionForBrowser(connection);
+    const result = toProviderConnectionResponse(connection);
 
     return NextResponse.json({ connection: result });
   } catch (error) {
@@ -163,10 +163,19 @@ export async function PUT(request, { params }) {
         proxyPoolResult.hasProxyPoolField
       )
     ) {
+      const incomingProviderSpecificData = { ...(providerSpecificData || {}) };
+      const isAwsCredential = usesAwsCredentialForm(existing.provider);
+      // A blank password input keeps the saved secret; null explicitly clears it.
+      if (isAwsCredential && incomingProviderSpecificData.sessionToken === "") {
+        delete incomingProviderSpecificData.sessionToken;
+      }
       updateData.providerSpecificData = {
         ...(existing.providerSpecificData || {}),
-        ...(providerSpecificData || {}),
+        ...incomingProviderSpecificData,
       };
+      if (isAwsCredential && incomingProviderSpecificData.sessionToken === null) {
+        delete updateData.providerSpecificData.sessionToken;
+      }
 
       if (proxyConfig.hasAnyProxyField) {
         updateData.providerSpecificData.connectionProxyEnabled = proxyConfig.connectionProxyEnabled;
@@ -204,7 +213,7 @@ export async function PUT(request, { params }) {
     const updated = await updateProviderConnection(id, updateData);
 
     // Hide sensitive fields
-    const result = sanitizeConnectionForBrowser(updated);
+    const result = toProviderConnectionResponse(updated);
 
     return NextResponse.json({ connection: result });
   } catch (error) {

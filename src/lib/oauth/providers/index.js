@@ -27,6 +27,8 @@ import kimchi from "./kimchi.js";
 import trae from "./trae.js";
 import windsurf from "./windsurf.js";
 import zed from "./zed.js";
+import nous from "./nous.js";
+import { PROVIDERS as OAUTH_PROVIDERS } from "../constants/oauth.js";
 
 // Provider configurations
 const PROVIDERS = {
@@ -53,6 +55,7 @@ const PROVIDERS = {
   trae,
   windsurf,
   zed,
+  [OAUTH_PROVIDERS.NOUS]: nous,
 };
 
 export { PROVIDERS };

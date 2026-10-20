@@ -180,12 +180,21 @@ export async function assertPublicUrlResolved(rawUrl) {
   if (ipv4ToInt(bracketless) !== null || bracketless.includes(":")) return;
 
   let addresses;
+  let deadline;
   try {
-    addresses = await dns.promises.lookup(host, { all: true, verbatim: true });
+    addresses = await Promise.race([
+      dns.promises.lookup(host, { all: true, verbatim: true }),
+      new Promise((_, reject) => {
+        deadline = setTimeout(() => reject(new Error("DNS lookup timeout")), 3000);
+      }),
+    ]);
   } catch {
-    // Resolution failure isn't an SSRF signal by itself — let the subsequent
-    // fetch() fail with its own (clearer) network error.
-    return;
+    throw new Error("Blocked URL: hostname could not be resolved");
+  } finally {
+    clearTimeout(deadline);
+  }
+  if (!Array.isArray(addresses) || addresses.length === 0) {
+    throw new Error("Blocked URL: hostname resolved to no addresses");
   }
   for (const { address, family } of addresses) {
     if (family === 4 ? isBlockedIpv4(address) : isBlockedIpv6Groups(parseIPv6ToGroups(address) || [])) {

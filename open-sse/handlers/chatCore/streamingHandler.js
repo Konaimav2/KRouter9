@@ -4,10 +4,13 @@ import { createSSETransformStreamWithLogger, createPassthroughStreamWithLogger }
 import { pipeWithDisconnect } from "../../utils/streamHandler.js";
 import { PROVIDERS } from "../../config/providers.js";
 import { STREAM_STALL_TIMEOUT_MS } from "../../config/runtimeConfig.js";
-import { buildAbortedResponsesTerminalBytes, buildAbortedOpenAITerminalBytes, buildAbortedClaudeTerminalBytes } from "../../utils/responsesStreamHelpers.js";
+import { buildAbortedResponsesTerminalBytes, buildAbortedOpenAITerminalBytes, buildAbortedClaudeTerminalBytes, isOpenAIResponsesFailureEvent, extractOpenAIResponsesFailure } from "../../utils/responsesStreamHelpers.js";
 import { buildRequestDetail, extractRequestConfig, saveUsageStats, formatDoneLine } from "./requestDetail.js";
 import { saveRequestDetail } from "@/lib/usageDb.js";
 import { SSE_HEADERS_CORS as SSE_HEADERS } from "../../utils/sseConstants.js";
+import { createStreamDecoder } from "../../utils/streamTextDecoder.js";
+import { extractReasoningText } from "../../translator/concerns/reasoning.js";
+import { CLAUDE_BLOCK, RESPONSES_ITEM } from "../../translator/schema/index.js";
 
 // Codex returns Responses API SSE → which client format to translate INTO, by request sourceFormat.
 // Gemini-family all map to ANTIGRAVITY decoder; unknown sources fall back to OPENAI.
@@ -113,16 +116,16 @@ export async function handleStreamingResponse({ providerResponse, provider, mode
 
   const transformStream = buildTransformStream({ provider, sourceFormat, targetFormat, userAgent, reqLogger, toolNameMap, customToolNames, model, connectionId, body, onStreamComplete, apiKey, credentials, log, reqTag });
 
-  // Responses passthrough: synthesize response.failed + [DONE] if the stream aborts/stalls before a terminal event
-  const isResponsesPassthrough = sourceFormat === FORMATS.OPENAI_RESPONSES && targetFormat === FORMATS.OPENAI_RESPONSES;
+  // These bytes are appended after translation, so their format is the client's.
+  const isResponsesClient = sourceFormat === FORMATS.OPENAI_RESPONSES;
   // Other formats get an equivalent terminal error event instead of a silent
   // truncation: OpenAI chat and Claude get shaped error frames; anything else
   // keeps the previous close-without-terminal behavior.
-  const onAbortTerminal = isResponsesPassthrough
+  const onAbortTerminal = isResponsesClient
     ? buildAbortedResponsesTerminalBytes
-    : targetFormat === FORMATS.OPENAI
+    : sourceFormat === FORMATS.OPENAI
       ? () => buildAbortedOpenAITerminalBytes(`[${provider}/${model}] stream closed before completion`)
-      : targetFormat === FORMATS.CLAUDE
+      : sourceFormat === FORMATS.CLAUDE
         ? () => buildAbortedClaudeTerminalBytes(`[${provider}/${model}] stream closed before completion`)
         : null;
   const stallTimeoutMs = PROVIDERS[provider]?.stallTimeoutMs || STREAM_STALL_TIMEOUT_MS;
@@ -130,8 +133,8 @@ export async function handleStreamingResponse({ providerResponse, provider, mode
   // carries data — providers (esp. capacity-limited ones) can return 200 and
   // then emit an error event or die silently. Without a probe, handleComboChat
   // sees success:true and never falls back (boss-report: combo opus-4.8).
-  // Solution: read the FIRST chunk before committing. Error event or timeout →
-  // success:false so the combo advances to the next model.
+  // A transport chunk can be a partial JSON/UTF-8 fragment or just a heartbeat.
+  // Commit only after a complete usable event; preserve every probed byte once.
   let bodyStream = providerResponse.body;
   if (comboName) {
     const reader = providerResponse.body.getReader();
@@ -144,60 +147,91 @@ export async function handleStreamingResponse({ providerResponse, provider, mode
       try { reader.releaseLock(); } catch { /* noop */ }
       try { providerResponse.body.cancel?.().catch(() => {}); } catch { /* noop */ }
     };
-    let firstChunk = null;
+    const decoder = createStreamDecoder();
+    const chunks = [];
+    let buffer = "";
+    let byteCount = 0;
+    // A per-attempt bounded lookahead, not an output accumulation buffer.
+    const probeMaxBytes = 64 * 1024;
+    const probeMaxChunks = 256;
     let timeoutTimer;
     try {
-      const timeoutMs = 15000;
-      // Keep a handle on the read promise so a losing race can be swallowed.
-      const readPromise = reader.read();
-      readPromise.catch(() => { /* consumed by race or abandon */ });
-      firstChunk = await Promise.race([
-        readPromise,
-        new Promise((_, rej) => { timeoutTimer = setTimeout(() => rej(new Error("first chunk timeout")), timeoutMs); }),
-      ]);
+      const timeout = new Promise((_, reject) => {
+        // Preserve the existing total probe deadline; heartbeats do not extend it.
+        timeoutTimer = setTimeout(() => reject(Object.assign(new Error("upstream semantic event timeout"), { status: 504 })), 15000);
+      });
+      const hasSemanticOutput = (parsed) => {
+        const payload = parsed.response || parsed;
+        const choices = payload.message ? [{ message: payload.message }] : payload.choices;
+        if (choices?.some(choice => {
+          const delta = choice.delta || choice.message;
+          return typeof delta?.content === "string" && delta.content.length > 0
+            || !!extractReasoningText(delta)
+            || Array.isArray(delta?.tool_calls) && delta.tool_calls.some(call => call?.id || call?.function?.name || call?.function?.arguments);
+        })) return true;
+        const delta = parsed.delta;
+        if (typeof delta === "object" && (delta?.text || delta?.thinking || delta?.partial_json)) return true;
+        const block = parsed.content_block || parsed.item;
+        if (block?.type === CLAUDE_BLOCK.TEXT && block.text) return true;
+        if (block && (block.type === CLAUDE_BLOCK.TOOL_USE || block.type === RESPONSES_ITEM.FUNCTION_CALL || block.type === RESPONSES_ITEM.CUSTOM_TOOL_CALL) && (block.id || block.call_id || block.name)) return true;
+        if (typeof delta === "string" && delta && /^(response\.(output_text|reasoning.*|function_call_arguments|custom_tool_call_input)\.delta)$/.test(parsed.type || "")) return true;
+        return payload.candidates?.some(candidate => candidate.content?.parts?.some(part => part.text || part.functionCall || part.inlineData)) || false;
+      };
+      let usable = false;
+      for (let reads = 0; reads < probeMaxChunks && !usable; reads++) {
+        const readPromise = reader.read();
+        readPromise.catch(() => { /* consumed by race or abandon */ });
+        const { done, value } = await Promise.race([readPromise, timeout]);
+        if (done) throw new Error("upstream stream ended before a usable event");
+        byteCount += value.byteLength;
+        if (byteCount > probeMaxBytes) throw new Error("upstream precommit byte limit exceeded");
+        chunks.push(value);
+        buffer += decoder.decode(value);
+        // Ollama is NDJSON; every other normalized executor returns SSE events.
+        const separator = targetFormat === FORMATS.OLLAMA ? /\r?\n/ : /\r?\n\r?\n/;
+        let match;
+        while (!usable && (match = separator.exec(buffer))) {
+          const frame = buffer.slice(0, match.index);
+          buffer = buffer.slice(match.index + match[0].length);
+          const lines = frame.split(/\r?\n/);
+          const eventName = lines.find(line => line.startsWith("event:"))?.slice(6).trim();
+          const data = lines.filter(line => line.startsWith("data:")).map(line => line.slice(5).trimStart()).join("\n");
+          // Parse only complete precommit frames here: the shared stream parser
+          // logs malformed short data verbatim, which can expose upstream bytes.
+          const raw = targetFormat === FORMATS.OLLAMA ? frame.trim() : data;
+          if (!raw) continue; // Comments and heartbeats aren't semantic.
+          if (raw === "[DONE]") throw new Error("upstream stream completed before a usable event");
+          let parsed;
+          try { parsed = JSON.parse(raw); } catch { throw new Error("malformed upstream precommit event"); }
+          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+            throw new Error("invalid upstream precommit event");
+          }
+          if (parsed.error || isOpenAIResponsesFailureEvent(eventName, parsed)) {
+            throw new Error(String(extractOpenAIResponsesFailure(parsed).message).slice(0, 200));
+          }
+          usable = hasSemanticOutput(parsed);
+          if (parsed.done && !usable) throw new Error("upstream stream completed before a usable event");
+        }
+      }
+      if (!usable) throw new Error("upstream precommit chunk limit exceeded");
+      const replay = new Uint8Array(byteCount);
+      let offset = 0;
+      for (const chunk of chunks) { replay.set(chunk, offset); offset += chunk.byteLength; }
+      // Reuse the SAME locked reader, preserving both lookahead and unread bytes.
+      bodyStream = reenqueueFirstChunk(reader, replay);
     } catch (err) {
       abandon();
       streamController?.handleError?.(err);
       return {
         success: false,
-        response: new Response(JSON.stringify({ error: { message: `[${provider}/${model}] upstream stream failed before first chunk: ${err.message}` } }), {
-          status: 504,
+        response: new Response(JSON.stringify({ error: { message: `[${provider}/${model}] upstream stream failed before semantic output: ${err.message}` } }), {
+          status: err.status || 502,
           headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
         }),
       };
     } finally {
       clearTimeout(timeoutTimer);
     }
-    if (firstChunk?.done) {
-      abandon();
-      streamController?.handleError?.(new Error("upstream stream ended before first chunk"));
-      return {
-        success: false,
-        response: new Response(JSON.stringify({ error: { message: `[${provider}/${model}] upstream stream ended before first chunk` } }), {
-          status: 502,
-          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-        }),
-      };
-    }
-    const chunkText = new TextDecoder().decode(firstChunk.value);
-    if (/^data:\s*\{"error"/m.test(chunkText) || /^data:\s*\[DONE\]/m.test(chunkText) && !/("delta"|"content_block_start"|"candidates"|"message_start"|"response\.output")/.test(chunkText)) {
-      abandon();
-      streamController?.handleError?.(new Error("upstream first chunk is an error/empty event"));
-      // extract error message if present
-      let errMsg = "upstream returned an error event";
-      const em = chunkText.match(/"error"\s*:\s*\{[^}]*"message"\s*:\s*"([^"]{0,200})/);
-      if (em) errMsg = em[1];
-      return {
-        success: false,
-        response: new Response(JSON.stringify({ error: { message: `[${provider}/${model}] ${errMsg}` } }), {
-          status: 502,
-          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-        }),
-      };
-    }
-    // good first chunk — re-wrap so the rest of the pipeline keeps streaming.
-    // Reuse the SAME reader (the stream is locked); a second getReader() throws.
-    bodyStream = reenqueueFirstChunk(reader, firstChunk.value);
   }
 
   const transformedBody = pipeWithDisconnect(bodyStream, transformStream, streamController, onAbortTerminal, stallTimeoutMs);

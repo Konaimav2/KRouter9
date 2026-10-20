@@ -1,5 +1,6 @@
 import { buildModelsList } from "../route.js";
 import { getComboByName } from "@/lib/localDb";
+import { authorizeModelCatalog, filterModelCatalog, isCatalogModelAllowed, modelCatalogJson, modelCatalogNotFound } from "@/lib/modelCatalogAccess.js";
 
 // URL slug → service kind(s). `web` covers both webSearch and webFetch.
 const KIND_SLUG_MAP = {
@@ -23,22 +24,14 @@ export async function OPTIONS() {
   });
 }
 
-function json(data, options = {}) {
-  return Response.json(data, {
-    ...options,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      ...options.headers,
-    },
-  });
-}
-
 /**
  * GET /v1/models/{kind} - OpenAI-compatible models list filtered by capability.
  * GET /v1/models/{provider}/{model} - OpenAI-compatible single model lookup.
  * Supported kinds: image, tts, stt, embedding, image-to-text, web.
  */
-export async function GET(_request, { params }) {
+export async function GET(request, { params }) {
+  const access = await authorizeModelCatalog(request);
+  if (access.response) return access.response;
   try {
     const { model } = await params;
     const path = Array.isArray(model) ? model : [model];
@@ -47,8 +40,10 @@ export async function GET(_request, { params }) {
 
     if (kindFilter) {
       const data = await buildModelsList(kindFilter);
-      return json({ object: "list", data });
+      return modelCatalogJson({ object: "list", data: filterModelCatalog(data, access) }, access);
     }
+
+    if (!isCatalogModelAllowed(access, identifier)) return modelCatalogNotFound(access);
 
     // Match the same LLM catalog exposed by GET /v1/models. A catch-all
     // parameter is required because provider-prefixed IDs contain a slash.
@@ -68,25 +63,10 @@ export async function GET(_request, { params }) {
       }
     }
 
-    if (!matchedModel) {
-      return json(
-        {
-          error: {
-            message: `The model '${identifier}' does not exist or you do not have access to it.`,
-            type: "invalid_request_error",
-            code: "model_not_found",
-          },
-        },
-        { status: 404 },
-      );
-    }
+    if (!matchedModel || !isCatalogModelAllowed(access, matchedModel.id)) return modelCatalogNotFound(access);
 
-    return json(matchedModel);
-  } catch (error) {
-    console.log("Error fetching model:", error);
-    return json(
-      { error: { message: error.message, type: "server_error" } },
-      { status: 500 },
-    );
+    return modelCatalogJson(matchedModel, access);
+  } catch {
+    return modelCatalogJson({ error: { message: "Failed to fetch model", type: "server_error" } }, access, { status: 500 });
   }
 }

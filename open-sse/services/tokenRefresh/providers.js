@@ -3,6 +3,64 @@ import { OAUTH_ENDPOINTS, GITHUB_COPILOT, buildKimiHeaders } from "../../config/
 import { proxyAwareFetch } from "../../utils/proxyFetch.js";
 import { dedupRefresh } from "./dedup.js";
 import { buildExternalIdpRefreshParams } from "../../../src/lib/oauth/kiroExternalIdp.js";
+import { NOUS_PROVIDER_ID, NOUS_TOKEN_URL, NOUS_AGENT_KEY_URL, NOUS_OAUTH_CLIENT_ID } from "../nous.js";
+
+// Refresh the Portal token, then mint the inference credential. Do not log
+// upstream response bodies: OAuth failures can echo credentials.
+export async function refreshNousToken(refreshToken, log) {
+  if (!refreshToken) return null;
+  return dedupRefresh(NOUS_PROVIDER_ID, refreshToken, async () => {
+    try {
+      const response = await fetch(NOUS_TOKEN_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json", "x-nous-refresh-token": refreshToken },
+        body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken, client_id: NOUS_OAUTH_CLIENT_ID }),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!response.ok) {
+        log?.error?.("TOKEN_REFRESH", "Failed to refresh Nous token", { status: response.status });
+        return null;
+      }
+      const tokens = await response.json();
+      if (!tokens?.access_token) return null;
+      let agentKey = null;
+      let agentKeyId = null;
+      let agentKeyExpiresAt = null;
+      try {
+        const minted = await fetch(NOUS_AGENT_KEY_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: `Bearer ${tokens.access_token}` },
+          body: JSON.stringify({ min_ttl_seconds: 7200 }),
+          signal: AbortSignal.timeout(15000),
+        });
+        if (minted.ok) {
+          const data = await minted.json();
+          agentKey = data.api_key || null;
+          agentKeyId = data.key_id || null;
+          agentKeyExpiresAt = data.expires_at || null;
+        } else {
+          log?.warn?.("TOKEN_REFRESH", "Failed to mint Nous agent key; using access token", { status: minted.status });
+        }
+      } catch {
+        log?.warn?.("TOKEN_REFRESH", "Nous agent key mint failed; using access token");
+      }
+      return {
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token || refreshToken,
+        expiresIn: tokens.expires_in,
+        apiKey: agentKey || tokens.access_token,
+        agentKey,
+        providerSpecificData: {
+          ...(agentKeyId ? { agentKeyId } : {}),
+          ...(agentKeyExpiresAt ? { agentKeyExpiresAt } : {}),
+        },
+      };
+    } catch {
+      log?.error?.("TOKEN_REFRESH", "Error refreshing Nous token");
+      return null;
+    }
+  }, log);
+}
 
 let _xaiServiceSingleton = null;
 export async function refreshXaiToken(refreshToken, log) {

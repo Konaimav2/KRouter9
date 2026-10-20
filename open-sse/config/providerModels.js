@@ -73,6 +73,12 @@ export function getModelType(aliasOrId, modelId) {
   return found?.kind || found?.type || null;
 }
 
+// Per-model transport hints, ignoring the client thinking-level suffix.
+export function getModelMeta(aliasOrId, modelId) {
+  const baseId = typeof modelId === "string" ? modelId.replace(/\([^()]+\)\s*$/, "").trim() : modelId;
+  return findModel(PROVIDER_MODELS[aliasOrId], baseId, aliasOrId) || null;
+}
+
 export function getModelUpstreamId(aliasOrId, modelId) {
   // Split off thinking suffix "(level)" so lookup hits the base id; re-append it to
   // the result so downstream applyThinking still sees the suffix (body.model is stripped separately).
