@@ -9,6 +9,7 @@ import {
 } from "../services/auth.js";
 import { handleAntigravityQuotaError, clearAntigravityStrikes } from "../services/antigravityQuota.js";
 import { circuitBreaker } from "open-sse/utils/circuitBreaker.js";
+import { isClientFault, isContentPolicyRefusal } from "open-sse/services/accountFallback.js";
 import { getCachedSettings, getCombos } from "@/lib/localDb";
 import { getModelInfo, getComboModels } from "../services/model.js";
 import { handleChatCore } from "open-sse/handlers/chatCore.js";
@@ -159,56 +160,51 @@ export async function handleChat(request, clientRawRequest = null, options = {})
   // `options.internal` (dashboard playground) is same-origin + auth-gated by the
   // dashboard guard, so it skips the end-user API key requirement.
   const settings = await getCachedSettings();
-  if (settings.requireApiKey && !options.internal) {
-    if (!apiKey) {
-      log.warn("AUTH", "Missing API key (requireApiKey=true)");
-      return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Missing API key");
-    }
-    const valid = await isValidApiKey(apiKey);
-    if (!valid) {
-      log.warn("AUTH", "Invalid API key (requireApiKey=true)");
-      return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Invalid API key");
-    }
+  if (apiKey === null && settings.requireApiKey && !options.internal) {
+    return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Missing API key");
   }
 
-  // KRouter9 per-key manage enforcement (V3). Defaults OFF (limits 0 = unlimited,
-  // policy off = allow all). Applies whenever a known key is presented, independent
-  // of requireApiKey. Budget/credit checks FAIL CLOSED; policy checks fail open.
+  // Explicit credentials are authoritative even in optional/internal mode.
+  // Mandatory lookup/active/expiry failures must not clear the enforcement row
+  // and dispatch unbilled provider work. Policy semantics remain unchanged.
   // The budget reservation is prepaid AFTER the cheap validation checks below so
   // an invalid/bypass request never charges the key.
   let enforcementKeyRow = null;
-  if (apiKey) {
-    let keyRow = null;
+  if (apiKey !== null) {
+    if (!apiKey) return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Invalid API key");
     try {
-      keyRow = await getApiKeyByKey(apiKey);
-      if (keyRow) {
-        if (!isModelAllowedForKey(keyRow, modelStr)) {
-          log.warn("AUTH", `API key model denied: ${modelStr}`);
-          return errorResponse(HTTP_STATUS.FORBIDDEN, `Model not allowed for this API key: ${modelStr}`);
-        }
-        const rpm = checkRateLimit(keyRow.id, clientIp, keyRow.rpmLimit || 0);
-        if (!rpm.ok) {
-          log.warn("AUTH", `API key RPM exceeded (limit ${rpm.limit})`);
-          const retryIso = new Date(Date.now() + (rpm.retryAfterSec || 60) * 1000).toISOString();
-          return unavailableResponse(HTTP_STATUS.RATE_LIMITED, `API key rate limit exceeded (${rpm.limit}/min)`, retryIso, `retry after ${rpm.retryAfterSec}s`);
-        }
-        const tpmLimit = keyRow.tpmLimit || 0;
-        // Skip the estimate entirely when unlimited: no full-body stringify.
-        const estTokens = tpmLimit > 0
-          ? Math.max(1, Math.ceil(estimateBodyChars(body) / 4))
-          : 0;
-        const tpm = checkTpmLimit(keyRow.id, estTokens, tpmLimit);
-        if (!tpm.ok) {
-          log.warn("AUTH", `API key TPM exceeded (limit ${tpm.limit})`);
-          const retryIso = new Date(Date.now() + (tpm.retryAfterSec || 60) * 1000).toISOString();
-          return unavailableResponse(HTTP_STATUS.RATE_LIMITED, `API key token limit exceeded (${tpm.limit}/min)`, retryIso, `retry after ${tpm.retryAfterSec}s`);
-        }
+      enforcementKeyRow = await getApiKeyByKey(apiKey);
+      if (!enforcementKeyRow?.isActive || !await isValidApiKey(apiKey)) {
+        return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Invalid API key");
       }
-    } catch (_keyPolicyErr) {
-      // RPM/TPM/policy are fail-open for inference; budget is handled below.
-      keyRow = null;
+    } catch {
+      return errorResponse(HTTP_STATUS.SERVICE_UNAVAILABLE, "API key lookup unavailable");
     }
-    enforcementKeyRow = keyRow;
+    const keyRow = enforcementKeyRow;
+    try {
+      if (!isModelAllowedForKey(keyRow, modelStr)) {
+        return errorResponse(HTTP_STATUS.FORBIDDEN, "Model not allowed for this API key");
+      }
+      const rpm = checkRateLimit(keyRow.id, clientIp, keyRow.rpmLimit || 0);
+      if (!rpm.ok) {
+        log.warn("AUTH", `API key RPM exceeded (limit ${rpm.limit})`);
+        const retryIso = new Date(Date.now() + (rpm.retryAfterSec || 60) * 1000).toISOString();
+        return unavailableResponse(HTTP_STATUS.RATE_LIMITED, `API key rate limit exceeded (${rpm.limit}/min)`, retryIso, `retry after ${rpm.retryAfterSec}s`);
+      }
+      const tpmLimit = keyRow.tpmLimit || 0;
+      // Skip the estimate entirely when unlimited: no full-body stringify.
+      const estTokens = tpmLimit > 0
+        ? Math.max(1, Math.ceil(estimateBodyChars(body) / 4))
+        : 0;
+      const tpm = checkTpmLimit(keyRow.id, estTokens, tpmLimit);
+      if (!tpm.ok) {
+        log.warn("AUTH", `API key TPM exceeded (limit ${tpm.limit})`);
+        const retryIso = new Date(Date.now() + (tpm.retryAfterSec || 60) * 1000).toISOString();
+        return unavailableResponse(HTTP_STATUS.RATE_LIMITED, `API key token limit exceeded (${tpm.limit}/min)`, retryIso, `retry after ${tpm.retryAfterSec}s`);
+      }
+    } catch {
+      return errorResponse(HTTP_STATUS.SERVICE_UNAVAILABLE, "API key enforcement unavailable");
+    }
   }
 
   if (!modelStr) {
@@ -612,7 +608,11 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
 
     // Exhausted Antigravity model is blocked only in RAM cache until upstream resetAt.
     // Do not persist a modelLock_* for this path.
-    const shouldFallback = provider === "antigravity" && quotaResetMs
+    // Refusals belong to the request, not the account. Ignore reset hints too:
+    // they must not persist cooldowns, rotate credentials or count as breaker failures.
+    const requestScopedRefusal = result.status === 410 || isContentPolicyRefusal(result.error) ||
+      (result.status === 403 && isClientFault(result.status, result.error));
+    const shouldFallback = requestScopedRefusal ? false : provider === "antigravity" && quotaResetMs
       ? true
       : (await markAccountUnavailable(credentials.connectionId, result.status, result.error, provider, model, resetsAtMs)).shouldFallback;
 

@@ -29,12 +29,14 @@ const FORMAT_LEVELS = {
   minimax: L.onOff,
   hunyuan: L.base,
   step: L.base,
+  nous: L.base,
 };
 
 const CODEX_GPT_5_6_LEVELS = ["none", "minimal", "low", "medium", "high", "xhigh", "max"];
 
 // Model-name pattern overrides (glob, first match wins) — more precise than format default.
 const PATTERN_THINKING = [
+  { pattern: "*gemini-4*", levels: ["low", "medium", "high"] },
   { provider: "codex", pattern: "*gpt-6.1-sol*", levels: [...CODEX_GPT_5_6_LEVELS, "ultra"] },
   { provider: "codex", pattern: "*gpt-6-sol*", levels: [...CODEX_GPT_5_6_LEVELS, "ultra"] },
   { provider: "codex", pattern: "*gpt-6*", levels: CODEX_GPT_5_6_LEVELS },

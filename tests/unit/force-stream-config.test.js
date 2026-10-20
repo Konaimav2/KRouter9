@@ -68,13 +68,20 @@ vi.mock("../../open-sse/rtk/index.js", () => ({
   formatRtkLog: vi.fn(() => ""),
 }));
 
-vi.mock("../../open-sse/rtk/headroom.js", () => ({
+vi.mock("../../open-sse/rtk/headroom.js", async (importOriginal) => ({
+  ...await importOriginal(),
   compressWithHeadroom: vi.fn(async () => null),
   formatHeadroomLog: vi.fn(() => ""),
 }));
 
-vi.mock("../../open-sse/providers/capabilities.js", () => ({
+vi.mock("../../open-sse/providers/capabilities.js", async (importOriginal) => ({
+  ...await importOriginal(),
   getCapabilitiesForModel: vi.fn(() => ({})),
+}));
+
+// The forceStream fixture has no operator declarations; never query the root DB.
+vi.mock("../../open-sse/providers/declaredCaps.js", () => ({
+  getDeclaredModelCaps: vi.fn(async () => undefined),
 }));
 
 vi.mock("../../open-sse/translator/concerns/modality.js", () => ({

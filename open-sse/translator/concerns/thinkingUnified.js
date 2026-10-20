@@ -347,7 +347,7 @@ function applyFormat(fmt, body, cfg, caps, supportedLevels, display) {
       const level = toLevel(eff);
       // auto with no concrete value → keep the native adaptive shape, invent no effort.
       if (!level || level === "auto") break;
-      body.output_config = { effort: clampThinkingLevel(level, supportedLevels) };
+      body.output_config = { effort: clampThinkingLevel(level === "minimal" ? "low" : level, supportedLevels) };
       break;
     }
     case "claude-budget": {
@@ -358,8 +358,10 @@ function applyFormat(fmt, body, cfg, caps, supportedLevels, display) {
     }
     case "gemini-level": {
       if (eff.mode === "auto") break; // pass through: omit level, provider decides
-      const level = none ? "minimal" : toGeminiThinkingLevel(eff);
+      let level = none ? "minimal" : toGeminiThinkingLevel(eff);
       if (!level) break;
+      const lowest = supportedLevels?.find(l => l !== "none");
+      if (lowest && !supportedLevels.includes(level)) level = lowest;
       setGeminiThinking(body, { thinkingLevel: level, includeThoughts: level !== "minimal" });
       ensureGeminiOutputFloor(body, geminiLevelOutputFloor(level), caps);
       break;
@@ -430,6 +432,12 @@ function applyFormat(fmt, body, cfg, caps, supportedLevels, display) {
       const level = toLevel(eff);
       if (!level || level === "auto") break;
       body.reasoning_effort = clampThinkingLevel(level, supportedLevels);
+      break;
+    }
+    case "nous": {
+      if (none && canDisable) break;
+      const level = eff.mode === "auto" ? "medium" : toLevel(eff);
+      body.reasoning = { enabled: true, ...(level ? { effort: level } : {}) };
       break;
     }
     case "tokenrouter": {

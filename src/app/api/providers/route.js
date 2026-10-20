@@ -13,7 +13,7 @@ import { APIKEY_PROVIDERS } from "@/shared/constants/config";
 import { AI_PROVIDERS, FREE_TIER_PROVIDERS, WEB_COOKIE_PROVIDERS, isOpenAICompatibleProvider, isAnthropicCompatibleProvider, isCustomEmbeddingProvider } from "@/shared/constants/providers";
 import { normalizeProviderId, normalizeProviderSpecificData } from "@/lib/providerNormalization";
 import { applyCustomHeaders } from "open-sse/utils/customHeaders.js";
-import { sanitizeConnectionForBrowser } from "@/lib/proxyMask.js";
+import { toProviderConnectionResponse } from "@/lib/providerConnectionResponse";
 
 export const dynamic = "force-dynamic";
 
@@ -92,7 +92,7 @@ export async function GET(request) {
 
     if (mode === "full") {
       const connections = await getProviderConnections(baseFilter);
-      const safeConnections = connections.map((c) => enrich(sanitizeConnectionForBrowser(c)));
+      const safeConnections = connections.map((c) => enrich(toProviderConnectionResponse(c)));
       return NextResponse.json({ connections: safeConnections, ...(stats ? { stats } : {}) });
     }
 
@@ -184,7 +184,10 @@ export async function POST(request) {
     if (!provider || !isValidProvider) {
       return NextResponse.json({ error: "Invalid provider" }, { status: 400 });
     }
-    if (!apiKey && provider !== "ollama-local") {
+    const apiKeySubstitute = AI_PROVIDERS[provider]?.apiKeyOptionalWith;
+    const substitute = apiKeySubstitute && body.providerSpecificData?.[apiKeySubstitute];
+    const hasApiKeySubstitute = typeof substitute === "string" && !!substitute.trim();
+    if (!apiKey && provider !== "ollama-local" && !hasApiKeySubstitute) {
       return NextResponse.json({ error: `${isWebCookieProvider ? "Cookie value" : "API Key"} is required` }, { status: 400 });
     }
     const connectionName = name || displayName || AI_PROVIDERS[provider]?.name;
@@ -298,7 +301,7 @@ export async function POST(request) {
     });
 
     // Hide sensitive fields
-    const result = sanitizeConnectionForBrowser(newConnection);
+    const result = toProviderConnectionResponse(newConnection);
 
     return NextResponse.json({ connection: result }, { status: 201 });
   } catch (error) {

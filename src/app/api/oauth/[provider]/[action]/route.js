@@ -35,7 +35,7 @@ import {
   clearZedSession,
 } from "@/lib/oauth/utils/server";
 import { detectIdeInstalled } from "@/lib/oauth/utils/ideDetect";
-import { ZED_HOSTED_CONFIG } from "@/lib/oauth/constants/oauth";
+import { ZED_HOSTED_CONFIG, PROVIDERS as OAUTH_PROVIDERS } from "@/lib/oauth/constants/oauth";
 
 async function completeXaiManualCode(code, state) {
   const session = state ? getXaiSessionStatus(state) : null;
@@ -206,6 +206,7 @@ export async function GET(request, { params }) {
       
       // Providers that don't use PKCE for device code (Grok CLI HAR: plain device_code, no challenge)
       const noPkceDeviceProviders = [
+        OAUTH_PROVIDERS.NOUS,
         "github",
         "kiro",
         "kimi",
@@ -381,7 +382,7 @@ export async function POST(request, { params }) {
       }
 
       // Providers that don't use PKCE for device code
-      const noPkceProviders = ["github", "kimi", "kimi-coding", "kilocode", "codebuddy-cn", "codebuddy-intl"];
+      const noPkceProviders = ["github", "kimi", "kimi-coding", "kilocode", "codebuddy-cn", "codebuddy-intl", OAUTH_PROVIDERS.NOUS];
       let result;
       if (noPkceProviders.includes(provider)) {
         // kimi needs extraData._kimiDeviceId for stable X-Msh-Device-Id (CLIProxyAPI parity)

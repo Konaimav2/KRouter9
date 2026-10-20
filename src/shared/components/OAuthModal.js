@@ -5,6 +5,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import PropTypes from "prop-types";
 import { Modal, Button, Input } from "@/shared/components";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
+import { PROVIDERS as OAUTH_PROVIDERS } from "@/lib/oauth/constants/oauth";
 
 // Providers using the dynamic-port local callback proxy.
 // Browser OAuth: popup → auto callback → auto exchange → poll-status.
@@ -226,6 +227,7 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
 
       // Device code flow providers (must match oauth providers with flowType: "device_code")
       const deviceCodeProviders = [
+        OAUTH_PROVIDERS.NOUS,
         "github",
         "kiro",
         "kimi",

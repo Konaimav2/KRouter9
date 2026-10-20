@@ -4,8 +4,9 @@ import { formatRetryAfter, checkFallbackError, isClientFault, isModelScopedError
 import { MAX_RATE_LIMIT_COOLDOWN_MS } from "open-sse/config/errorConfig.js";
 import { resolveProviderId, getProviderAlias, FREE_PROVIDERS } from "@/shared/constants/providers.js";
 import { getDisabledByProvider } from "@/lib/disabledModelsDb";
-import { getAntigravityQuotaCache } from "./antigravityQuota.js";
+import { getAntigravityQuotaCache, getAntigravityModelQuota } from "./antigravityQuota.js";
 import * as log from "../utils/logger.js";
+import { extractApiKey as extractRequestApiKey } from "@/lib/apiKeyCredentials.js";
 
 // Mutex to prevent race conditions during account selection
 let selectionMutex = Promise.resolve();
@@ -132,7 +133,7 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
       if (isModelLockActive(c, model)) return false;
       // Antigravity: skip if live quota exhausted for this model
       if (isAntigravity && model && antigravityQuotaCache) {
-        const quota = antigravityQuotaCache.get(c.id)?.[model];
+        const quota = getAntigravityModelQuota(antigravityQuotaCache.get(c.id), model);
         if (quota && quota.remainingPercentage <= 0 && quota.resetAt && new Date(quota.resetAt).getTime() > Date.now()) {
           const account = c.id?.slice(0, 8) || "unknown";
           log.info("AG_QUOTA", `${account} | CACHE_BLOCK ${model} — skip upstream until ${quota.resetAt}`);
@@ -158,7 +159,7 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
       const expiries = lockedConns.map(c => getEarliestModelLockUntil(c)).filter(Boolean);
       if (isAntigravity && model && antigravityQuotaCache) {
         connections.forEach((c) => {
-          const resetAt = antigravityQuotaCache.get(c.id)?.[model]?.resetAt;
+          const resetAt = getAntigravityModelQuota(antigravityQuotaCache.get(c.id), model)?.resetAt;
           if (resetAt && new Date(resetAt).getTime() > Date.now()) expiries.push(resetAt);
         });
       }
@@ -443,19 +444,7 @@ export async function clearAccountError(connectionId, currentConnection, model =
  * Extract API key from request headers
  */
 export function extractApiKey(request) {
-  // Check Authorization header first
-  const authHeader = request.headers.get("Authorization");
-  if (authHeader?.startsWith("Bearer ")) {
-    return authHeader.slice(7);
-  }
-
-  // Check Anthropic x-api-key header
-  const xApiKey = request.headers.get("x-api-key");
-  if (xApiKey) {
-    return xApiKey;
-  }
-
-  return null;
+  return extractRequestApiKey(request);
 }
 
 /**

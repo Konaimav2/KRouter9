@@ -13,6 +13,7 @@ import { resolveGrokCliModels } from "open-sse/services/grokCliModels.js";
 import { resolveConnectionProxyConfig } from "@/lib/network/connectionProxy";
 import { resolveCursorModels } from "open-sse/services/cursorModels.js";
 import { resolveClineModels, resolveClinepassModels } from "open-sse/services/clinepassModels.js";
+import { NOUS_PROVIDER_ID, NOUS_MODELS_URL, normalizeNousModels } from "open-sse/services/nous.js";
 
 const GEMINI_CLI_MODELS_URL = "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels";
 
@@ -101,6 +102,12 @@ const buildOAuthResolver = ({ refreshFn, fetchFn, parseFn, errorLabel }) => asyn
 
 // Provider models endpoints configuration
 const PROVIDER_MODELS_CONFIG = {
+  [NOUS_PROVIDER_ID]: {
+    ...createOpenAIModelsConfig(NOUS_MODELS_URL),
+    parseResponse: (data) => normalizeNousModels(data).map((model) => ({
+      ...model, id: `${NOUS_PROVIDER_ID}/${model.id}`, upstreamModelId: model.id,
+    })),
+  },
   claude: {
     url: "https://api.anthropic.com/v1/models",
     method: "GET",

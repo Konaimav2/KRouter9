@@ -119,6 +119,23 @@ export class AntigravityExecutor extends BaseExecutor {
     super("antigravity", PROVIDERS.antigravity);
   }
 
+  parseError(response, bodyText) {
+    if ((response.status === 429 || response.status === 409) && bodyText) {
+      try {
+        const err = JSON.parse(bodyText)?.error;
+        const details = Array.isArray(err?.details) ? err.details : [];
+        for (const detail of details) {
+          const timestamp = Date.parse(detail?.metadata?.quotaResetTimeStamp);
+          const seconds = typeof detail?.retryDelay === "string" ? parseFloat(detail.retryDelay) : NaN;
+          const resetsAtMs = timestamp > Date.now() ? timestamp
+            : Number.isFinite(seconds) && seconds > 0 ? Date.now() + Math.round(seconds * 1000) : null;
+          if (resetsAtMs > Date.now()) return { status: response.status, message: err?.message || bodyText, resetsAtMs };
+        }
+      } catch { /* Fall back to the standard error parser. */ }
+    }
+    return super.parseError(response, bodyText);
+  }
+
   buildUrl(model, stream, urlIndex = 0) {
     const baseUrls = this.getBaseUrls();
     const baseUrl = baseUrls[urlIndex] || baseUrls[0];

@@ -56,7 +56,7 @@ describe("new providers registry wiring (agentrouter/bai-api/tokenharbor)", () =
     }
   });
 
-  it("keeps index length consistent (119 baseline + 4 new = 123)", () => {
-    expect(REGISTRY.length).toBe(123);
+  it("keeps index length consistent (123 baseline + nous/opencode-zen/bedrock/bedrock-xai = 127)", () => {
+    expect(REGISTRY.length).toBe(127);
   });
 });

@@ -18,6 +18,9 @@ export const TOKEN_REFRESH_SPAM_PATTERNS = [
   // log?.info?.("TOKEN", `${provider} refreshed`) (default.js),
   // `${PROVIDER} | refreshed for embeddings|image generation|video …`.
   /\[TOKEN\][^\n]*\brefreshed\b/i,
+  // Console capture joins tag/message args without brackets. Match only the
+  // complete provider refresh-success message, not TOKEN mentioned in other logs.
+  /^TOKEN [a-z][a-z0-9-]*(?: (?:CLI|token))? refreshed$/i,
   /\[TOKEN\][^\n]*\brefresh (failed|error|threw)\b/i,
   /onCredentialsRefreshed/,
 ];

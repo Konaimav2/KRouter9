@@ -28,13 +28,25 @@ export async function GET() {
 
 // POST /api/models/custom - Add custom model
 export async function POST(request) {
+  let body;
   try {
-    const { providerAlias, id, type, name, caps } = await request.json();
-    if (!providerAlias || !id) {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json({ error: "JSON object required" }, { status: 400 });
+  }
+  try {
+    const { providerAlias, id, type, name, caps, contextWindow } = body;
+    if (typeof providerAlias !== "string" || !providerAlias.trim() || typeof id !== "string" || !id.trim()) {
       return NextResponse.json({ error: "providerAlias and id required" }, { status: 400 });
     }
+    if (contextWindow !== undefined && (!Number.isFinite(contextWindow) || contextWindow <= 0)) {
+      return NextResponse.json({ error: "contextWindow must be a positive finite number" }, { status: 400 });
+    }
     const cleanCaps = sanitizeCaps(caps);
-    const added = await addCustomModel({ providerAlias, id, type: type || "llm", name, ...(cleanCaps ? { caps: cleanCaps } : {}) });
+    const added = await addCustomModel({ providerAlias, id, type: type || "llm", name, ...(cleanCaps ? { caps: cleanCaps } : {}), ...(contextWindow !== undefined ? { contextWindow } : {}) });
     invalidateDeclaredModelCaps();
     return NextResponse.json({ success: true, added });
   } catch (error) {

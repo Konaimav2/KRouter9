@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { EventEmitter } from "node:events";
 import os from "node:os";
+import fs from "node:fs";
 
 // `vi.hoisted` runs before the mocked module is evaluated, so the factory can
 // safely reference the mock fn.
@@ -398,8 +399,20 @@ describe("DevinCliExecutor ACP session/new", () => {
   });
 
   it("does not set XDG_CONFIG_HOME when DEVIN_MCP_SERVERS is absent", async () => {
-    const { child } = await runExecute();
-    expect(child.opts.env.XDG_CONFIG_HOME).toBeUndefined();
+    const inheritedXdg = process.env.XDG_CONFIG_HOME;
+    vi.stubEnv("DEVIN_MCP_SERVERS", undefined);
+    const mkdtemp = vi.spyOn(fs, "mkdtempSync");
+    const writeFile = vi.spyOn(fs, "writeFileSync");
+    try {
+      const { child } = await runExecute();
+      expect(child.opts.env.XDG_CONFIG_HOME).toBe(inheritedXdg);
+      expect(mkdtemp).not.toHaveBeenCalled();
+      expect(writeFile).not.toHaveBeenCalled();
+    } finally {
+      mkdtemp.mockRestore();
+      writeFile.mockRestore();
+      vi.unstubAllEnvs();
+    }
   });
 
   it("exposes body.tools as an MCP server (sets XDG_CONFIG_HOME + writes script)", async () => {

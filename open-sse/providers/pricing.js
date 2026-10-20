@@ -10,6 +10,17 @@
  * Cover all known models; deduplicated across providers.
  */
 export const MODEL_PRICING = {
+  "claude-opus-5-5": { input: 4, output: 20, cached: 0.2, reasoning: 20, cache_creation: 5 },
+  "claude-opus-5-5-thinking": { input: 4, output: 20, cached: 0.2, reasoning: 20, cache_creation: 5 },
+  "claude-opus-5-5-high": { input: 4, output: 20, cached: 0.2, reasoning: 20, cache_creation: 5 },
+  "claude-opus-5-5-medium": { input: 4, output: 20, cached: 0.2, reasoning: 20, cache_creation: 5 },
+  "claude-opus-5-5-low": { input: 4, output: 20, cached: 0.2, reasoning: 20, cache_creation: 5 },
+  "claude-sonnet-5-5": { input: 2, output: 10, cached: 0.2, reasoning: 10, cache_creation: 2.5 },
+  "claude-sonnet-5-5-thinking": { input: 2, output: 10, cached: 0.2, reasoning: 10, cache_creation: 2.5 },
+  "claude-sonnet-5-5-high": { input: 2, output: 10, cached: 0.2, reasoning: 10, cache_creation: 2.5 },
+  "claude-sonnet-5-5-medium": { input: 2, output: 10, cached: 0.2, reasoning: 10, cache_creation: 2.5 },
+  "claude-sonnet-5-5-low": { input: 2, output: 10, cached: 0.2, reasoning: 10, cache_creation: 2.5 },
+  "claude-sonnet-5": { input: 2, output: 10, cached: 0.2, reasoning: 10, cache_creation: 2.5 },
   // === Anthropic / Claude ===
   "claude-opus-4-6":              { input: 5.00,  output: 25.00, cached: 0.50,  reasoning: 25.00,  cache_creation: 6.25  },
   "claude-opus-4-5-20251101":     { input: 5.00,  output: 25.00, cached: 0.50,  reasoning: 25.00,  cache_creation: 6.25  },

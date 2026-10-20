@@ -3,6 +3,7 @@ import { AI_PROVIDERS, ALIAS_TO_ID } from "@/shared/constants/providers";
 import { getModelKind } from "@/shared/constants/models";
 import { buildModelsList } from "@/app/api/v1/models/route.js";
 import { getProviderConnections } from "@/lib/localDb";
+import { authorizeModelCatalog, isCatalogModelAllowed, modelCatalogJson, modelCatalogNotFound } from "@/lib/modelCatalogAccess.js";
 
 const KIND_ENDPOINT = {
   llm: "/v1/chat/completions",
@@ -86,39 +87,40 @@ export async function OPTIONS() {
 
 // GET /v1/models/info?id={alias}/{modelId} — metadata for a single model
 export async function GET(request) {
-  const { searchParams } = new URL(request.url);
-  const id = searchParams.get("id");
-  const kind = searchParams.get("kind");
-  if (!id) {
-    return Response.json(
-      { error: { message: "Missing required query param: id (e.g. ?id=openai/dall-e-3)", type: "invalid_request_error" } },
-      { status: 400, headers: { "Access-Control-Allow-Origin": "*" } },
-    );
+  const access = await authorizeModelCatalog(request);
+  if (access.response) return access.response;
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
+    const kind = searchParams.get("kind");
+    if (!id) {
+      return modelCatalogJson(
+        { error: { message: "Missing required query param: id (e.g. ?id=openai/dall-e-3)", type: "invalid_request_error" } },
+        access,
+        { status: 400 },
+      );
+    }
+    if (!isCatalogModelAllowed(access, id)) return modelCatalogNotFound(access);
+    const alias = id.split("/", 1)[0];
+    const codexConnections = (await getProviderConnections())
+      .filter((conn) => conn.provider === "codex" && conn.isActive !== false);
+    const codexPrefixes = new Set(codexConnections.map((conn) => conn.providerSpecificData?.prefix?.trim() || "cx"));
+    const isCodex = alias === "cx" || alias === "codex" || codexPrefixes.has(alias);
+    // Codex OAuth is account-scoped: the static registry is neither an entitlement list
+    // nor an authoritative source for this account's context window.
+    if (isCodex && (!kind || kind === "llm")) {
+      const lookupId = alias === "codex" ? `cx/${id.slice(alias.length + 1)}` : id;
+      const models = await buildModelsList(["llm"]);
+      const live = models.find((model) => model.id === lookupId)
+        || ((alias === "codex" || alias === "cx") && models.find((model) =>
+          codexPrefixes.has(model.owned_by) && model.id === `${model.owned_by}/${id.slice(alias.length + 1)}`));
+      if (live && isCatalogModelAllowed(access, live.id)) return modelCatalogJson({ ...live, name: id.slice(alias.length + 1), kind: "llm", endpoint: KIND_ENDPOINT.llm }, access);
+      return modelCatalogNotFound(access);
+    }
+    const info = lookup(id, kind);
+    if (!info || !isCatalogModelAllowed(access, info.id)) return modelCatalogNotFound(access);
+    return modelCatalogJson(info, access);
+  } catch {
+    return modelCatalogJson({ error: { message: "Failed to fetch model info", type: "server_error" } }, access, { status: 500 });
   }
-  const alias = id.split("/", 1)[0];
-  const codexConnections = (await getProviderConnections())
-    .filter((conn) => conn.provider === "codex" && conn.isActive !== false);
-  const codexPrefixes = new Set(codexConnections.map((conn) => conn.providerSpecificData?.prefix?.trim() || "cx"));
-  const isCodex = alias === "cx" || alias === "codex" || codexPrefixes.has(alias);
-  // Codex OAuth is account-scoped: the static registry is neither an entitlement list
-  // nor an authoritative source for this account's context window.
-  if (isCodex && (!kind || kind === "llm")) {
-    const lookupId = alias === "codex" ? `cx/${id.slice(alias.length + 1)}` : id;
-    const models = await buildModelsList(["llm"]);
-    const live = models.find((model) => model.id === lookupId)
-      || ((alias === "codex" || alias === "cx") && models.find((model) =>
-        codexPrefixes.has(model.owned_by) && model.id === `${model.owned_by}/${id.slice(alias.length + 1)}`));
-    if (live) return Response.json({ ...live, name: id.slice(alias.length + 1), kind: "llm", endpoint: KIND_ENDPOINT.llm },
-      { headers: { "Access-Control-Allow-Origin": "*" } });
-    return Response.json({ error: { message: `Model not found: ${id}`, type: "not_found" } },
-      { status: 404, headers: { "Access-Control-Allow-Origin": "*" } });
-  }
-  const info = lookup(id, kind);
-  if (!info) {
-    return Response.json(
-      { error: { message: `Model not found: ${id}`, type: "not_found" } },
-      { status: 404, headers: { "Access-Control-Allow-Origin": "*" } },
-    );
-  }
-  return Response.json(info, { headers: { "Access-Control-Allow-Origin": "*" } });
 }

@@ -39,6 +39,16 @@ export const BACKOFF_CONFIG = {
 // Default cooldown for transient/unknown errors
 export const TRANSIENT_COOLDOWN_MS = 30 * 1000;
 
+// Request refusals do not describe account health, even when relayed as 5xx.
+export const CONTENT_POLICY_REFUSAL_TEXTS = [
+  "cyber_policy", "content_policy_violation", "content policy",
+  "blocked by policy", "safety policy", "refusal",
+];
+export const PERSISTENT_FORBIDDEN_TEXTS = [
+  "permission denied", "permission_denied", "permission_error",
+  "access denied", "access_denied", "policy",
+];
+
 // Hard cap for provider-reported rate limit cooldown (e.g. codex resets_at can be 5-6h)
 export const MAX_RATE_LIMIT_COOLDOWN_MS = 30 * 60 * 1000;
 

@@ -63,6 +63,7 @@ import p60 from "./mistral.js";
 import p61 from "./mmf.js";
 import p62 from "./nanobanana.js";
 import p63 from "./nebius.js";
+import nous from "./nous.js";
 import p64 from "./nvidia.js";
 import p65 from "./ollama-local.js";
 import p66 from "./ollama.js";
@@ -127,6 +128,9 @@ import p124 from "./agentrouter.js";
 import p125 from "./bai-api.js";
 import p126 from "./tokenharbor.js";
 import p127 from "./jina-reader-free.js";
+import opencodeZen from "./opencode-zen.js";
+import bedrock from "./bedrock.js";
+import bedrockXai from "./bedrock-xai.js";
 
 export default [
   p0,
@@ -193,6 +197,7 @@ export default [
   p61,
   p62,
   p63,
+  nous,
   p64,
   p65,
   p66,
@@ -255,4 +260,7 @@ export default [
   p125,
   p126,
   p127,
+  opencodeZen,
+  bedrock,
+  bedrockXai,
 ];

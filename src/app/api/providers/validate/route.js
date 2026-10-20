@@ -5,7 +5,11 @@ import { getDefaultModel } from "open-sse/config/providerModels.js";
 import { resolveOllamaLocalHost, resolveXiaomiTokenplanBaseUrl, PROVIDERS } from "open-sse/config/providers.js";
 import { openaiToCommandCodeRequest } from "open-sse/translator/request/openai-to-commandcode.js";
 import { resolveQoderCredentials, resolveQoderModels } from "open-sse/services/qoderModels.js";
+import {
+  NOUS_PROVIDER_ID, createNousApiKeyProbe, getNousApiKeyValidationError, isNousApiKeyAccepted,
+} from "open-sse/services/nous.js";
 import { normalizeProviderId } from "@/lib/providerNormalization";
+import { probeBedrockCredentials } from "open-sse/executors/bedrock.js";
 
 // Probe a webSearch/webFetch provider using its searchConfig/fetchConfig.
 // Returns true if API key is accepted (status !== 401 && !== 403).
@@ -89,7 +93,10 @@ export async function POST(request) {
     const { apiKey, providerSpecificData } = body;
 
     const isNoAuth = AI_PROVIDERS[provider]?.noAuth === true;
-    if (!provider || (!apiKey && provider !== "ollama-local" && !isNoAuth)) {
+    const apiKeySubstitute = AI_PROVIDERS[provider]?.apiKeyOptionalWith;
+    const substitute = apiKeySubstitute && providerSpecificData?.[apiKeySubstitute];
+    const hasApiKeySubstitute = typeof substitute === "string" && !!substitute.trim();
+    if (!provider || (!apiKey && provider !== "ollama-local" && !isNoAuth && !hasApiKeySubstitute)) {
       return NextResponse.json({ error: "Provider and API key required" }, { status: 400 });
     }
 
@@ -234,6 +241,11 @@ export async function POST(request) {
         });
       }
 
+      // AWS providers require a signed control-plane probe, not a bearer key.
+      if (AI_PROVIDERS[provider]?.credentialForm === "aws") {
+        return NextResponse.json(await probeBedrockCredentials({ apiKey, providerSpecificData }, fetch));
+      }
+
       // Generic probe for webSearch/webFetch providers (config-driven)
       const webResult = await probeWebProvider(provider, apiKey);
       if (webResult !== null) {
@@ -253,6 +265,14 @@ export async function POST(request) {
       }
 
       switch (provider) {
+        case NOUS_PROVIDER_ID: {
+          // /models is public and cannot prove that a Portal key is valid.
+          const probe = createNousApiKeyProbe(apiKey);
+          const res = await fetch(probe.url, { ...probe.options, signal: AbortSignal.timeout(8000) });
+          isValid = isNousApiKeyAccepted(res.status);
+          if (!isValid) error = getNousApiKeyValidationError(res.status);
+          break;
+        }
         case "openai":
           const openaiRes = await fetch("https://api.openai.com/v1/models", {
             headers: { "Authorization": `Bearer ${apiKey}` },

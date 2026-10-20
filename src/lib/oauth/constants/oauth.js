@@ -4,6 +4,7 @@
 import { platform, arch } from "os";
 import { ANTIGRAVITY_OAUTH_CLIENT, GOOGLE_OAUTH_CLIENT } from "open-sse/providers/shared.js";
 import { PROVIDER_OAUTH, PROVIDERS as REGISTRY_PROVIDERS } from "open-sse/providers/index.js";
+import { NOUS_PROVIDER_ID, NOUS_INFERENCE_BASE_URL } from "open-sse/providers/registry/nous.js";
 
 /**
  * Get the platform enum value based on the current OS.
@@ -206,6 +207,12 @@ export const ZED_HOSTED_CONFIG = {
   oauthTimeoutMs: 600_000,
 };
 
+// Nous Portal device-code flow shares its endpoints with engine token refresh.
+export const NOUS_CONFIG = {
+  ...PROVIDER_OAUTH[NOUS_PROVIDER_ID],
+  inferenceBaseUrl: NOUS_INFERENCE_BASE_URL,
+};
+
 // OAuth timeout (5 minutes)
 export const OAUTH_TIMEOUT = 300000;
 
@@ -234,4 +241,5 @@ export const PROVIDERS = {
   TRAE: "trae",
   WINDSURF: "windsurf",
   ZED: "zed",
+  NOUS: NOUS_PROVIDER_ID,
 };

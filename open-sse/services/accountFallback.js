@@ -1,4 +1,9 @@
-import { ERROR_RULES, MODEL_SCOPED_ERROR_TEXTS, BACKOFF_CONFIG, TRANSIENT_COOLDOWN_MS } from "../config/errorConfig.js";
+import { ERROR_RULES, MODEL_SCOPED_ERROR_TEXTS, BACKOFF_CONFIG, TRANSIENT_COOLDOWN_MS, CONTENT_POLICY_REFUSAL_TEXTS, PERSISTENT_FORBIDDEN_TEXTS } from "../config/errorConfig.js";
+
+export function isContentPolicyRefusal(errorText) {
+  const lower = (typeof errorText === "string" ? errorText : JSON.stringify(errorText) || "").toLowerCase();
+  return CONTENT_POLICY_REFUSAL_TEXTS.some((text) => lower.includes(text));
+}
 
 /**
  * Calculate exponential backoff cooldown for rate limits (429)
@@ -52,6 +57,11 @@ const PROVIDER_FAULT_HINTS = [
   "overloaded",
   "no credentials",
   "request not allowed",
+  "invalid api key",
+  "invalid token",
+  "unauthorized",
+  "not eligible",
+  "validation_required",
 ];
 
 /**
@@ -61,6 +71,7 @@ const PROVIDER_FAULT_HINTS = [
  * rotates instead of pinning routing to a broken account.
  */
 export function isClientFault(status, errorText) {
+  if (status === 410 || isContentPolicyRefusal(errorText)) return true;
   const lower = errorText
     ? (typeof errorText === "string" ? errorText : JSON.stringify(errorText)).toLowerCase()
     : "";
@@ -72,6 +83,7 @@ export function isClientFault(status, errorText) {
   // so a genuine transient (e.g. 503 "queue too long") still falls back.
   if (status >= 500) return false;
   if (PROVIDER_FAULT_HINTS.some((h) => lower.includes(h))) return false;
+  if (status === 403 && PERSISTENT_FORBIDDEN_TEXTS.some((h) => lower.includes(h))) return true;
   if (CLIENT_FAULT_HINTS.some((h) => lower.includes(h))) return true;
   return CLIENT_FAULT_STATUSES.has(status) && !PROVIDER_FAULT_HINTS.some((h) => lower.includes(h));
 }
@@ -156,6 +168,10 @@ export function checkFallbackError(status, errorText, backoffLevel = 0) {
 export const MODEL_SCOPED_LOCK_MS = 5 * 60 * 1000;
 
 export function isModelScopedError(status, errorText, modelId = null) {
+  if (isContentPolicyRefusal(errorText)) return false;
+  // A retired model is still model-scoped diagnostically, but the anchored
+  // account-lock path must not park a credential or retry a permanent 410.
+  if (status === 410 && modelId) return false;
   // Only 4xx: a 5xx is a server fault and already falls back everywhere.
   if (!(status >= 400 && status < 500)) return false;
 

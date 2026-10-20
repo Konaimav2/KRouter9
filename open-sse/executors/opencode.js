@@ -10,29 +10,22 @@ import { isMuseSparkModel } from "../providers/models/helpers.js";
 import { applyFingerprintTools } from "../utils/opencodeFingerprint.js";
 import { ANTHROPIC_API_VERSION } from "../providers/shared.js";
 
-const OPENCODE_UA = "opencode/1.18.31";
+const OPENCODE_UA = "opencode/latest/2.0.26/cli";
 
-// Free-tier fingerprint: upstream requires the lowercase file-search quartet
-// (bash/glob/grep/read) on both endpoints — 0-3 → 403 (upstream #4188,
-// merged as 822aa958). Implemented in the shared fingerprint module (case
-// canonicalization + rename restoration); this executor only wires it in.
+// The free /inference/v1 lane requires the v2 read/shell fingerprint.
 const MAX_SESSION_LENGTH = 256;
 const SESSION_HEADER = "x-opencode-session";
 const SESSION_FIELD = "_opencodeSession";
-const REQ_FIELD = "_opencodeRequest";
 export const OPENCODE_SESSION_RE = /^ses_[0-9a-f]{12}[0-9A-Za-z]{14}$/;
 export const OPENCODE_REQUEST_RE = /^msg_[0-9a-f]{12}[0-9A-Za-z]{14}$/;
 const BASE62_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
 function hasValidOpencodeVersion(ua) {
-  const m = String(ua || "").match(/opencode\/(\d+)\.(\d+)(?:\.(\d+))?/i);
-  if (!m) return false;
-  const major = parseInt(m[1], 10);
-  const minor = parseInt(m[2], 10);
-  return major > 1 || (major === 1 && minor >= 17);
+  const m = String(ua || "").match(/^opencode\/[a-z0-9-]+\/(\d+)\.\d+\.\d+\/[a-z0-9-]+$/i);
+  return !!m && parseInt(m[1], 10) >= 2;
 }
 
-// Models served by /zen/v1/responses; every other model stays on /chat/completions.
+// Models served by /inference/v1/responses; others stay on /chat/completions.
 const RESPONSES_MODELS = new Set([
   "muse-spark-1.2-contributor-free",
   "muse-spark-1.3-contributor-free",
@@ -86,7 +79,9 @@ export function translateSessionId(sessionId, clientTool = "") {
     .createHash("sha256")
     .update(`opencode\0${clientTool || "generic"}\0${sessionId || ""}`)
     .digest();
-  const timeHex = digest.subarray(0, 6).toString("hex");
+  // Match the CLI's descending timestamp with a real, small counter (1).
+  const time = BigInt(`0x${digest.subarray(0, 5).toString("hex")}`) & ((1n << 36n) - 1n);
+  const timeHex = (~(time * 0x1000n + 1n) & ((1n << 48n) - 1n)).toString(16).padStart(12, "0");
   let randomPart = "";
   for (let i = 6; i < 20; i++) {
     randomPart += BASE62_CHARS[digest[i] % 62];
@@ -207,13 +202,6 @@ export function deriveRequestId(sessionId, body) {
   return OPENCODE_REQUEST_RE.test(id) ? id : generateRequestId();
 }
 
-function normalizeRequestId(value) {
-  if (typeof value !== "string") return null;
-  const normalized = value.trim();
-  if (!normalized || normalized.length > MAX_SESSION_LENGTH) return null;
-  return OPENCODE_REQUEST_RE.test(normalized) ? normalized : null;
-}
-
 function bodyHasSessionHints(body) {
   try {
     if (!body || typeof body !== "object") return false;
@@ -317,7 +305,6 @@ export class OpenCodeExecutor extends BaseExecutor {
     return {
       ...sourceCredentials,
       [SESSION_FIELD]: resolved,
-      [REQ_FIELD]: deriveRequestId(resolved, body),
     };
   }
 
@@ -340,8 +327,7 @@ export class OpenCodeExecutor extends BaseExecutor {
       delete body.max_tokens;
       delete body.max_completion_tokens;
       normalizeOpencodeReasoning(model, body);
-      // Free-tier fingerprint quartet required even when an agent client
-      // already supplied tools; skipping here triggers 403 FreeTierError.
+      // Required even when the caller already supplied its own tools.
       applyFingerprintTools(body, true);
     } else if (body && typeof body === "object") {
       applyFingerprintTools(body, false);
@@ -356,8 +342,8 @@ export class OpenCodeExecutor extends BaseExecutor {
   buildUrl(model) {
     const base = this.config.baseUrl;
     return isResponsesModel(model)
-      ? `${base}/zen/v1/responses`
-      : `${base}/zen/v1/chat/completions`;
+      ? `${base}/inference/v1/responses`
+      : `${base}/inference/v1/chat/completions`;
   }
 
   buildHeaders(credentials, stream = true) {
@@ -370,16 +356,15 @@ export class OpenCodeExecutor extends BaseExecutor {
 
     const session = credentials?.[SESSION_FIELD] || this.prepareRequestCredentials({ credentials })[SESSION_FIELD];
 
-    const downstreamReq = normalizeRequestId(lower["x-opencode-request"]);
-    const requestId = credentials?.[REQ_FIELD] || downstreamReq || generateRequestId();
-
     const headers = {
       "Content-Type": "application/json",
       "Authorization": "Bearer public",
       "User-Agent": isOpencodeDownstream ? downstreamUa : OPENCODE_UA,
-      "x-opencode-client": lower["x-opencode-client"] || "desktop",
+      "x-opencode-client": lower["x-opencode-client"] || "cli",
       "x-opencode-session": session,
-      "x-opencode-request": requestId,
+      "x-opencode-session-id": session,
+      "x-session-affinity": session,
+      "x-session-id": session,
       "x-opencode-project": lower["x-opencode-project"] || "global",
       "Accept": stream ? "text/event-stream" : "*/*",
     };

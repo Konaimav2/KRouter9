@@ -28,7 +28,7 @@ describe("provider display split (E1)", () => {
 
   it("helpers still work after split", async () => {
     const m = await import("../../src/shared/constants/providers.js");
-    expect(m.ALIAS_TO_ID.kr).toBe("kiro");
+    expect(m.ALIAS_TO_ID.kiro).toBe("kiro");
     expect(m.getProvidersByKind("tts").length).toBeGreaterThan(0);
   });
 
@@ -36,5 +36,22 @@ describe("provider display split (E1)", () => {
     const { FREE_TIER_PROVIDERS } = await import("../../src/shared/constants/providers.js");
     expect(FREE_TIER_PROVIDERS["cloudflare-ai"].authType).toBe("apikey");
     expect(FREE_TIER_PROVIDERS["cloudflare-ai"].authModes).toEqual(["apikey"]);
+  });
+
+  it("Kimchi keeps free-tier grouping and both authentication modes", async () => {
+    const {
+      FREE_TIER_PROVIDERS, AI_PROVIDERS, OAUTH_PROVIDERS,
+      APIKEY_PROVIDERS, getProviderByAlias,
+    } = await import("../../src/shared/constants/providers.js");
+    const kimchi = FREE_TIER_PROVIDERS.kimchi;
+    expect(kimchi).toBeDefined();
+    expect(kimchi.id).toBe("kimchi");
+    expect(kimchi.alias).toBe("kimchi");
+    expect(kimchi.authModes).toEqual(["oauth", "apikey"]);
+    expect(kimchi.hasOAuth).toBe(true);
+    expect(AI_PROVIDERS.kimchi).toBe(kimchi);
+    expect(OAUTH_PROVIDERS.kimchi).toBeUndefined();
+    expect(APIKEY_PROVIDERS.kimchi).toBeUndefined();
+    expect(getProviderByAlias("kimchi")).toBe(kimchi);
   });
 });
