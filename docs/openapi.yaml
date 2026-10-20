@@ -1,0 +1,452 @@
+openapi: 3.0.3
+info:
+  title: KRouter9 API
+  version: "3.2.1"
+  description: |
+    KRouter9 is an OpenAI-compatible AI routing gateway. The `/v1/*` surface
+    is the public LLM API; the `/api/*` surface is the dashboard/management API.
+
+    ## Authentication
+    - **LLM API (`/v1/*`)** — send your KRouter9 API key as
+      `Authorization: Bearer <key>`, `x-api-key: <key>`, or `x-goog-api-key`.
+      When `requireApiKey` is disabled, loopback requests are allowed without a
+      key. Per-key RPM/TPM limits and credit/token quotas are enforced (0 =
+      unlimited).
+    - **Dashboard API (`/api/*`)** — same-origin session cookie/JWT or the CLI
+      token header `x-9r-cli-token`. Remote callers may instead present a valid
+      API key.
+    - **Dashboard chat (`/api/dashboard/chat/completions`)** — always requires a
+      dashboard session or CLI token (never the `requireLogin=false` bypass).
+
+    ## Errors
+    Errors use the OpenAI envelope:
+    ```json
+    { "error": { "message": "...", "type": "...", "code": "..." } }
+    ```
+    Common statuses: 400 bad request, 401 missing/invalid key, 402 credit
+    exhausted, 403 model not allowed for the key, 404 model not found,
+    429 rate/token limit, 502/503/504 upstream failure.
+servers:
+  - url: http://localhost:20128
+    description: Local (paths already include /v1)
+
+tags:
+  - name: Chat
+  - name: Responses
+  - name: Messages
+  - name: Embeddings
+  - name: Images
+  - name: Audio
+  - name: Video
+  - name: Search
+  - name: Moderation
+  - name: Models
+
+paths:
+  /v1/chat/completions:
+    post:
+      tags: [Chat]
+      summary: Create a chat completion (OpenAI-compatible)
+      security:
+        - bearerAuth: []
+        - apiKeyHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [model, messages]
+              properties:
+                model:
+                  type: string
+                  description: "Provider prefix is optional; combos and aliases resolve here."
+                  example: oc/muse-spark-1.3-contributor-free
+                messages:
+                  type: array
+                  items:
+                    type: object
+                    required: [role]
+                    properties:
+                      role: { type: string, enum: [system, user, assistant, tool] }
+                      content: {}
+                stream: { type: boolean, default: false }
+                temperature: { type: number }
+                top_p: { type: number }
+                max_tokens: { type: integer }
+                tools: { type: array, items: { type: object } }
+                tool_choice: {}
+                response_format: { type: object }
+      responses:
+        "200":
+          description: Chat completion. `text/event-stream` when `stream=true`.
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/UpstreamError" }
+
+  /v1/responses:
+    post:
+      tags: [Responses]
+      summary: Create a Responses API completion
+      security:
+        - bearerAuth: []
+        - apiKeyHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                model: { type: string }
+                input: {}
+                stream: { type: boolean, default: false }
+                previous_response_id: { type: string }
+      responses:
+        "200": { description: Responses object or SSE stream when `stream=true` }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/responses/compact:
+    post:
+      tags: [Responses]
+      summary: Compact a Responses conversation (summary)
+      security:
+        - bearerAuth: []
+        - apiKeyHeader: []
+      responses:
+        "200": { description: Compacted conversation }
+
+  /v1/messages:
+    post:
+      tags: [Messages]
+      summary: Anthropic Messages API (Claude-compatible)
+      security:
+        - bearerAuth: []
+        - apiKeyHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [model, messages]
+              properties:
+                model: { type: string }
+                messages: { type: array, items: { type: object } }
+                system: {}
+                max_tokens: { type: integer }
+                stream: { type: boolean, default: false }
+      responses:
+        "200": { description: Claude message object or SSE stream }
+
+  /v1/messages/count_tokens:
+    post:
+      tags: [Messages]
+      summary: Count tokens for a Messages request
+      security:
+        - bearerAuth: []
+        - apiKeyHeader: []
+      responses:
+        "200":
+          description: Token count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  input_tokens: { type: integer }
+
+  /v1/embeddings:
+    post:
+      tags: [Embeddings]
+      summary: Create embeddings
+      security:
+        - bearerAuth: []
+        - apiKeyHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [model, input]
+              properties:
+                model: { type: string }
+                input: {}
+      responses:
+        "200": { description: Embeddings response }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+
+  /v1/images/generations:
+    post:
+      tags: [Images]
+      summary: Generate an image
+      security:
+        - bearerAuth: []
+        - apiKeyHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [model, prompt]
+              properties:
+                model: { type: string }
+                prompt: { type: string }
+                n: { type: integer }
+                size: { type: string }
+                response_format: { type: string, enum: [url, b64_json] }
+      responses:
+        "200": { description: Image generation result }
+
+  /v1/audio/speech:
+    post:
+      tags: [Audio]
+      summary: Text-to-speech
+      security:
+        - bearerAuth: []
+        - apiKeyHeader: []
+      responses:
+        "200": { description: Audio bytes or JSON }
+
+  /v1/audio/transcriptions:
+    post:
+      tags: [Audio]
+      summary: Speech-to-text (multipart)
+      security:
+        - bearerAuth: []
+        - apiKeyHeader: []
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                model: { type: string }
+                file: { type: string, format: binary }
+      responses:
+        "200": { description: Transcription }
+
+  /v1/audio/voices:
+    get:
+      tags: [Audio]
+      summary: List available TTS voices
+      security:
+        - bearerAuth: []
+        - apiKeyHeader: []
+      responses:
+        "200": { description: Voice list }
+
+  /v1/videos/generations:
+    post:
+      tags: [Video]
+      summary: Create a video generation job
+      security:
+        - bearerAuth: []
+        - apiKeyHeader: []
+      responses:
+        "200": { description: Job reference }
+
+  /v1/videos/{id}:
+    get:
+      tags: [Video]
+      summary: Get a video job status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      security:
+        - bearerAuth: []
+        - apiKeyHeader: []
+      responses:
+        "200": { description: Job status }
+
+  /v1/videos/edits:
+    post:
+      tags: [Video]
+      summary: Edit a video
+      security:
+        - bearerAuth: []
+        - apiKeyHeader: []
+      responses:
+        "200": { description: Job reference }
+
+  /v1/videos/extensions:
+    post:
+      tags: [Video]
+      summary: Extend a video
+      security:
+        - bearerAuth: []
+        - apiKeyHeader: []
+      responses:
+        "200": { description: Job reference }
+
+  /v1/search:
+    post:
+      tags: [Search]
+      summary: Web search
+      security:
+        - bearerAuth: []
+        - apiKeyHeader: []
+      responses:
+        "200": { description: Search results }
+
+  /v1/web/fetch:
+    post:
+      tags: [Search]
+      summary: Fetch and extract a web page
+      security:
+        - bearerAuth: []
+        - apiKeyHeader: []
+      responses:
+        "200": { description: Page content }
+
+  /v1/rerank:
+    post:
+      tags: [Search]
+      summary: Rerank documents
+      security:
+        - bearerAuth: []
+        - apiKeyHeader: []
+      responses:
+        "200": { description: Ranked results }
+
+  /v1/moderations:
+    post:
+      tags: [Moderation]
+      summary: Content moderation
+      security:
+        - bearerAuth: []
+        - apiKeyHeader: []
+      responses:
+        "200": { description: Moderation result }
+
+  /v1/music:
+    post:
+      tags: [Audio]
+      summary: Music generation (stub — returns 501)
+      security:
+        - bearerAuth: []
+        - apiKeyHeader: []
+      responses:
+        "501": { description: Not implemented in this build }
+
+  /v1/ocr:
+    post:
+      tags: [Images]
+      summary: OCR an image
+      security:
+        - bearerAuth: []
+        - apiKeyHeader: []
+      responses:
+        "200": { description: Extracted text }
+
+  /v1/models:
+    get:
+      tags: [Models]
+      summary: List available models
+      security:
+        - bearerAuth: []
+        - apiKeyHeader: []
+      responses:
+        "200":
+          description: OpenAI-style model list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  object: { type: string, example: list }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        object: { type: string, example: model }
+                        owned_by: { type: string }
+
+  /v1/models/info:
+    get:
+      tags: [Models]
+      summary: Model metadata / info
+      security:
+        - bearerAuth: []
+        - apiKeyHeader: []
+      responses:
+        "200": { description: Model info }
+
+  /v1/models/{model}:
+    get:
+      tags: [Models]
+      summary: Get a single model
+      parameters:
+        - name: model
+          in: path
+          required: true
+          schema: { type: string }
+      security:
+        - bearerAuth: []
+        - apiKeyHeader: []
+      responses:
+        "200": { description: Model object }
+
+  /v1/api/chat:
+    post:
+      tags: [Chat]
+      summary: Alternate chat entrypoint
+      security:
+        - bearerAuth: []
+        - apiKeyHeader: []
+      responses:
+        "200": { description: Chat completion }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+    apiKeyHeader:
+      type: apiKey
+      in: header
+      name: x-api-key
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: Missing or invalid API key
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    PaymentRequired:
+      description: API key credit exhausted
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: Rate or token limit exceeded
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    UpstreamError:
+      description: Upstream provider failure
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            message: { type: string }
+            type: { type: string }
+            code: { type: string }
