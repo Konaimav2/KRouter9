@@ -53,6 +53,7 @@ docs/*
 !docs/API-AUTOMATION.md
 !docs/FEATURES.md
 !docs/ARCHITECTURE.md
+!docs/openapi.yaml
 test/*
 open-sse/test/*
 RM.vn.md
