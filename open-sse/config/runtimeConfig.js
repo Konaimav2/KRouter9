@@ -59,6 +59,15 @@ export const STREAM_FIRST_CHUNK_TIMEOUT_MS = envMs("STREAM_FIRST_CHUNK_TIMEOUT_M
 // Fetch connect timeout: abort if upstream doesn't return response headers within this duration
 export const FETCH_CONNECT_TIMEOUT_MS = envMs("FETCH_CONNECT_TIMEOUT_MS", 60 * 1000);
 
+// Account-rotation budget for ONE client request. A provider can carry hundreds of
+// connections (rate-limited aggregators), and the rotation loop had no ceiling: it could
+// outlive the edge proxy's response window (Cloudflare answers 524 at 120s) so the combo
+// layer never got an error to fall back on. The deadline also caps the in-flight attempt
+// via an abort signal, so a single hung upstream cannot consume the whole budget.
+// Env: ACCOUNT_ROTATION_DEADLINE_MS, ACCOUNT_ROTATION_MAX_ATTEMPTS.
+export const ACCOUNT_ROTATION_DEADLINE_MS = envMs("ACCOUNT_ROTATION_DEADLINE_MS", 75 * 1000);
+export const ACCOUNT_ROTATION_MAX_ATTEMPTS = envMs("ACCOUNT_ROTATION_MAX_ATTEMPTS", 8);
+
 // Per-provider-node timeout override bounds (node config `timeoutMs`). Prevents
 // an unbounded value (e.g. 2^31 ≈ 25 days) from pinning sockets/requests.
 export const NODE_TIMEOUT_MIN_MS = 1000;
