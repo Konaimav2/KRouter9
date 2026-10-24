@@ -1,3 +1,47 @@
+# v3.2.2 (2026-10-24) — Routing correctness: priority, plan-aware accounts, edge timeouts
+
+## Connection priority
+- The dashboard stored 1-based priorities but rendered `priority + 1` in the connection
+  row while the card rendered the raw value, so a connection stored as `1` displayed as
+  `02` on one surface and `#1` on the other. Both now render the stored value
+- Reorder handlers sent a 0-based index and fired both priority writes concurrently;
+  each PUT renormalizes the provider to 1..N, so a concurrent pair could land in the
+  wrong order. Writes now use the 1-based index and are issued sequentially
+
+## Account selection & fallback
+- Codex accounts carry `providerSpecificData.chatgptPlanType`, which routing ignored. A
+  free ChatGPT plan cannot reach paid-plan models, so every request for one burned a
+  round trip and returned
+  `400 "The 'gpt-6-sol' model is not supported when using Codex with a ChatGPT account."`
+  Account selection now skips accounts whose plan cannot serve the requested model
+  (`open-sse/config/codexPlans.js`), and reports "no account on a plan that includes X"
+  instead of a generic unavailable
+- That same 400 was classified as a client fault because the upstream names the model
+  **family** (`gpt-6-sol`) rather than the requested id (`gpt-6.1-sol`), and the
+  model-scoped anchor required an exact id match. The anchor now also accepts family +
+  descriptor, so one wrong-plan credential rotates to the next account instead of failing
+  the whole provider. Request-shaped text (`tool web_search is not supported when using
+  streaming`) still does not lock an account
+- Account rotation is bounded per request (`ACCOUNT_ROTATION_DEADLINE_MS` 75s,
+  `ACCOUNT_ROTATION_MAX_ATTEMPTS` 8, both env-overridable) and the in-flight attempt is
+  aborted at the deadline and surfaced as a retry-safe `504`. Previously a provider with
+  hundreds of connections — TokenHarbor carries 147 on papi — could rotate past the
+  edge proxy's response window, so Cloudflare answered `524` and the combo never got an
+  error to fall back on
+
+## Dashboard
+- Usage → Breakdown printed the raw routing id for custom providers whose node had been
+  deleted, so one model appeared twice with one row unattributable. Provider labels now
+  resolve through a single helper that prefers the node name, names deleted custom nodes
+  (`Custom OpenAI provider (6d68d8e0)`), and never renders an empty cell
+- Console log pane had no height cap, so its inner `overflow-auto` never engaged: the
+  page scrolled instead and the view opened on the oldest lines. The pane is now capped
+  and auto-tail works
+- The combo model picker documents "click to add, click again to remove" but only removes
+  when `onDeselect` is passed. The combo card and the capacity-adapter picker only passed
+  `onSelect`, so clicking a member that was already listed silently did nothing. Both now
+  pass `onDeselect`
+
 # v3.2.1 (2026-10-20) — Fork merge: Bedrock, request-log retention, resilience
 
 ## Ship blocker

@@ -113,3 +113,6 @@ SKILLS-CATALOGUE.md
 PROJECTS/
 _trace_files/
 .opencode/
+# local proof artifacts (screenshots, captured payloads, throwaway scripts)
+labs/
+notforpush/
