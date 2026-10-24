@@ -53,6 +53,29 @@ function getLocalDateKey(timestamp) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+/**
+ * Human-readable label for a usage row's provider.
+ *
+ * Usage rows record the raw routing id. For custom OpenAI/Anthropic compatible
+ * providers that id is a generated `…-compatible-<uuid>` string. Nodes that
+ * still exist resolve through the node-name map; nodes the operator deleted have
+ * no name at all, and the Breakdown used to print the bare uuid (or an empty
+ * cell) — so the same model showed up twice, one row unattributable.
+ * Never return an empty string: the ledger always shows something traceable.
+ */
+export function resolveProviderLabel(provider, nodeNameMap = {}) {
+  const id = String(provider ?? "").trim();
+  if (!id) return "Unknown provider";
+  if (nodeNameMap[id]) return nodeNameMap[id];
+  const compat = /^(openai|anthropic)-compatible-(.+)$/i.exec(id);
+  if (compat) {
+    const short = compat[2].replace(/^chat-/, "").slice(0, 8);
+    const kind = compat[1].toLowerCase() === "openai" ? "OpenAI" : "Anthropic";
+    return `Custom ${kind} provider (${short})`;
+  }
+  return id;
+}
+
 function addToCounter(target, key, values) {
   if (!target[key]) target[key] = { requests: 0, promptTokens: 0, completionTokens: 0, cachedTokens: 0, cost: 0 };
   target[key].requests += values.requests || 1;
@@ -237,7 +260,7 @@ export async function getActiveRequests() {
       return {
         timestamp: e.timestamp, model: e.model,
         // Resolve provider-node ids to human node names for display
-        provider: nodeNameMap[e.provider] || e.provider || "",
+        provider: resolveProviderLabel(e.provider, nodeNameMap),
         account: connectionMap[e.connectionId] || (e.connectionId ? e.connectionId.slice(0, 8) : ""),
         promptTokens: t.prompt_tokens || t.input_tokens || 0,
         completionTokens: t.completion_tokens || t.output_tokens || 0,
@@ -437,7 +460,7 @@ export async function getUsageStats(period = "all") {
       const t = parseJson(r.tokens, {}) || {};
       return {
         timestamp: r.timestamp, model: r.model,
-        provider: providerNodeNameMap[r.provider] || r.provider || "",
+        provider: resolveProviderLabel(r.provider, providerNodeNameMap),
         promptTokens: t.prompt_tokens || t.input_tokens || 0,
         completionTokens: t.completion_tokens || t.output_tokens || 0,
         cachedTokens: t.cached_tokens || t.cache_read_input_tokens || 0,
@@ -535,7 +558,7 @@ export async function getUsageStats(period = "all") {
         const rawModel = m.rawModel || mk.split("|")[0];
         const provider = m.provider || mk.split("|")[1] || "";
         const statsKey = provider ? `${rawModel} (${provider})` : rawModel;
-        const providerDisplayName = providerNodeNameMap[provider] || provider;
+        const providerDisplayName = resolveProviderLabel(provider, providerNodeNameMap);
         if (!stats.byModel[statsKey]) {
           stats.byModel[statsKey] = { requests: 0, promptTokens: 0, completionTokens: 0, cachedTokens: 0, cost: 0, rawModel, provider: providerDisplayName, lastUsed: dateKey };
         }
@@ -551,7 +574,7 @@ export async function getUsageStats(period = "all") {
         const accountName = connectionMap[connId] || `Account ${connId.slice(0, 8)}...`;
         const rawModel = a.rawModel || "";
         const provider = a.provider || "";
-        const providerDisplayName = providerNodeNameMap[provider] || provider;
+        const providerDisplayName = resolveProviderLabel(provider, providerNodeNameMap);
         const accountKey = `${rawModel} (${provider} - ${accountName})`;
         if (!stats.byAccount[accountKey]) {
           stats.byAccount[accountKey] = { requests: 0, promptTokens: 0, completionTokens: 0, cachedTokens: 0, cost: 0, rawModel, provider: providerDisplayName, connectionId: connId, accountName, lastUsed: dateKey };
@@ -567,7 +590,7 @@ export async function getUsageStats(period = "all") {
       for (const [akKey, ak] of Object.entries(day.byApiKey || {})) {
         const rawModel = ak.rawModel || "";
         const provider = ak.provider || "";
-        const providerDisplayName = providerNodeNameMap[provider] || provider;
+        const providerDisplayName = resolveProviderLabel(provider, providerNodeNameMap);
         const apiKeyVal = ak.apiKey;
         const keyInfo = apiKeyVal ? apiKeyMap[apiKeyVal] : null;
         const keyName = keyInfo?.name || (apiKeyVal ? apiKeyVal.slice(0, 8) + "..." : "Local (No API Key)");
@@ -588,7 +611,7 @@ export async function getUsageStats(period = "all") {
         const endpoint = ep.endpoint || epKey.split("|")[0] || "Unknown";
         const rawModel = ep.rawModel || "";
         const provider = ep.provider || "";
-        const providerDisplayName = providerNodeNameMap[provider] || provider;
+        const providerDisplayName = resolveProviderLabel(provider, providerNodeNameMap);
         if (!stats.byEndpoint[epKey]) {
           stats.byEndpoint[epKey] = { requests: 0, promptTokens: 0, completionTokens: 0, cachedTokens: 0, cost: 0, endpoint, rawModel, provider: providerDisplayName, lastUsed: dateKey };
         }
@@ -658,7 +681,7 @@ export async function getUsageStats(period = "all") {
       const completionTokens = tokens.completion_tokens || tokens.output_tokens || r.completionTokens || 0;
       const cachedTokens = tokens.cached_tokens || tokens.cache_read_input_tokens || 0;
       const entryCost = r.cost || 0;
-      const providerDisplayName = providerNodeNameMap[r.provider] || r.provider;
+      const providerDisplayName = resolveProviderLabel(r.provider, providerNodeNameMap);
 
       stats.totalPromptTokens += promptTokens;
       stats.totalCompletionTokens += completionTokens;
