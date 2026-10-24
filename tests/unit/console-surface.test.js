@@ -115,6 +115,14 @@ describe("console log dashboard surface", () => {
     expect(html).toContain("2 visible / 2 retained");
   });
 
+  it("caps the log viewport so the pane scrolls instead of the page", () => {
+    const html = renderClient();
+    // Without a bounded height, overflow-auto never engages and the page itself
+    // scrolls from the oldest line (the "log starts at the top" bug).
+    expect(html).toMatch(/max-h-\[calc\(100dvh-19rem\)\]/);
+    expect(html).toContain("overscroll-contain");
+  });
+
   it("filters retained rows from the search control", () => {
     const search = findElement(
       clientTree(),
