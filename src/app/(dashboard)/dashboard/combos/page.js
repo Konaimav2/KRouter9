@@ -521,7 +521,7 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
       <span className="sr-only" aria-live="polite">{announcement}</span>
 
       {showJudgeSelect && <ModelSelectModal isOpen={showJudgeSelect} onClose={() => setShowJudgeSelect(false)} onSelect={(model) => { onSetStrategy({ judgeModel: model?.value || "" }); setShowJudgeSelect(false); }} activeProviders={activeProviders} title="Select judge model" addedModelValues={judge ? [judge] : []} closeOnSelect />}
-      {showAddModel && <ModelSelectModal isOpen={showAddModel} onClose={() => setShowAddModel(false)} onSelect={(model) => { if (model?.value && !draftModels.includes(model.value)) setDraftModels([...draftModels, model.value]); }} activeProviders={activeProviders} title={`Add model to ${combo.name}`} addedModelValues={draftModels} includeCombos closeOnSelect={false} />}
+      {showAddModel && <ModelSelectModal isOpen={showAddModel} onClose={() => setShowAddModel(false)} onSelect={(model) => { if (model?.value && !draftModels.includes(model.value)) setDraftModels([...draftModels, model.value]); }} onDeselect={(model) => setDraftModels(draftModels.filter((value) => value !== model?.value))} activeProviders={activeProviders} title={`Add model to ${combo.name}`} addedModelValues={draftModels} includeCombos closeOnSelect={false} />}
     </article>
   );
 }
@@ -599,7 +599,7 @@ function CapacityAdapterCap({ cap, entry, onChange, activeProviders, getCaps }) 
         <button type="button" disabled={!enabled} onClick={() => setShowModelSelect(true)} className="flex min-h-12 w-full items-center justify-center gap-2 border border-dashed border-[var(--color-primary-border)] font-medium text-[var(--color-primary)] disabled:cursor-not-allowed disabled:text-[var(--color-text-disabled)]"><Icon name="add" size={17} />Add fallback model</button>
       </div>}
       <span className="sr-only" aria-live="polite">{announcement}</span>
-      {showModelSelect && <ModelSelectModal isOpen={showModelSelect} onClose={() => setShowModelSelect(false)} onSelect={handleAdd} activeProviders={activeProviders} title={`Add ${cap.label} model`} addedModelValues={models} capFilter={cap.key} includeCombos closeOnSelect={false} />}
+      {showModelSelect && <ModelSelectModal isOpen={showModelSelect} onClose={() => setShowModelSelect(false)} onSelect={handleAdd} onDeselect={(model) => { const next = models.filter((value) => value !== model?.value); patch({ models: next.length === 0 ? [DEFAULT_FALLBACK_MODEL] : next }); }} activeProviders={activeProviders} title={`Add ${cap.label} model`} addedModelValues={models} capFilter={cap.key} includeCombos closeOnSelect={false} />}
     </article>
   );
 }
