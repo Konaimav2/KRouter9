@@ -188,13 +188,30 @@ export function isModelScopedError(status, errorText, modelId = null) {
   const hit = MODEL_SCOPED_ERROR_TEXTS.some((text) => lower.includes(text));
   if (!hit) return false;
 
-  // Optional anchor: when the caller names the model, require its tail in the
-  // text. Prevents request-controlled 400s (e.g. a tool/param validation error
-  // that happens to contain a scoped phrase) from locking a valid model.
+  // Optional anchor: when the caller names the model, require it (or its model
+  // family) to appear in the text. Prevents request-controlled 400s (e.g. a
+  // tool/param validation error that happens to contain a scoped phrase) from
+  // locking a valid model.
   // No anchor (combo path) keeps legacy phrase-only behavior.
   if (modelId) {
     const tail = String(modelId).includes("/") ? String(modelId).split("/").pop() : String(modelId);
-    if (!tail || !lower.includes(tail.toLowerCase())) return false;
+    if (!tail) return false;
+    const needle = tail.toLowerCase().replace(/\[[^\]]*\]$/, "");
+    if (lower.includes(needle)) return true;
+    // Upstreams name the FAMILY, not the exact id: asking Codex for
+    // "gpt-6.1-sol" on an unentitled plan answers
+    // `The 'gpt-6-sol' model is not supported when using Codex ...`.
+    // Requiring an exact id match made that a client fault, so no other account
+    // was tried and a single wrong-plan credential failed the whole provider.
+    // Accept family + descriptor together (both must appear) — still anchored
+    // enough that "tool web_search is not supported when using streaming" misses.
+    const family = needle.match(/^[a-z]+[-_.]?\d+/)?.[0];
+    const descriptor = needle.match(/[a-z]+$/)?.[0];
+    if (family && family.length >= 4 && descriptor && descriptor.length >= 2
+      && lower.includes(family) && lower.includes(descriptor)) {
+      return true;
+    }
+    return false;
   }
   return true;
 }

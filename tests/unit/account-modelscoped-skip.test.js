@@ -63,3 +63,44 @@ describe("markAccountUnavailable — model-scoped 4xx rotates accounts", () => {
     expect(mocks.updateProviderConnection).not.toHaveBeenCalled();
   });
 });
+
+// Production shape: the upstream names the model FAMILY, not the exact id.
+// Asking Codex for `gpt-6.1-sol` on an unentitled ChatGPT plan answers
+// `The 'gpt-6-sol' model is not supported when using Codex with a ChatGPT account.`
+// An exact-id anchor missed that, the 400 was read as a client fault, no other
+// account was tried, and one wrong-plan credential failed the whole provider —
+// which is what broke subagent dispatch through the gateway.
+const FAMILY_MSG =
+  "[400]: {\"detail\":\"The 'gpt-6-sol' model is not supported when using Codex with a ChatGPT account.\",\"status\":400}";
+
+describe("model-scoped anchor accepts the family name", () => {
+  it("rotates for gpt-6.1-sol when the text says gpt-6-sol", async () => {
+    const res = await markAccountUnavailable("c1", 400, FAMILY_MSG, "codex", "gpt-6.1-sol");
+    expect(res.shouldFallback).toBe(true);
+    expect(res.cooldownMs).toBe(MODEL_SCOPED_LOCK_MS);
+    const write = mocks.updateProviderConnection.mock.calls[0][1];
+    expect(write["modelLock_gpt-6.1-sol"]).toBeDefined();
+  });
+
+  it("still locks the requested model id, not the family name from the text", async () => {
+    await markAccountUnavailable("c1", 400, FAMILY_MSG, "codex", "gpt-6.1-sol[1m]");
+    const write = mocks.updateProviderConnection.mock.calls[0][1];
+    expect(Object.keys(write).some((k) => k.startsWith("modelLock_"))).toBe(true);
+    expect(write["modelLock_gpt-6-sol"]).toBeUndefined();
+  });
+
+  it("still refuses request-shaped text that names no model", async () => {
+    const res = await markAccountUnavailable(
+      "c1", 400, "tool web_search is not supported when using streaming", "codex", "gpt-6.1-sol"
+    );
+    expect(res.shouldFallback).toBe(false);
+    expect(mocks.updateProviderConnection).not.toHaveBeenCalled();
+  });
+
+  it("still refuses an unrelated model family", async () => {
+    const res = await markAccountUnavailable(
+      "c1", 400, "The 'claude-opus-5' model is not supported when using this endpoint.", "codex", "gpt-6.1-sol"
+    );
+    expect(res.shouldFallback).toBe(false);
+  });
+});
