@@ -2,6 +2,7 @@ import { getProviderConnections, validateApiKey, updateProviderConnection, getSe
 import { resolveConnectionProxyConfig, pickProxyPoolId } from "@/lib/network/connectionProxy";
 import { formatRetryAfter, checkFallbackError, isClientFault, isModelScopedError, MODEL_SCOPED_LOCK_MS, isModelLockActive, buildModelLockUpdate, getEarliestModelLockUntil } from "open-sse/services/accountFallback.js";
 import { MAX_RATE_LIMIT_COOLDOWN_MS } from "open-sse/config/errorConfig.js";
+import { isCodexModelAllowedForPlan } from "open-sse/config/codexPlans.js";
 import { resolveProviderId, getProviderAlias, FREE_PROVIDERS } from "@/shared/constants/providers.js";
 import { getDisabledByProvider } from "@/lib/disabledModelsDb";
 import { getAntigravityQuotaCache, getAntigravityModelQuota } from "./antigravityQuota.js";
@@ -125,12 +126,21 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
 
     // Antigravity quota cache is lazy: only populated after that account returns 409/429.
     const isAntigravity = providerId === "antigravity";
+    // Codex plans differ per account: a free ChatGPT plan cannot reach paid-plan
+    // models (sol/astra/spark). Asking anyway returns
+    // 400 "model is not supported when using Codex ..." and burns a round trip.
+    const isCodex = providerId === "codex";
     const antigravityQuotaCache = isAntigravity && model ? getAntigravityQuotaCache() : null;
+    let planSkipped = 0;
 
     // Filter out model-locked, excluded, and Antigravity quota-exhausted connections.
     const availableConnections = connections.filter(c => {
       if (excludeSet.has(c.id)) return false;
       if (isModelLockActive(c, model)) return false;
+      if (isCodex && model && !isCodexModelAllowedForPlan(model, c.providerSpecificData?.chatgptPlanType)) {
+        planSkipped++;
+        return false;
+      }
       // Antigravity: skip if live quota exhausted for this model
       if (isAntigravity && model && antigravityQuotaCache) {
         const quota = getAntigravityModelQuota(antigravityQuotaCache.get(c.id), model);
@@ -144,6 +154,9 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
     });
 
     log.debug("AUTH", `${provider} | available: ${availableConnections.length}/${connections.length}`);
+    if (planSkipped > 0) {
+      log.info("AUTH", `${provider} | ${planSkipped} account(s) skipped: plan does not include ${model}`);
+    }
     connections.forEach(c => {
       const excluded = excludeSet.has(c.id);
       const locked = isModelLockActive(c, model);
@@ -154,6 +167,12 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
     });
 
     if (availableConnections.length === 0) {
+      // Every account was filtered because its plan cannot use this model:
+      // report that plainly instead of the generic "unavailable".
+      if (planSkipped >= connections.length) {
+        log.warn("AUTH", `${provider} | no account on a plan that includes ${model} (${planSkipped} skipped)`);
+        return null;
+      }
       // Find earliest persistent lock or lazy Antigravity quota-cache reset for retry timing.
       const lockedConns = connections.filter(c => isModelLockActive(c, model));
       const expiries = lockedConns.map(c => getEarliestModelLockUntil(c)).filter(Boolean);
