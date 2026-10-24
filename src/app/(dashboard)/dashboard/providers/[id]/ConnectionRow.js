@@ -9,7 +9,7 @@ import { Badge, Toggle, Tooltip } from "@/shared/components";
 import { useCooldownNow } from "@/shared/hooks/useCooldownNow";
 import CooldownTimer from "./CooldownTimer";
 
-export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst, isLast, onMoveUp, onMoveDown, onToggleActive, onUpdateProxy, onEdit, onDelete, oneByOneStatus = null, autoPing = null }) {
+export default function ConnectionRow({ connection, proxyPools, isOAuth, index = 0, isFirst, isLast, onMoveUp, onMoveDown, onToggleActive, onUpdateProxy, onEdit, onDelete, oneByOneStatus = null, autoPing = null }) {
   const [showProxyDropdown, setShowProxyDropdown] = useState(false);
   const [updatingProxy, setUpdatingProxy] = useState(false);
   const proxyDropdownRef = useRef(null);
@@ -125,7 +125,7 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
 
   return (
     <div className={`grid min-w-0 grid-cols-[2.5rem_minmax(0,1fr)] gap-3 px-2 py-3 transition-colors hover:bg-[var(--color-surface-hover)] sm:grid-cols-[2.5rem_minmax(0,1fr)_auto] sm:items-center ${connection.isActive === false ? "bg-[var(--color-surface-strong)]" : ""}`}>
-      <span className="flex h-full min-h-12 items-center justify-center border-r border-[var(--color-border-strong)] font-mono text-xs tabular-nums text-[var(--color-primary)]">{String((connection.priority ?? 0) + 1).padStart(2, "0")}</span>
+      <span className="flex h-full min-h-12 items-center justify-center border-r border-[var(--color-border-strong)] font-mono text-xs tabular-nums text-[var(--color-primary)]">{String(connection.priority > 0 ? connection.priority : index + 1).padStart(2, "0")}</span>
       <div className="flex min-w-0 flex-1 items-start gap-2 sm:items-center sm:gap-3">
         {/* Priority arrows */}
         <div className="flex shrink-0 flex-col">
@@ -283,6 +283,7 @@ ConnectionRow.propTypes = {
     isActive: PropTypes.bool,
   })),
   isOAuth: PropTypes.bool.isRequired,
+  index: PropTypes.number,
   isFirst: PropTypes.bool.isRequired,
   isLast: PropTypes.bool.isRequired,
   onMoveUp: PropTypes.func.isRequired,
