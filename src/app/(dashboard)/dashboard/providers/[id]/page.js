@@ -909,18 +909,18 @@ export default function ProviderDetailPage() {
     setConnections(newConnections);
 
     try {
-      await Promise.all([
-        fetch(`/api/providers/${newConnections[index1].id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ priority: index1 }),
-        }),
-        fetch(`/api/providers/${newConnections[index2].id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ priority: index2 }),
-        }),
-      ]);
+      // Sequential on purpose: every PUT renormalizes the provider's priorities to 1..N,
+      // so two concurrent writes race on the tie-break and can land in the wrong order.
+      await fetch(`/api/providers/${newConnections[index1].id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priority: index1 + 1 }),
+      });
+      await fetch(`/api/providers/${newConnections[index2].id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priority: index2 + 1 }),
+      });
     } catch (error) {
       console.log("Error swapping priority:", error);
       await fetchConnections();
@@ -1042,6 +1042,7 @@ export default function ProviderDetailPage() {
             <div className="flex-1 min-w-0">
               <ConnectionRow
                 connection={conn}
+                index={index}
                 proxyPools={proxyPools}
                 isOAuth={isOAuth}
                 isFirst={index === 0}

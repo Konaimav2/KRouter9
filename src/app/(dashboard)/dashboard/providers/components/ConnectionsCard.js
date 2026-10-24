@@ -125,7 +125,7 @@ function ConnectionRow({ connection, proxyPools, isOAuth, isFirst, isLast, onMov
             {connection.lastError && connection.isActive !== false && (
               <span className="text-xs text-red-500 truncate max-w-[300px]" title={connection.lastError}>{connection.lastError}</span>
             )}
-            <span className="text-xs text-text-muted">#{connection.priority}</span>
+            <span className="text-xs text-text-muted">#{connection.priority > 0 ? connection.priority : "—"}</span>
           </div>
           {hasAnyProxy && (
             <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -350,10 +350,10 @@ export default function ConnectionsCard({ providerId, isOAuth }) {
     [next[i1], next[i2]] = [next[i2], next[i1]];
     setConnections(next);
     try {
-      await Promise.all([
-        fetch(`/api/providers/${next[i1].id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ priority: i1 }) }),
-        fetch(`/api/providers/${next[i2].id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ priority: i2 }) }),
-      ]);
+      // Sequential on purpose: every PUT renormalizes the provider's priorities to 1..N,
+      // so two concurrent writes race on the tie-break and can land in the wrong order.
+      await fetch(`/api/providers/${next[i1].id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ priority: i1 + 1 }) });
+      await fetch(`/api/providers/${next[i2].id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ priority: i2 + 1 }) });
     } catch { await fetch_(); }
   };
 
