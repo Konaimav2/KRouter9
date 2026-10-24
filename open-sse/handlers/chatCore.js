@@ -63,7 +63,7 @@ export function stripContinuityFields(body) {
   return body;
 }
 
-export async function handleChatCore({ body, modelInfo, credentials, log, onCredentialsRefreshed, onRequestSuccess, onDisconnect, clientRawRequest, connectionId, userAgent, apiKey, ccFilterNaming, rtkEnabled, headroomEnabled, headroomUrl, headroomCompressUserMessages, headroomTimeoutMs, cavemanEnabled, cavemanLevel, cavemanWenyanOptIn, ponytailEnabled, ponytailLevel, pxpipeEnabled, pxpipeMinChars, pxpipeTimeoutMs, pxpipeTransform, onPxpipeEvent, sourceFormatOverride, providerThinking, clientSignal, clientIp, comboName }) {
+export async function handleChatCore({ body, modelInfo, credentials, log, onCredentialsRefreshed, onRequestSuccess, onDisconnect, clientRawRequest, connectionId, userAgent, apiKey, ccFilterNaming, rtkEnabled, headroomEnabled, headroomUrl, headroomCompressUserMessages, headroomTimeoutMs, cavemanEnabled, cavemanLevel, cavemanWenyanOptIn, ponytailEnabled, ponytailLevel, pxpipeEnabled, pxpipeMinChars, pxpipeTimeoutMs, pxpipeTransform, onPxpipeEvent, sourceFormatOverride, providerThinking, clientSignal, deadlineSignal, clientIp, comboName }) {
   const { provider, model } = modelInfo;
   const requestStartTime = Date.now();
   // Stable per-session color so all lines of one CLI conversation share a tag
@@ -359,6 +359,18 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
     }
   }
 
+  // Account-rotation budget: abort the in-flight upstream attempt when the caller's
+  // deadline expires, so one hung connection cannot consume the whole request window.
+  if (deadlineSignal) {
+    if (deadlineSignal.aborted) {
+      streamController.handleDisconnect("deadline_exceeded");
+    } else {
+      deadlineSignal.addEventListener("abort", () => {
+        streamController.handleDisconnect("deadline_exceeded");
+      }, { once: true });
+    }
+  }
+
   const proxyOptions = {
     connectionProxyEnabled: credentials?.providerSpecificData?.connectionProxyEnabled === true,
     connectionProxyUrl: credentials?.providerSpecificData?.connectionProxyUrl || "",
@@ -435,6 +447,12 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
 
     if (error.name === "AbortError") {
       streamController.handleError(error);
+      // A deadline abort is ours, not the client's. Surface a retry-safe gateway
+      // timeout so the account loop and the combo layer can fall back to the next
+      // target instead of returning a client-abort status.
+      if (deadlineSignal?.aborted) {
+        return createErrorResult(HTTP_STATUS.GATEWAY_TIMEOUT, "Upstream attempt exceeded the request budget. Safe to retry.");
+      }
       return createErrorResult(499, "Request aborted");
     }
     // Pre-dispatch client faults (e.g. relay payload too large) surface as-is:

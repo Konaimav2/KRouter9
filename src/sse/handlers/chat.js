@@ -17,6 +17,10 @@ import { DEFAULT_HEADROOM_URL } from "@/lib/headroom/detect";
 import { getTransform as getPxpipeTransform } from "@/lib/pxpipe/loader.js";
 import { appendPxpipeEvent } from "@/lib/pxpipe/events.js";
 import { errorResponse, unavailableResponse } from "open-sse/utils/error.js";
+import {
+  ACCOUNT_ROTATION_DEADLINE_MS,
+  ACCOUNT_ROTATION_MAX_ATTEMPTS,
+} from "open-sse/config/runtimeConfig.js";
 import { saveRequestError } from "open-sse/handlers/chatCore/requestDetail.js";
 import {
   buildCacheKey,
@@ -489,8 +493,26 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
   const excludeConnectionIds = new Set();
   let lastError = null;
   let lastStatus = null;
+  const rotationStartedAt = Date.now();
+  let rotationAttempts = 0;
 
   while (true) {
+    const rotationElapsedMs = Date.now() - rotationStartedAt;
+    if (rotationAttempts >= ACCOUNT_ROTATION_MAX_ATTEMPTS || rotationElapsedMs >= ACCOUNT_ROTATION_DEADLINE_MS) {
+      // Hand a real error back to the caller (combo layer) instead of letting the edge
+      // proxy time the connection out with no response at all.
+      const status = lastStatus || HTTP_STATUS.SERVICE_UNAVAILABLE;
+      log.warn("CHAT", `[${provider}/${model}] account rotation budget exhausted`, {
+        attempts: rotationAttempts,
+        elapsedMs: rotationElapsedMs,
+        maxAttempts: ACCOUNT_ROTATION_MAX_ATTEMPTS,
+        deadlineMs: ACCOUNT_ROTATION_DEADLINE_MS,
+      });
+      saveRequestError({ provider, model, status, endpoint: clientRawRequest?.endpoint });
+      return errorResponse(status, lastError || "All accounts unavailable");
+    }
+    rotationAttempts++;
+
     const credentials = await getProviderCredentials(provider, excludeConnectionIds, model);
 
     // All accounts unavailable
@@ -528,6 +550,9 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
     // Use shared chatCore
     const chatSettings = await getCachedSettings();
     const providerThinking = (chatSettings.providerThinking || {})[provider] || null;
+    // Cap this attempt by whatever remains of the rotation budget.
+    const remainingBudgetMs = Math.max(1, ACCOUNT_ROTATION_DEADLINE_MS - (Date.now() - rotationStartedAt));
+    const attemptSignal = AbortSignal.timeout(remainingBudgetMs);
     const result = await handleChatCore({
       body: { ...body, model: `${provider}/${model}` },
       modelInfo: { provider, model },
@@ -538,6 +563,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       clientIp,
       connectionId: credentials.connectionId,
       userAgent,
+      deadlineSignal: attemptSignal,
       apiKey,
       ccFilterNaming: !!chatSettings.ccFilterNaming,
       rtkEnabled: !!chatSettings.rtkEnabled,

@@ -138,3 +138,41 @@ describe("ERROR_RULES timeout short-cooldown", () => {
     expect(r.cooldownMs).toBe(5 * 1000);
   });
 });
+
+// Account-rotation budget: the gateway must produce an error inside the edge proxy
+// window (Cloudflare 524 at 120s) so the combo layer can fall back. Before this, a
+// provider with hundreds of rate-limited connections could rotate for minutes.
+describe("account rotation budget", () => {
+  it("keeps the rotation budget inside the edge proxy window", async () => {
+    const { ACCOUNT_ROTATION_DEADLINE_MS, ACCOUNT_ROTATION_MAX_ATTEMPTS } = await import(
+      "../../open-sse/config/runtimeConfig.js"
+    );
+    expect(ACCOUNT_ROTATION_DEADLINE_MS).toBeLessThan(120000);
+    expect(ACCOUNT_ROTATION_DEADLINE_MS).toBeGreaterThan(0);
+    expect(ACCOUNT_ROTATION_MAX_ATTEMPTS).toBeGreaterThan(0);
+  });
+
+  it("maps a deadline abort to a retry-safe 504, never a client-abort 499", async () => {
+    const log = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), line: vi.fn(), errorLine: vi.fn() };
+    const args = baseArgs(log, null);
+    executeMock.mockRejectedValueOnce(
+      Object.assign(new Error("This operation was aborted"), { name: "AbortError" })
+    );
+    args.deadlineSignal = AbortSignal.abort();
+
+    const result = await handleChatCore(args);
+    expect(result.status).toBe(504);
+    expect(result.error).toMatch(/budget|retry/i);
+  });
+
+  it("keeps a plain client abort at 499", async () => {
+    const log = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), line: vi.fn(), errorLine: vi.fn() };
+    const args = baseArgs(log, null);
+    executeMock.mockRejectedValueOnce(
+      Object.assign(new Error("This operation was aborted"), { name: "AbortError" })
+    );
+
+    const result = await handleChatCore(args);
+    expect(result.status).toBe(499);
+  });
+});
