@@ -1,3 +1,37 @@
+# v3.2.3 (2026-10-26) — Hotfix: combo self-member picker, provider error text, codex tests
+
+## Combo member picker (P7 residual)
+- A combo could be offered as a member of **itself**. The add-model picker runs with
+  `includeCombos`, so the combo under edit appeared in its own list; its value resolves
+  back to the same combo, which made clicking it either add a cyclic member (dropped
+  server-side, so nothing appeared to happen) or toggle nothing at all — reported as
+  "the model add with the same name of combo model still happening"
+- `ModelSelectModal` gains `excludeComboNames`, and the combo editor excludes its own
+  name, so the picker can no longer emit a self-reference. Nested combos remain
+  selectable
+- Proof: `tests/unit/combo-model-picker-contract.test.js` asserts the picker instance
+  carries `excludeComboNames={[combo.name]}` and that the modal filters the list
+
+## Provider cards: the contentless "Provider error" placeholder
+- `markAccountUnavailable` wrote the literal `Provider error` as `connection.lastError`
+  whenever a handler passed an empty or non-string error, so almost every failing provider
+  card showed the same message and the real cause (status, upstream text) was lost
+- The lock reason is now derived from whatever the caller supplied: a string is trimmed and
+  bounded, an error-like object contributes its `message`, and an empty value falls back to
+  `Upstream error <status>`
+- Rows already carrying the placeholder are rendered as `Upstream error <errorCode>` without
+  mutating stored data; the next successful request clears them through `clearAccountError`
+- Proof: `tests/unit/connection-lock-reason.test.js` (7 cases)
+
+## Codex image prefetch tests
+- `tests/unit/codex-image-fetch.test.js` mocked `node:dns/promises.lookup` with a single
+  record object, but the SSRF guard calls `lookup(host, { all: true })` and requires an
+  array. The guard therefore treated `example.com` as blocked, no fetch was attempted,
+  and the image stayed a remote URL — two failures that looked like a product bug
+- The mock now returns an address array. No production code changed: the executor and
+  the hardened fetcher were already correct
+- Both tests removed from `tests/__baseline__/known-fails.txt`
+
 # v3.2.2 (2026-10-24) — Routing correctness: priority, plan-aware accounts, edge timeouts
 
 ## Connection priority

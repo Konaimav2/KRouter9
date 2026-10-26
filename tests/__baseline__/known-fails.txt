@@ -19,8 +19,6 @@ tests/translator/thinking-unified.test.js :: applyThinking per provider format g
 tests/translator/thinking-unified.test.js :: applyThinking per provider format permanently adaptive Claude maps auto effort without adding a thinking switch
 tests/unit/claude-header-forwarding.test.js :: proxyAwareFetch — api.anthropic.com routing routes api.anthropic.com to gotScraping (non-streaming) and returns ok response
 tests/unit/cli-xai-video.test.js :: run (against a mock gateway) creates, polls to done, downloads the MP4, and exits 0
-tests/unit/codex-image-fetch.test.js :: CodexExecutor image handling execute() prefetches images before sending to upstream
-tests/unit/codex-image-fetch.test.js :: CodexExecutor image handling fetches 1MB remote image and inlines it as base64 data URI
 tests/unit/combo-autoswitch.test.js :: detectRequiredCapabilities web_search tool -> search
 tests/unit/combo-autoswitch.test.js :: reorderByCapabilities keeps order when no model matches
 tests/unit/compatible-provider-connections.test.js :: compatible provider connections API allows multiple connections on the same compatible node
@@ -118,3 +116,4 @@ tests/unit/windsurf-executor.test.js :: WindsurfExecutor class buildUrl returns 
 tests/unit/windsurf-executor.test.js :: WindsurfExecutor class constructor wires config from PROVIDERS.windsurf
 tests/unit/xai-video-handler.test.js :: handleVideoCreate returns the serving connection id in x-9router-connection-id
 tests/unit/xai-video-handler.test.js :: handleVideoCreate rotates to the next account on 401 (auth errors cannot have created a job)
+tests/unit/cursor-models.test.js :: Cursor live model catalog fails open when the Cursor catalog request fails

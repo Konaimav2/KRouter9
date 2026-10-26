@@ -83,6 +83,7 @@ export default function ModelSelectModal({
   addedModelValues = [],
   closeOnSelect = true,
   includeCombos = false,
+  excludeComboNames = [],
 }) {
   // Filter activeProviders by serviceKinds when kindFilter set (e.g. "webSearch", "webFetch")
   const filteredActiveProviders = useMemo(() => {
@@ -431,10 +432,15 @@ export default function ModelSelectModal({
   const filteredCombos = useMemo(() => {
     if (kindFilter) return [];
     if (capFilter && !includeCombos) return [];
-    if (!searchQuery.trim()) return combos;
+    // A combo must not be offered as a member of itself: the name would resolve back to
+    // the combo being edited, so the click either adds a cyclic entry (dropped server-side)
+    // or toggles nothing — the "same name as the combo" symptom from P7.
+    const excluded = new Set(excludeComboNames);
+    const visible = excluded.size ? combos.filter((c) => !excluded.has(c?.name)) : combos;
+    if (!searchQuery.trim()) return visible;
     const query = searchQuery.toLowerCase();
-    return combos.filter(c => (c?.name || "").toLowerCase().includes(query));
-  }, [combos, searchQuery, kindFilter, capFilter, includeCombos]);
+    return visible.filter(c => (c?.name || "").toLowerCase().includes(query));
+  }, [combos, searchQuery, kindFilter, capFilter, includeCombos, excludeComboNames]);
 
   // Sort models alphabetically, with added models floated to top
   const sortModels = (models) => {
@@ -662,4 +668,5 @@ ModelSelectModal.propTypes = {
   addedModelValues: PropTypes.arrayOf(PropTypes.string),
   closeOnSelect: PropTypes.bool,
   includeCombos: PropTypes.bool,
+  excludeComboNames: PropTypes.arrayOf(PropTypes.string),
 };

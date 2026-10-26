@@ -69,6 +69,22 @@ describe("combo model picker keeps select AND deselect wired", () => {
     expect(cardInstance).toMatch(/onDeselect=\{\(model\)\s*=>/);
   });
 
+  it("never offers the combo being edited as its own member", () => {
+    // P7 residual: with `includeCombos`, the combo under edit appeared in its own
+    // picker. Its value resolves back to the combo, so clicking it adds a cyclic
+    // member (dropped server-side) or toggles nothing — "same name as the combo".
+    const cardInstance = instances.find((block) => block.includes("draftModels"));
+    expect(cardInstance).toContain("excludeComboNames");
+    expect(cardInstance).toMatch(/excludeComboNames=\{\[combo\.name\]\}/);
+
+    const picker = readFileSync(
+      new URL("../../src/shared/components/ModelSelectModal.js", import.meta.url),
+      "utf8"
+    );
+    expect(picker).toContain("excludeComboNames");
+    expect(picker).toMatch(/combos\.filter\(\(c\) => !excluded\.has/);
+  });
+
   it("exports ModelSelectModal with both handlers declared", () => {
     const picker = readFileSync(
       new URL("../../src/shared/components/ModelSelectModal.js", import.meta.url),

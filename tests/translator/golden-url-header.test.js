@@ -27,10 +27,18 @@ const SPECIALIZED = new Set([
 function sanitize(headers) {
   const out = {};
   for (const [k, v] of Object.entries(headers)) {
+    // The release version is injected into every outbound header set, so it must be
+    // normalized like any other dynamic field — otherwise every version bump rewrites
+    // these golden snapshots.
+    if (/^(X-CLIENT-VERSION|X-CORE-VERSION|X-MSH-VERSION)$/i.test(k)) {
+      out[k] = "<VER>";
+      continue;
+    }
     out[k] = typeof v === "string"
       ? v.replace(/Bearer .+/, "Bearer <TOK>")
           .replace(/sk-test-APIKEY|tok-test-ACCESS/g, "<CRED>")
           .replace(/kimi-\d{10,}/g, "kimi-<TS>")
+          .replace(/9Router\/\d+\.\d+\.\d+/g, "9Router/<VER>")
       : v;
   }
   return out;
