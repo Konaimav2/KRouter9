@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { getStatusVariant as getConnectionStatusVariant } from "@/shared/utils/connectionStatus";
+import { displayConnectionError } from "@/shared/utils/errorClass";
 import PropTypes from "prop-types";
 import { Card, Badge, Button, Modal, Select, Toggle, EditConnectionModal, ConfirmModal } from "@/shared/components";
 import Icon from "@/shared/components/Icon";
@@ -122,8 +123,8 @@ function ConnectionRow({ connection, proxyPools, isOAuth, isFirst, isLast, onMov
             </Badge>
             {hasAnyProxy && <Badge variant={proxyBadgeVariant} size="sm">Proxy</Badge>}
             {isCooldown && connection.isActive !== false && <CooldownTimer until={modelLockUntil} />}
-            {connection.lastError && connection.isActive !== false && (
-              <span className="text-xs text-red-500 truncate max-w-[300px]" title={connection.lastError}>{connection.lastError}</span>
+            {displayConnectionError(connection) && connection.isActive !== false && (
+              <span className="text-xs text-red-500 truncate max-w-[300px]" title={displayConnectionError(connection)}>{displayConnectionError(connection)}</span>
             )}
             <span className="text-xs text-text-muted">#{connection.priority > 0 ? connection.priority : "—"}</span>
           </div>

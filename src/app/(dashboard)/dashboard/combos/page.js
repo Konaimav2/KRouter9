@@ -521,7 +521,7 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
       <span className="sr-only" aria-live="polite">{announcement}</span>
 
       {showJudgeSelect && <ModelSelectModal isOpen={showJudgeSelect} onClose={() => setShowJudgeSelect(false)} onSelect={(model) => { onSetStrategy({ judgeModel: model?.value || "" }); setShowJudgeSelect(false); }} activeProviders={activeProviders} title="Select judge model" addedModelValues={judge ? [judge] : []} closeOnSelect />}
-      {showAddModel && <ModelSelectModal isOpen={showAddModel} onClose={() => setShowAddModel(false)} onSelect={(model) => { if (model?.value && !draftModels.includes(model.value)) setDraftModels([...draftModels, model.value]); }} onDeselect={(model) => setDraftModels(draftModels.filter((value) => value !== model?.value))} activeProviders={activeProviders} title={`Add model to ${combo.name}`} addedModelValues={draftModels} includeCombos closeOnSelect={false} />}
+      {showAddModel && <ModelSelectModal isOpen={showAddModel} onClose={() => setShowAddModel(false)} onSelect={(model) => { if (model?.value && !draftModels.includes(model.value)) setDraftModels([...draftModels, model.value]); }} onDeselect={(model) => setDraftModels(draftModels.filter((value) => value !== model?.value))} activeProviders={activeProviders} title={`Add model to ${combo.name}`} addedModelValues={draftModels} includeCombos excludeComboNames={[combo.name]} closeOnSelect={false} />}
     </article>
   );
 }

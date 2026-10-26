@@ -334,6 +334,21 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
  * @param {string|null} model - The specific model that triggered the error
  * @returns {{ shouldFallback: boolean, cooldownMs: number }}
  */
+function describeLockReason(errorText, status) {
+  const raw = errorText && typeof errorText === "object" && typeof errorText.message === "string"
+    ? errorText.message
+    : errorText;
+  const text = typeof raw === "string"
+    ? raw.trim()
+    : raw == null
+      ? ""
+      : String(raw).trim();
+  if (text) return text.slice(0, 100);
+  // Cards render this verbatim. A bare "Provider error" tells the operator nothing, so
+  // at minimum keep the status that caused the lock.
+  return status ? `Upstream error ${status}` : "Upstream error";
+}
+
 export async function markAccountUnavailable(connectionId, status, errorText, provider = null, model = null, resetsAtMs = null) {
   if (!connectionId || connectionId === "noauth") return { shouldFallback: false, cooldownMs: 0 };
 
@@ -344,7 +359,7 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
   // is per-account, not per-request — a sibling account on another plan may
   // serve it. Lock the model on this account and rotate (P-SKIP).
   if (!resetsAtMs && model && isModelScopedError(status, errorText, model)) {
-    const reason = typeof errorText === "string" ? errorText.slice(0, 100) : "Provider error";
+    const reason = describeLockReason(errorText, status);
     const lockUpdate = buildModelLockUpdate(model, MODEL_SCOPED_LOCK_MS);
     await updateProviderConnection(connectionId, {
       ...lockUpdate,
@@ -386,7 +401,7 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
   }
   if (!shouldFallback) return { shouldFallback: false, cooldownMs: 0 };
 
-  const reason = typeof errorText === "string" ? errorText.slice(0, 100) : "Provider error";
+  const reason = describeLockReason(errorText, status);
   const lockUpdate = buildModelLockUpdate(githubResetAtMs ? null : model, cooldownMs);
 
   await updateProviderConnection(connectionId, {
