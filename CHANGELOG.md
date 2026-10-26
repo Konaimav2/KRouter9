@@ -1,3 +1,22 @@
+# v3.2.4 (2026-10-26) — Codex streams terminate with [DONE]
+
+## Streaming
+- A codex upstream speaks the Responses API while the client asked for OpenAI chat
+  completions. The translator emitted `data: [DONE]` only when **both** sides were the
+  Responses format, so the translated stream closed with no terminator and clients that
+  wait for it hung until their own timeout
+- OpenAI to OpenAI also runs in translate mode, where an incoming sentinel was consumed and
+  never re-emitted, so a stream could end with zero sentinels
+- One rule now drives both paths: `needsDoneSentinel` is true for OpenAI chat completions and
+  the Responses API. Claude, Gemini and Ollama streams are untouched (Gemini rejects the
+  sentinel)
+- Proof: `tests/unit/codex-stream-done.test.js` (3 cases) plus the adjacent stream suites
+
+## Verified on the live gateway
+- `gpt-6.1-sol` combo: non-streaming 200 (`sol-ok`, 2.39s); streaming 200 with the full text
+- `cx/gpt-5.6-luna` and `gpt-5.6-terra` reproduced the missing sentinel; `deepseek-v4.1-flash`
+  exposed the duplicate-sentinel path
+
 # v3.2.3 (2026-10-26) — Hotfix: combo self-member picker, provider error text, codex tests
 
 ## Combo member picker (P7 residual)
