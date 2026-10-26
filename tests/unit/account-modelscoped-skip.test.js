@@ -45,7 +45,9 @@ describe("markAccountUnavailable — model-scoped 4xx rotates accounts", () => {
   it("falls back + model-locks the account on entitlement 400", async () => {
     const res = await markAccountUnavailable("c1", 400, CODEX_MSG, "codex", "gpt-5.6-sol");
     expect(res.shouldFallback).toBe(true);
-    expect(res.cooldownMs).toBe(MODEL_SCOPED_LOCK_MS);
+    // Entitlement errors are permanent for the account: hold the model for a day, because
+    // a 5-minute cooldown just makes the next request pay the same rejected round trip.
+    expect(res.cooldownMs).toBeGreaterThan(23 * 60 * 60 * 1000);
     const write = mocks.updateProviderConnection.mock.calls[0][1];
     expect(write["modelLock_gpt-5.6-sol"]).toBeDefined();
     expect(new Date(write["modelLock_gpt-5.6-sol"]).getTime()).toBeGreaterThan(Date.now());
@@ -77,7 +79,7 @@ describe("model-scoped anchor accepts the family name", () => {
   it("rotates for gpt-6.1-sol when the text says gpt-6-sol", async () => {
     const res = await markAccountUnavailable("c1", 400, FAMILY_MSG, "codex", "gpt-6.1-sol");
     expect(res.shouldFallback).toBe(true);
-    expect(res.cooldownMs).toBe(MODEL_SCOPED_LOCK_MS);
+    expect(res.cooldownMs).toBeGreaterThan(23 * 60 * 60 * 1000);
     const write = mocks.updateProviderConnection.mock.calls[0][1];
     expect(write["modelLock_gpt-6.1-sol"]).toBeDefined();
   });

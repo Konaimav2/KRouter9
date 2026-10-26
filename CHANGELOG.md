@@ -1,3 +1,29 @@
+# v3.2.5 (2026-10-26) — Codex entitlement lock, readable Change Log
+
+## Codex account selection
+- One account can be entitled to a plan and still be unable to serve a specific model.
+  Production showed the plus account `9a3ded0d...` failing **10 of 10** requests for
+  `gpt-6.1-sol` with `model_not_found` ("not supported when using Codex with a ChatGPT
+  account"), while the other plus account served **29 of 29**
+- The model-scoped lock existed but used the 5-minute cooldown, so after every cooldown the
+  next request paid the same rejected round trip. Entitlement errors are permanent for the
+  account: the lock TTL is now chosen from the error and is **24 hours** for
+  `model_not_supported` / `model_not_found` / plan wording. Every other model-scoped failure
+  keeps the 5-minute cooldown
+- Proof: `tests/unit/connection-lock-reason.test.js` and the updated
+  `tests/unit/account-modelscoped-skip.test.js`
+
+## Dashboard — Change Log
+- The popup rendered `CHANGELOG.md` through `marked()` with no stylesheet at all. Tailwind's
+  preflight strips heading sizes, list markers and paragraph spacing, so every release block
+  read as one flat wall of text
+- The rendered markdown now has a real reading hierarchy: sized headings, a **sticky version
+  heading** per section, restored bullets with token-coloured markers, readable line height
+  and spacing, styled inline code and code blocks, and link styling
+- The dialog is wider (`max-w-4xl`), declares `role="dialog"`/`aria-modal`, keeps loading and
+  error states visible, and uses a contained scroll area
+- Proof: `tests/unit/changelog-menu.test.js`
+
 # v3.2.4 (2026-10-26) — Codex streams terminate with [DONE]
 
 ## Streaming
