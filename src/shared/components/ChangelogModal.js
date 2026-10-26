@@ -54,14 +54,20 @@ export default function ChangelogModal({ isOpen, onClose }) {
       {/* Modal content */}
       <div
         ref={modalRef}
-        className="relative w-full bg-surface border border-black/10 dark:border-white/10 rounded-xl shadow-2xl animate-in fade-in zoom-in-95 duration-200 max-w-3xl flex flex-col max-h-[85vh]"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Change Log"
+        className="relative flex max-h-[85vh] w-full max-w-4xl flex-col rounded-xl border border-black/10 bg-surface shadow-2xl animate-in fade-in zoom-in-95 duration-200 dark:border-white/10"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-3 border-b border-black/5 dark:border-white/5">
-          <h2 className="text-lg font-semibold text-text-main">Change Log</h2>
+        <div className="flex items-start justify-between gap-3 border-b border-black/5 px-5 py-3 dark:border-white/5">
+          <div>
+            <h2 className="text-lg font-semibold text-text-main">Change Log</h2>
+            <p className="mt-0.5 text-[11px] text-text-muted">Release history, newest first</p>
+          </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-text-muted hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+            className="rounded-lg p-1.5 text-text-muted transition-colors hover:bg-black/5 dark:hover:bg-white/5"
             aria-label="Close"
           >
             <Icon name="close" className="text-[20px]" />
@@ -69,15 +75,17 @@ export default function ChangelogModal({ isOpen, onClose }) {
         </div>
 
         {/* Body */}
-        <div className="p-6 overflow-y-auto flex-1">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4 sm:px-6">
           {loading && (
             <div className="flex items-center justify-center py-10 text-text-muted">
-              <Icon name="progress_activity" className="animate-spin mr-2" />
+              <Icon name="progress_activity" className="mr-2 animate-spin" />
               Loading...
             </div>
           )}
           {error && (
-            <div className="text-red-500 py-4">Failed to load changelog: {error}</div>
+            <div role="alert" className="py-4 text-red-500">
+              Failed to load changelog: {error}
+            </div>
           )}
           {!loading && !error && html && (
             <div

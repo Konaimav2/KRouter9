@@ -349,6 +349,17 @@ function describeLockReason(errorText, status) {
   return status ? `Upstream error ${status}` : "Upstream error";
 }
 
+// "The 'x' model is not supported when using Codex with a ChatGPT account" is an
+// entitlement fact for that account, not a transient failure. A 5-minute cooldown only
+// makes the next request pay the same rejected round trip, so hold the model for a day.
+const ENTITLEMENT_LOCK_MS = 24 * 60 * 60 * 1000;
+const ENTITLEMENT_ERROR_RE = /model is not supported when using|model_not_found|does not have access to (?:this|that) model|not available on (?:this|your) plan/i;
+
+function modelScopedLockMs(errorText) {
+  const text = typeof errorText === "string" ? errorText : "";
+  return ENTITLEMENT_ERROR_RE.test(text) ? ENTITLEMENT_LOCK_MS : MODEL_SCOPED_LOCK_MS;
+}
+
 export async function markAccountUnavailable(connectionId, status, errorText, provider = null, model = null, resetsAtMs = null) {
   if (!connectionId || connectionId === "noauth") return { shouldFallback: false, cooldownMs: 0 };
 
@@ -360,7 +371,8 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
   // serve it. Lock the model on this account and rotate (P-SKIP).
   if (!resetsAtMs && model && isModelScopedError(status, errorText, model)) {
     const reason = describeLockReason(errorText, status);
-    const lockUpdate = buildModelLockUpdate(model, MODEL_SCOPED_LOCK_MS);
+    const lockMs = modelScopedLockMs(errorText);
+    const lockUpdate = buildModelLockUpdate(model, lockMs);
     await updateProviderConnection(connectionId, {
       ...lockUpdate,
       testStatus: "unavailable",
@@ -370,7 +382,7 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
     });
     const lockKey = Object.keys(lockUpdate)[0];
     log.warn("AUTH", `model-scoped ${status} on ${connectionId.slice(0, 8)} — locked ${lockKey}, rotating account`);
-    return { shouldFallback: true, cooldownMs: MODEL_SCOPED_LOCK_MS };
+    return { shouldFallback: true, cooldownMs: lockMs };
   }
   if (isClientFault(status, errorText) && !resetsAtMs) {
     return { shouldFallback: false, cooldownMs: 0, clientFault: true };

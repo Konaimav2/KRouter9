@@ -77,6 +77,23 @@ describe("connection lock reason is always informative", () => {
     expect(writtenReason()).toHaveLength(100);
     expect(writtenReason()).toBe("x".repeat(100));
   });
+
+  it("holds an entitlement error for a day instead of five minutes", async () => {
+    // Real production body: this account can never serve the model, so a short cooldown
+    // guarantees the next request pays the same rejected round trip.
+    const entitlement = JSON.stringify({
+      detail: "The 'gpt-6.1-sol' model is not supported when using Codex with a ChatGPT account.",
+      error: { type: "invalid_request_error", code: "model_not_found", message: "The 'gpt-6.1-sol' model is not supported when using Codex with a ChatGPT account." },
+    });
+
+    const before = Date.now();
+    await markAccountUnavailable("conn-1", 400, entitlement, "codex", "gpt-6.1-sol");
+
+    const patch = mocks.updateProviderConnection.mock.calls.at(-1)?.[1] || {};
+    const lock = patch["modelLock_gpt-6.1-sol"];
+    expect(lock).toBeTruthy();
+    expect(new Date(lock).getTime() - before).toBeGreaterThan(23 * 60 * 60 * 1000);
+  });
 });
 
 describe("card display of legacy lock reasons", () => {
