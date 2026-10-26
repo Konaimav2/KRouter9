@@ -1,6 +1,6 @@
 {
   "name": "krouter9-app",
-  "version": "3.2.3",
+  "version": "3.2.4",
   "description": "KRouter9 web dashboard (based on 9Router)",
   "private": true,
   "scripts": {
