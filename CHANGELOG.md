@@ -1,3 +1,15 @@
+# v3.2.6 (2026-10-27) — Gemini requests no longer end on a model turn
+
+## Antigravity / Gemini translation
+- Gemini rejects any conversation whose final turn belongs to the model:
+  `400 INVALID_ARGUMENT — Requests ending with a model turn are not supported.`
+  Clients that prefill, and agents that replay a trailing assistant message, hit this on
+  every request — including subagent dispatch through the gateway
+- `normalizeGeminiContents()` now closes such a conversation with a neutral user turn after
+  merging consecutive roles, so the request is accepted and the model still answers the real
+  last question. Conversations already ending on a user turn are untouched
+- Proof: `tests/unit/gemini-trailing-model-turn.test.js` (3 cases)
+
 # v3.2.5 (2026-10-26) — Codex entitlement lock, readable Change Log
 
 ## Codex account selection
