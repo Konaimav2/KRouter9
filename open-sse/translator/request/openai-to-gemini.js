@@ -81,6 +81,13 @@ function normalizeGeminiContents(contents) {
     if (last?.role === c.role) last.parts.push(...c.parts);
     else out.push({ ...c, parts: [...c.parts] });
   }
+  // Gemini/Antigravity reject a conversation whose final turn belongs to the model:
+  // "Requests ending with a model turn are not supported." Clients that prefill, or agents
+  // that replay a trailing assistant message, hit this every time. Close with a neutral
+  // user turn so the request is accepted; the model still answers the real last question.
+  if (out.at(-1)?.role === GEMINI_ROLE.MODEL) {
+    out.push({ role: GEMINI_ROLE.USER, parts: [{ text: "Continue." }] });
+  }
   return out;
 }
 
