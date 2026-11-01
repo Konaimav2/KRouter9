@@ -11,5 +11,8 @@ services:
     environment:
       - DATA_DIR=/app/data
       - PORT=20128
-      - INITIAL_PASSWORD=change-me
-      - JWT_SECRET=change-me-to-a-long-random-secret
+      # No defaults on purpose. A published JWT_SECRET lets anyone forge auth tokens
+      # offline, and a published password is a login. Both must be supplied by the
+      # operator (a .env file beside this compose file); compose aborts if either is unset.
+      - INITIAL_PASSWORD=${INITIAL_PASSWORD:?set INITIAL_PASSWORD in .env}
+      - JWT_SECRET=${JWT_SECRET:?set JWT_SECRET in .env (e.g. openssl rand -hex 32)}

@@ -22,7 +22,9 @@ const CAPACITY_ADAPTER_CAPS = [
   // pdf, videoInput temporarily hidden — no translator support yet for those blocks.
   { key: "audioInput", label: "Audio", icon: "graphic_eq", desc: "Audio input" },
 ];
-const DEFAULT_FALLBACK_MODEL = "oc/mimo-v2.5-free";
+// Retired IDs must never become the default: oc/mimo-v2.5-free stopped being served
+// upstream (verified 2026-10-25), so the successor keeps an emptied combo routable.
+const DEFAULT_FALLBACK_MODEL = "oc/mimo-v2.6-flash-free";
 const EMPTY_CAP_ENTRY = { enabled: true, roundRobin: false, models: [] };
 const EMPTY_CAPACITY_ADAPTER = {
   vision: { ...EMPTY_CAP_ENTRY },
@@ -341,6 +343,11 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
     };
   }, [commandOpen]);
   const [draftModels, setDraftModels] = useState(combo.models);
+  // Inline member rename: edits one model ID at its existing position. The draft stays a
+  // flat array of "<alias>/<model>" strings — no schema change, no display labels.
+  const [editingIndex, setEditingIndex] = useState(-1);
+  const [editingValue, setEditingValue] = useState("");
+  const [editError, setEditError] = useState("");
   const [draftName, setDraftName] = useState(combo.name);
   const [nameError, setNameError] = useState("");
   const [saveError, setSaveError] = useState("");
@@ -382,6 +389,35 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
     [next[index], next[target]] = [next[target], next[index]];
     setAnnouncement(`${draftModels[index]} moved from position ${index + 1} to ${target + 1}`);
     setDraftModels(next);
+  };
+
+  const startEdit = (index) => {
+    setEditingIndex(index);
+    setEditingValue(draftModels[index]);
+    setEditError("");
+  };
+
+  const cancelEdit = () => {
+    setEditingIndex(-1);
+    setEditingValue("");
+    setEditError("");
+  };
+
+  const commitEdit = (index) => {
+    const next = editingValue.trim();
+    if (!next) {
+      setEditError("Model ID cannot be empty.");
+      return;
+    }
+    if (next === draftModels[index]) {
+      cancelEdit();
+      return;
+    }
+    const updated = [...draftModels];
+    updated[index] = next; // same index keeps route order; still a string array
+    setDraftModels(updated);
+    setAnnouncement(`${draftModels[index]} renamed to ${next} at position ${index + 1}`);
+    cancelEdit();
   };
 
   const saveMembers = async () => {
@@ -464,7 +500,7 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
             {draftModels.map((model, index) => (
               <div
                 key={`${model}-${index}`}
-                draggable
+                draggable={editingIndex !== index}
                 onDragStart={(event) => {
                   dragSourceRef.current = index;
                   event.dataTransfer.effectAllowed = "move";
@@ -493,12 +529,13 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
                   setDraftModels(arrayMove(draftModels, source, target));
                   setAnnouncement(`${draftModels[source]} moved from position ${source + 1} to ${target + 1}`);
                 }}
-                className="relative grid min-h-14 cursor-grab grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 active:cursor-grabbing"
+                className={`relative grid min-h-14 grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 border bg-[var(--color-surface)] px-3 py-2 ${editingIndex === index ? "border-[var(--color-primary)]" : "cursor-grab border-[var(--color-border)] active:cursor-grabbing"}`}
               >
                 {dropPosition === index || (index === draftModels.length - 1 && dropPosition === draftModels.length) ? <span data-testid="combo-drop-indicator" aria-hidden="true" className={`pointer-events-none absolute inset-x-0 z-10 h-0.5 bg-[var(--color-primary)] ${dropPosition === index ? "top-0" : "bottom-0"}`} /> : null}
                 <div className="flex h-full flex-col items-center justify-center border-r border-[var(--route-line)] pr-3 font-mono text-xs tabular-nums text-[var(--color-primary)]">{String(index + 1).padStart(2, "0")}</div>
-                <div className="min-w-0"><code className="block break-all font-mono text-xs text-[var(--color-text)]">{model}</code><div className="mt-1 flex flex-wrap items-center gap-2"><span className="inline-flex items-center gap-1 text-[11px] text-[var(--color-text-muted)]"><span className="size-2 rounded-full border border-[var(--color-text-subtle)]" />Not tested</span><CapacityBadges caps={getCaps?.(model)} /></div></div>
+                <div className="min-w-0">{editingIndex === index ? (<div className="flex flex-col gap-1"><div className="flex items-center gap-1"><input autoFocus value={editingValue} onChange={(event) => { setEditingValue(event.target.value); setEditError(""); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); commitEdit(index); } else if (event.key === "Escape") { event.preventDefault(); cancelEdit(); } }} aria-label={`Model ID at position ${index + 1}`} aria-invalid={editError ? "true" : undefined} className="min-h-9 w-full min-w-0 border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-2 font-mono text-xs" /><IconButton icon="check" label={`Save model ID at position ${index + 1}`} onClick={() => commitEdit(index)} /><IconButton icon="close" label={`Cancel editing position ${index + 1}`} onClick={cancelEdit} /></div>{editError && <p role="alert" className="text-[11px] text-[var(--color-danger)]">{editError}</p>}</div>) : (<code className="block break-all font-mono text-xs text-[var(--color-text)]">{model}</code>)}<div className="mt-1 flex flex-wrap items-center gap-2"><span className="inline-flex items-center gap-1 text-[11px] text-[var(--color-text-muted)]"><span className="size-2 rounded-full border border-[var(--color-text-subtle)]" />Not tested</span><CapacityBadges caps={getCaps?.(model)} /></div></div>
                 <div className="flex items-center gap-1">
+                  <IconButton icon="edit" label={`Rename ${model}`} onClick={() => startEdit(index)} disabled={editingIndex === index} />
                   <IconButton icon="arrow_upward" label={`Move ${model} up`} onClick={() => moveModel(index, -1)} disabled={index === 0} />
                   <IconButton icon="arrow_downward" label={`Move ${model} down`} onClick={() => moveModel(index, 1)} disabled={index === draftModels.length - 1} />
                   <IconButton icon="close" label={`Remove ${model}`} onClick={() => setDraftModels(draftModels.filter((_, itemIndex) => itemIndex !== index))} danger />
@@ -521,7 +558,7 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
       <span className="sr-only" aria-live="polite">{announcement}</span>
 
       {showJudgeSelect && <ModelSelectModal isOpen={showJudgeSelect} onClose={() => setShowJudgeSelect(false)} onSelect={(model) => { onSetStrategy({ judgeModel: model?.value || "" }); setShowJudgeSelect(false); }} activeProviders={activeProviders} title="Select judge model" addedModelValues={judge ? [judge] : []} closeOnSelect />}
-      {showAddModel && <ModelSelectModal isOpen={showAddModel} onClose={() => setShowAddModel(false)} onSelect={(model) => { if (model?.value && !draftModels.includes(model.value)) setDraftModels([...draftModels, model.value]); }} onDeselect={(model) => setDraftModels(draftModels.filter((value) => value !== model?.value))} activeProviders={activeProviders} title={`Add model to ${combo.name}`} addedModelValues={draftModels} includeCombos closeOnSelect={false} />}
+      {showAddModel && <ModelSelectModal isOpen={showAddModel} onClose={() => setShowAddModel(false)} onSelect={(model) => { if (model?.value && !draftModels.includes(model.value)) setDraftModels([...draftModels, model.value]); }} onDeselect={(model) => setDraftModels(draftModels.filter((value) => value !== model?.value))} activeProviders={activeProviders} title={`Add model to ${combo.name}`} addedModelValues={draftModels} includeCombos excludeComboNames={[combo.name]} closeOnSelect={false} />}
     </article>
   );
 }

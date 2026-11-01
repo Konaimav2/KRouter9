@@ -3,7 +3,7 @@
 import Icon from "@/shared/components/Icon";
 import { useState, useEffect, useRef } from "react";
 import { getStatusVariant as getConnectionStatusVariant } from "@/shared/utils/connectionStatus";
-import { normalizeErrorClass, errorClassLabel } from "@/shared/utils/errorClass";
+import { normalizeErrorClass, errorClassLabel, displayConnectionError } from "@/shared/utils/errorClass";
 import PropTypes from "prop-types";
 import { Badge, Toggle, Tooltip } from "@/shared/components";
 import { useCooldownNow } from "@/shared/hooks/useCooldownNow";
@@ -122,6 +122,7 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, index =
   };
 
   const errorClass = connection.lastError ? normalizeErrorClass(connection) : null;
+  const displayError = displayConnectionError(connection);
 
   return (
     <div className={`grid min-w-0 grid-cols-[2.5rem_minmax(0,1fr)] gap-3 px-2 py-3 transition-colors hover:bg-[var(--color-surface-hover)] sm:grid-cols-[2.5rem_minmax(0,1fr)_auto] sm:items-center ${connection.isActive === false ? "bg-[var(--color-surface-strong)]" : ""}`}>
@@ -163,9 +164,9 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, index =
               </Badge>
             )}
             {isCooldown && connection.isActive !== false && <CooldownTimer until={modelLockUntil} />}
-            {connection.lastError && connection.isActive !== false && (
-              <span className="max-w-full truncate text-xs text-red-500 sm:max-w-[300px]" title={connection.lastError}>
-                {connection.lastError}
+            {displayError && connection.isActive !== false && (
+              <span className="max-w-full truncate text-xs text-red-500 sm:max-w-[300px]" title={displayError}>
+                {displayError}
               </span>
             )}
             {errorClass && errorClass !== "unknown" && <Badge variant="error" size="sm">{errorClassLabel(errorClass)}</Badge>}

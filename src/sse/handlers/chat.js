@@ -41,6 +41,7 @@ import { handleComboChat, handleFusionChat, detectRequiredCapabilities, partitio
 import { augmentModelsWithCapacityAdapter, withCapacityAdapterStripping, getActiveAdapterStrategy } from "open-sse/services/capacityAdapter.js";
 import { handleBypassRequest } from "open-sse/utils/bypassHandler.js";
 import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
+import { getOpencodeRetirement } from "open-sse/providers/opencodeFreeStatus.js";
 import { detectFormatByEndpoint } from "open-sse/translator/formats.js";
 import * as log from "../utils/logger.js";
 import { updateProviderCredentials, checkAndRefreshToken } from "../services/tokenRefresh.js";
@@ -447,6 +448,15 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
   }
 
   const { provider, model } = modelInfo;
+
+  // Retired free-lane models: fail fast with the migration target instead of paying a
+  // round-trip that can only answer 400/410 (verified live 2026-10-25).
+  const retirement = getOpencodeRetirement(provider, model);
+  if (retirement) {
+    log.warn("CHAT", `[${provider}/${model}] ${retirement.message}`);
+    saveRequestError({ provider, model, status: HTTP_STATUS.GONE, endpoint: clientRawRequest?.endpoint });
+    return errorResponse(HTTP_STATUS.GONE, `[${provider}/${model}] ${retirement.message}`);
+  }
 
   // Own response cache (W14): exact-match, non-streaming only, opt-in via
   // settings.responseCacheEnabled. Identity is bound into the key; failures

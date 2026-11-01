@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import dns from "node:dns/promises";
+import net from "node:net";
 import { getSettings } from "@/lib/localDb";
 import { DEFAULT_HEADROOM_URL } from "@/lib/headroom/detect";
 
@@ -25,7 +27,34 @@ async function getTargetBase() {
   if (!["http:", "https:"].includes(target.protocol)) {
     throw new Error("Headroom URL must use http or https");
   }
+  // Headroom is a local sidecar. Refuse anything that resolves outside loopback or
+  // RFC1918 space, so this route can never be pointed at cloud metadata or the
+  // public internet. Link-local (169.254.0.0/16, fe80::/10) is always rejected.
+  const host = target.hostname.replace(/^\[|\]$/g, "");
+  const addresses = net.isIP(host)
+    ? [host]
+    : (await dns.lookup(host, { all: true }).catch(() => [])).map((entry) => entry.address);
+  if (!addresses.length || addresses.some((address) => !isPrivateOrLoopback(address))) {
+    throw new Error("Headroom URL must resolve to a loopback or private address");
+  }
   return target;
+}
+
+function isPrivateOrLoopback(address) {
+  if (net.isIPv4(address)) {
+    if (address === "0.0.0.0") return false;
+    if (address.startsWith("127.")) return true;
+    if (address.startsWith("10.")) return true;
+    if (address.startsWith("192.168.")) return true;
+    if (/^172\.(1[6-9]|2\d|3[01])\./.test(address)) return true;
+    return false;
+  }
+  const low = address.toLowerCase();
+  if (low === "::1") return true;
+  if (low === "::") return false;
+  if (low.startsWith("::ffff:")) return isPrivateOrLoopback(low.slice("::ffff:".length));
+  if (low.startsWith("fc") || low.startsWith("fd")) return true; // unique-local
+  return false; // public + link-local (fe80::/10) rejected
 }
 
 function buildTargetUrl(base, path, search) {

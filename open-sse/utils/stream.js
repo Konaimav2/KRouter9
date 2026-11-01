@@ -125,6 +125,9 @@ export function createSSEStream(options = {}) {
   let openAIResponsesTerminalSeen = false;
   let openAIResponsesDoneSent = false;
   let streamDoneSent = false;  // track duplicate [DONE] across transform + flush
+  // OpenAI chat completions and the Responses API both require the SSE sentinel; Claude,
+  // Gemini and Ollama streams do not (Gemini even rejects it).
+  const needsDoneSentinel = targetFormat === FORMATS.OPENAI || targetFormat === FORMATS.OPENAI_RESPONSES;
   let finalized = false;
   // Client-visible failure seen inside the stream (a Responses `error` /
   // `response.failed` event, or a translator that set state.error). The stream
@@ -327,7 +330,7 @@ export function createSSEStream(options = {}) {
             sseEmittedCount++;
           }
 
-          if (keepsOpenAIResponsesFormat && !streamDoneSent) {
+          if (needsDoneSentinel && !streamDoneSent) {
             const doneOutput = "data: [DONE]\n\n";
             reqLogger?.appendConvertedChunk?.(doneOutput);
             controller.enqueue(sharedEncoder.encode(doneOutput));
@@ -540,7 +543,10 @@ export function createSSEStream(options = {}) {
           openAIResponsesTerminalSeen = true;
         }
 
-        if (keepsOpenAIResponsesFormat && !openAIResponsesDoneSent && !streamDoneSent) {
+        // Emit the sentinel for every OpenAI-format downstream, not only Responses
+        // passthrough. A codex upstream (Responses) translated to chat completions used to
+        // close without it, so clients waited for a terminator that never arrived.
+        if (needsDoneSentinel && !streamDoneSent) {
           const doneOutput = "data: [DONE]\n\n";
           reqLogger?.appendConvertedChunk?.(doneOutput);
           controller.enqueue(sharedEncoder.encode(doneOutput));

@@ -5,6 +5,7 @@ import { Button, CardSkeleton, Input, MaskedProxyValue, Modal, Toggle, ConfirmMo
 import Icon from "@/shared/components/Icon";
 import { useNotificationStore } from "@/store/notificationStore";
 import { redactSensitiveText } from "@/lib/proxyMask.js";
+import { FREE_PROVIDERS } from "@/shared/constants/providers";
 
 function formatDateTime(value) {
   if (!value) return "Never";
@@ -48,6 +49,7 @@ export default function ProxyPoolsPage() {
   const [healthProgress, setHealthProgress] = useState({ current: 0, total: 0 });
   const [bulkBusy, setBulkBusy] = useState(false);
   const [confirmState, setConfirmState] = useState(null);
+  const [freeLaneBindings, setFreeLaneBindings] = useState({ pools: {}, rotation: [] });
   const relayMenuRef = useRef(null);
   const notify = useNotificationStore();
 
@@ -65,11 +67,30 @@ export default function ProxyPoolsPage() {
 
   const fetchProxyPools = useCallback(async () => {
     try {
-      const res = await fetch("/api/proxy-pools?includeUsage=true", { cache: "no-store" });
+      const [res, settingsRes] = await Promise.all([
+        fetch("/api/proxy-pools?includeUsage=true", { cache: "no-store" }),
+        fetch("/api/settings", { cache: "no-store" }),
+      ]);
       const data = await res.json();
       if (res.ok) {
         setProxyPools(data.proxyPools || []);
       }
+      // Free-lane bindings live in settings.providerStrategies (no-auth providers have no
+      // connection row), so surface them here where pools are managed.
+      const settings = settingsRes.ok ? await settingsRes.json() : {};
+      const strategies = settings.providerStrategies || {};
+      const pools = {};
+      const rotation = [];
+      for (const [providerId, override] of Object.entries(strategies)) {
+        if (!override || !FREE_PROVIDERS[providerId]?.noAuth) continue;
+        if (override.rotateStrategy && override.rotateStrategy !== "none") {
+          rotation.push({ providerId, strategy: override.rotateStrategy });
+        } else if (override.proxyPoolId) {
+          if (!pools[override.proxyPoolId]) pools[override.proxyPoolId] = [];
+          pools[override.proxyPoolId].push(providerId);
+        }
+      }
+      setFreeLaneBindings({ pools, rotation });
     } catch (error) {
       console.log("Error fetching proxy pools:", error);
     } finally {
@@ -661,6 +682,12 @@ export default function ProxyPoolsPage() {
           </div>
         )}
 
+        {freeLaneBindings.rotation.length > 0 && (
+          <div className="border-b border-[var(--color-border)] bg-[var(--color-surface-strong)] px-3 py-2 text-[11px] text-text-muted">
+            Rotation active for {freeLaneBindings.rotation.map((lane) => `${lane.providerId} (${lane.strategy})`).join(", ")} — every active pool is used, and the free lane refuses direct egress if none is usable.
+          </div>
+        )}
+
         {proxyPools.length === 0 ? (
           <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] flex flex-wrap items-center justify-between gap-3 px-3 py-5">
             <div><p className="font-medium">No proxy pool entries yet</p><p className="text-sm text-text-muted">Create a proxy pool entry, then assign it to connections.</p></div>
@@ -677,7 +704,7 @@ export default function ProxyPoolsPage() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1"><p className="truncate text-sm font-medium">{pool.name}</p><span className={`inline-flex items-center gap-1 text-xs ${statusTone}`}><span aria-hidden="true">{statusGlyph}</span>{status}</span><span className={pool.isActive ? "text-success text-xs" : "text-text-muted text-xs"}>{pool.isActive ? "● Active" : "Ⅱ Inactive"}</span></div>
                 <div className="mt-1 text-xs text-text-muted"><MaskedProxyValue masked={pool.proxyUrlMasked || "***"} revealUrl={`/api/proxy-pools/${pool.id}/reveal`} hasAuth={pool.hasProxyAuth === true} /></div>
-                <div className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-text-muted"><span>{pool.noProxy ? "No proxy: configured" : "No proxy: none"}</span>{pool.type && <span>{pool.type} relay</span>}<span>{pool.boundConnectionCount || 0} bound</span><span>Last tested: {formatDateTime(pool.lastTestedAt)}</span>{pool.lastError && <span className="text-danger">■ {redactSensitiveText(pool.lastError)}</span>}</div>
+                <div className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-text-muted"><span>{pool.noProxy ? "No proxy: configured" : "No proxy: none"}</span>{pool.type && <span>{pool.type} relay</span>}<span>{pool.boundConnectionCount || 0} bound</span>{freeLaneBindings.pools[pool.id]?.length ? <span className="text-primary">Free lane: {freeLaneBindings.pools[pool.id].join(", ")}</span> : null}<span>Last tested: {formatDateTime(pool.lastTestedAt)}</span>{pool.lastError && <span className="text-danger">■ {redactSensitiveText(pool.lastError)}</span>}</div>
               </div>
               <div className="col-span-3 flex min-h-11 items-center justify-end gap-1 sm:col-span-1">
                 <Toggle size="sm" checked={pool.isActive === true} onChange={() => handleToggleActive(pool)} title={pool.isActive ? "Disable" : "Enable"} />

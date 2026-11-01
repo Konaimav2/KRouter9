@@ -4,17 +4,24 @@ import { OpenCodeZenExecutor } from "../../open-sse/executors/opencode-zen.js";
 import { getExecutor } from "../../open-sse/executors/index.js";
 
 describe("OpenCode free v2 tool choice and keyed isolation", () => {
-  it("keeps the Muse Spark 1.3 auto-only quirk for every rejected choice", () => {
+  it("keeps the auto-only quirk for every rejected choice", () => {
+    // The registry no longer pins any model to this quirk: the Muse Spark contributor
+    // IDs were retired upstream (2026-10-25). Inject the allowlist so the gate itself
+    // stays covered for a future model that needs it.
+    const executor = new OpenCodeExecutor();
+    executor.config = {
+      ...executor.config,
+      quirks: { forceAutoToolChoiceModels: ["muse-spark-1.3-contributor-free"] },
+    };
     for (const tool_choice of ["none", "required", { type: "function", name: "read" }]) {
       const body = { input: "hello", tools: [{ type: "function", name: "read" }], tool_choice };
-      const out = new OpenCodeExecutor().transformRequest("muse-spark-1.3-contributor-free(high)", body, true, {});
+      const out = executor.transformRequest("muse-spark-1.3-contributor-free(high)", body, true, {});
       expect(out.tool_choice).toBe("auto");
       expect(out.tools.map((tool) => tool.name)).toEqual(["read_client", "read", "shell"]);
     }
   });
 
-  it("does not default chat to none and marks injected tools as placeholders", () => {
-    const out = new OpenCodeExecutor().transformRequest("big-pickle", {
+  it("does not default chat to none and marks injected tools as placeholders", () => {    const out = new OpenCodeExecutor().transformRequest("big-pickle", {
       messages: [{ role: "user", content: "hello" }],
     }, true, {});
     expect(out.tool_choice).toBeUndefined();

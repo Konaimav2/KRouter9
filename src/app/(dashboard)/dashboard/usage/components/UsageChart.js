@@ -54,7 +54,11 @@ export default function UsageChart({ period = "7d", viewMode = "tokens", scopeQu
     return () => { requestId.current += 1; };
   }, [fetchData]);
 
-  const hasData = data.some((d) => d.tokens > 0 || d.cost > 0);
+  // Gate on the metric actually being displayed. Testing tokens OR cost would let a
+  // zero-cost period render an all-zero cost chart just because tokens moved.
+  const hasData = chartMode === "cost"
+    ? data.some((d) => Number(d.cost) > 0)
+    : data.some((d) => Number(d.tokens) > 0);
 
   return (
     <div className="flex min-w-0 flex-col gap-3 p-3 sm:p-4">
@@ -65,7 +69,18 @@ export default function UsageChart({ period = "7d", viewMode = "tokens", scopeQu
           {Array.from({ length: 5 }, (_, index) => <div key={index} className="h-7 animate-pulse motion-reduce:animate-none bg-[var(--color-surface-strong)]" />)}
         </div>
       ) : !hasData ? (
-        <div className="h-48 flex items-center justify-center text-text-muted text-sm">No data for this period</div>
+        error ? null : (
+          <div className="flex h-48 flex-col items-center justify-center gap-1 px-4 text-center text-sm text-[var(--color-text-muted)]">
+            <span className="font-medium text-[var(--color-text)]">
+              {chartMode === "cost" ? "No measured cost in this period" : "No token usage in this period"}
+            </span>
+            <span>
+              {chartMode === "cost"
+                ? "Switch to Tokens to see traffic, or widen the period."
+                : "Widen the period or clear the scope filter."}
+            </span>
+          </div>
+        )
       ) : (
         <ResponsiveContainer width="100%" height={220}>
           <AreaChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>

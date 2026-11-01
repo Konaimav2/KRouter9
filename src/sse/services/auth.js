@@ -94,13 +94,46 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
       const settings = await getSettings();
       const override = (settings.providerStrategies || {})[providerId] || {};
       const strategy = override.rotateStrategy || "none";
-      let pickedId = override.proxyPoolId || null;
-      if (strategy !== "none") {
+      const boundPoolId = override.proxyPoolId || null;
+      const rotationActive = strategy !== "none";
+      // A binding exists when the operator picked a pool or enabled rotation. With neither,
+      // "None (direct)" is an explicit choice, so direct egress is allowed.
+      const bindingActive = Boolean(boundPoolId) || rotationActive;
+
+      let resolvedProxy;
+      if (bindingActive) {
         const allPools = await getProxyPools({ isActive: true });
-        const poolIds = allPools.filter(p => p.proxyUrl).map(p => p.id);
-        pickedId = pickProxyPoolId(poolIds, strategy, providerId);
+        const usablePools = allPools.filter(pool => pool.proxyUrl);
+        const pickedId = rotationActive
+          ? pickProxyPoolId(usablePools.map(pool => pool.id), strategy, providerId)
+          : boundPoolId;
+
+        // Q3: a bound free lane egresses through its pool or not at all. A silent direct
+        // fallback would expose this server's own IP, so refuse loudly instead. Returning
+        // the existing allRateLimited shape routes this through the 503 path that already
+        // surfaces lastError to the client.
+        const tried = (usablePools.length ? usablePools : allPools)
+          .map(pool => pool.name || pool.id)
+          .join(" → ");
+        const refuse = (reason) => ({
+          id: "noauth",
+          connectionName: "Public",
+          isActive: true,
+          accessToken: "public",
+          allRateLimited: true,
+          lastError: `Free lane ${providerId} is bound to a proxy pool but ${reason}. Refusing direct egress. tried: ${tried || boundPoolId || "no active proxy pools"}`,
+          providerSpecificData: {},
+        });
+
+        if (!pickedId) return refuse("no usable member is available");
+        resolvedProxy = await resolveConnectionProxyConfig({ proxyPoolId: pickedId });
+        if (resolvedProxy.source === "none" || resolvedProxy.source === "error") {
+          return refuse(`pool ${pickedId} could not be resolved`);
+        }
+      } else {
+        resolvedProxy = await resolveConnectionProxyConfig({ proxyPoolId: "" });
       }
-      const resolvedProxy = await resolveConnectionProxyConfig({ proxyPoolId: pickedId || "" });
+
       return {
         id: "noauth",
         connectionName: "Public",
@@ -334,6 +367,32 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
  * @param {string|null} model - The specific model that triggered the error
  * @returns {{ shouldFallback: boolean, cooldownMs: number }}
  */
+function describeLockReason(errorText, status) {
+  const raw = errorText && typeof errorText === "object" && typeof errorText.message === "string"
+    ? errorText.message
+    : errorText;
+  const text = typeof raw === "string"
+    ? raw.trim()
+    : raw == null
+      ? ""
+      : String(raw).trim();
+  if (text) return text.slice(0, 100);
+  // Cards render this verbatim. A bare "Provider error" tells the operator nothing, so
+  // at minimum keep the status that caused the lock.
+  return status ? `Upstream error ${status}` : "Upstream error";
+}
+
+// "The 'x' model is not supported when using Codex with a ChatGPT account" is an
+// entitlement fact for that account, not a transient failure. A 5-minute cooldown only
+// makes the next request pay the same rejected round trip, so hold the model for a day.
+const ENTITLEMENT_LOCK_MS = 24 * 60 * 60 * 1000;
+const ENTITLEMENT_ERROR_RE = /model is not supported when using|model_not_found|does not have access to (?:this|that) model|not available on (?:this|your) plan/i;
+
+function modelScopedLockMs(errorText) {
+  const text = typeof errorText === "string" ? errorText : "";
+  return ENTITLEMENT_ERROR_RE.test(text) ? ENTITLEMENT_LOCK_MS : MODEL_SCOPED_LOCK_MS;
+}
+
 export async function markAccountUnavailable(connectionId, status, errorText, provider = null, model = null, resetsAtMs = null) {
   if (!connectionId || connectionId === "noauth") return { shouldFallback: false, cooldownMs: 0 };
 
@@ -344,8 +403,9 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
   // is per-account, not per-request — a sibling account on another plan may
   // serve it. Lock the model on this account and rotate (P-SKIP).
   if (!resetsAtMs && model && isModelScopedError(status, errorText, model)) {
-    const reason = typeof errorText === "string" ? errorText.slice(0, 100) : "Provider error";
-    const lockUpdate = buildModelLockUpdate(model, MODEL_SCOPED_LOCK_MS);
+    const reason = describeLockReason(errorText, status);
+    const lockMs = modelScopedLockMs(errorText);
+    const lockUpdate = buildModelLockUpdate(model, lockMs);
     await updateProviderConnection(connectionId, {
       ...lockUpdate,
       testStatus: "unavailable",
@@ -355,7 +415,7 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
     });
     const lockKey = Object.keys(lockUpdate)[0];
     log.warn("AUTH", `model-scoped ${status} on ${connectionId.slice(0, 8)} — locked ${lockKey}, rotating account`);
-    return { shouldFallback: true, cooldownMs: MODEL_SCOPED_LOCK_MS };
+    return { shouldFallback: true, cooldownMs: lockMs };
   }
   if (isClientFault(status, errorText) && !resetsAtMs) {
     return { shouldFallback: false, cooldownMs: 0, clientFault: true };
@@ -386,7 +446,7 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
   }
   if (!shouldFallback) return { shouldFallback: false, cooldownMs: 0 };
 
-  const reason = typeof errorText === "string" ? errorText.slice(0, 100) : "Provider error";
+  const reason = describeLockReason(errorText, status);
   const lockUpdate = buildModelLockUpdate(githubResetAtMs ? null : model, cooldownMs);
 
   await updateProviderConnection(connectionId, {

@@ -9,6 +9,14 @@ import {
   CAVEMAN_LEVELS,
   PONYTAIL_LEVELS,
 } from "../endpoint/endpointConstants";
+import {
+  HEADROOM_VERSION,
+  buildHeadroomDockerfile,
+  buildHeadroomRunCommand,
+  headroomSampleMessages,
+} from "@/shared/constants/headroom";
+
+const formatTokens = (value) => new Intl.NumberFormat("en-US").format(Math.round(Number(value) || 0));
 
 export default function TokenSaverClient() {
   const [rtkEnabled, setRtkEnabledState] = useState(false);
@@ -26,6 +34,8 @@ export default function TokenSaverClient() {
   });
   const [headroomActionLoading, setHeadroomActionLoading] = useState(false);
   const [headroomActionError, setHeadroomActionError] = useState("");
+  const [verifyResult, setVerifyResult] = useState(null);
+  const [savings, setSavings] = useState(null);
   const [headroomExtras, setHeadroomExtras] = useState({
     version: null,
     extras: { code: false, ml: false },
@@ -421,6 +431,58 @@ export default function TokenSaverClient() {
     patchSetting({ headroomTimeoutMs: next });
   };
 
+  // Proves the proxy end to end: /health can be green while /v1/compress is broken.
+  // The request goes through the SSRF-guarded dashboard proxy route, never straight
+  // from the browser, so the configured URL keeps its private-address restriction.
+  const handleVerifyService = useCallback(async () => {
+    setVerifyResult({ loading: true });
+    const started = performance.now();
+    try {
+      const res = await fetch("/api/headroom/proxy/v1/compress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "gpt-5", messages: headroomSampleMessages() }),
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) {
+        setVerifyResult({ ok: false, error: `Service returned HTTP ${res.status}` });
+        return;
+      }
+      const data = await res.json();
+      setVerifyResult({
+        ok: true,
+        before: data.tokens_before ?? 0,
+        after: data.tokens_after ?? 0,
+        saved: data.tokens_saved ?? 0,
+        ms: Math.round(performance.now() - started),
+      });
+    } catch (e) {
+      setVerifyResult({ ok: false, error: e?.message || "Request failed" });
+    }
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/headroom/proxy/stats")
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("stats"))))
+      .then((data) => {
+        if (!alive) return;
+        const compression = data?.summary?.compression;
+        const before = Number(compression?.total_tokens_before);
+        if (!Number.isFinite(before) || before <= 0) {
+          setSavings({ error: true });
+          return;
+        }
+        setSavings({
+          before,
+          saved: Number(compression.total_tokens_removed ?? compression.total_tokens_saved_all_layers ?? 0),
+          pct: Number.isFinite(compression.avg_compression_pct) ? compression.avg_compression_pct : null,
+        });
+      })
+      .catch(() => { if (alive) setSavings({ error: true }); });
+    return () => { alive = false; };
+  }, []);
+
   useEffect(() => {
     const loadSettings = async () => {
       try {
@@ -488,9 +550,9 @@ export default function TokenSaverClient() {
     {
       id: "install",
       label: "Install",
-      state: !headroomLocalUrl ? "External service" : headroomStatus.installed ? "Complete" : "Approval required",
+      state: !headroomLocalUrl ? (headroomStatus.running ? "Complete" : "Container setup") : headroomStatus.installed ? "Complete" : "Approval required",
       body: !headroomLocalUrl
-        ? "For an external URL, install and start Headroom on that host yourself. Save its URL below, then Re-check before enabling. Local setup cannot manage an external service."
+        ? "Run Headroom as a sidecar on the Docker host: build the pinned image, publish the port on loopback only, then test the service below."
         : 'Package source: PyPI package headroom-ai with the proxy extra. Installation never runs on page load.',
       command: headroomLocalUrl ? 'pip install "headroom-ai[proxy]"' : null,
       recovery: headroomLocalUrl && !headroomStatus.installed ? "Run the reviewed command externally, then re-check." : null,
@@ -553,11 +615,11 @@ export default function TokenSaverClient() {
         <aside aria-labelledby="savings-title" className="border border-border bg-surface p-4">
           <h2 id="savings-title" className="font-semibold">Current savings evidence</h2>
           <dl className="mt-4 grid grid-cols-2 gap-px bg-border">
-            <div className="bg-surface-2 p-3"><dt className="text-xs text-text-muted">Before</dt><dd className="mt-1 font-mono text-xl tabular-nums">— tokens</dd></div>
-            <div className="bg-surface-2 p-3"><dt className="text-xs text-text-muted">After</dt><dd className="mt-1 font-mono text-xl tabular-nums">— tokens</dd></div>
-            <div className="col-span-2 bg-surface-2 p-3"><dt className="text-xs text-text-muted">Saved</dt><dd className="mt-1 font-mono text-xl tabular-nums">Awaiting measured traffic</dd></div>
+            <div className="bg-surface-2 p-3"><dt className="text-xs text-text-muted">Before</dt><dd className="mt-1 font-mono text-xl tabular-nums">{savings?.before != null ? `${formatTokens(savings.before)} tokens` : "— tokens"}</dd></div>
+            <div className="bg-surface-2 p-3"><dt className="text-xs text-text-muted">After</dt><dd className="mt-1 font-mono text-xl tabular-nums">{savings?.before != null ? `${formatTokens(Math.max(0, savings.before - savings.saved))} tokens` : "— tokens"}</dd></div>
+            <div className="col-span-2 bg-surface-2 p-3"><dt className="text-xs text-text-muted">Saved</dt><dd className="mt-1 font-mono text-xl tabular-nums">{savings?.before != null ? `${formatTokens(savings.saved)} tokens${savings.pct != null ? ` · ${savings.pct}% avg` : ""}` : savings?.error ? "Headroom service stats unavailable" : "Awaiting measured traffic"}</dd></div>
           </dl>
-          <p className="mt-3 text-xs text-text-muted">Evidence appears after a request passes through an enabled saver; estimates are never presented as billing.</p>
+          <p className="mt-3 text-xs text-text-muted">{savings?.before != null ? "Totals reported by the Headroom service, not this gateway's billing. Estimates are never presented as cost." : "Evidence appears after a request passes through an enabled saver; estimates are never presented as billing."}</p>
         </aside>
       </div>
 
@@ -574,7 +636,30 @@ export default function TokenSaverClient() {
                 <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{step.label}</h3><span className="text-xs font-semibold text-text-muted">{step.state}</span></div>
                 <p className="mt-1 text-sm text-text-muted">{step.body}</p>
                 {step.command && <div className="mt-3 flex flex-col gap-2 sm:flex-row"><pre className="min-w-0 flex-1 overflow-x-auto border border-border bg-[var(--color-code-bg)] p-3 font-mono text-xs">{step.command}</pre><Button size="sm" variant="secondary" onClick={() => copy(step.command)}>{copied ? "Copied" : "Copy command"}</Button></div>}
+                {step.id === "install" && !headroomLocalUrl && (
+                  <div className="mt-3 space-y-2">
+                    <p className="text-xs text-text-muted">Container setup pinned to headroom-ai {HEADROOM_VERSION}. Publish the port on loopback only; the acknowledgement variable is what lets the proxy bind inside the container.</p>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <pre className="min-w-0 flex-1 overflow-x-auto border border-border bg-[var(--color-code-bg)] p-3 font-mono text-xs">{buildHeadroomDockerfile()}</pre>
+                      <Button size="sm" variant="secondary" onClick={() => copy(buildHeadroomDockerfile())}>{copied ? "Copied" : "Copy Dockerfile"}</Button>
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <pre className="min-w-0 flex-1 overflow-x-auto border border-border bg-[var(--color-code-bg)] p-3 font-mono text-xs">{buildHeadroomRunCommand()}</pre>
+                      <Button size="sm" variant="secondary" onClick={() => copy(buildHeadroomRunCommand())}>{copied ? "Copied" : "Copy run command"}</Button>
+                    </div>
+                  </div>
+                )}
                 {step.id === "verify" && <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_9rem]"><Input value={headroomUrl} onChange={(event) => setHeadroomUrl(event.target.value)} onBlur={handleHeadroomUrlBlur} aria-label="Headroom proxy URL" /><Input value={String(headroomTimeoutMs)} onChange={(event) => setHeadroomTimeoutMs(event.target.value)} onBlur={handleHeadroomTimeoutBlur} aria-label="Headroom timeout in milliseconds" /></div>}
+                {step.id === "verify" && (
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <Button size="sm" variant="secondary" onClick={handleVerifyService} disabled={!!verifyResult?.loading}>{verifyResult?.loading ? "Testing…" : "Test service"}</Button>
+                    {verifyResult && !verifyResult.loading && (verifyResult.ok ? (
+                      <p role="status" className="text-xs text-success">Reachable · {verifyResult.before} → {verifyResult.after} tokens · {verifyResult.ms} ms</p>
+                    ) : (
+                      <p role="alert" className="text-xs text-danger">Test failed: {verifyResult.error}</p>
+                    ))}
+                  </div>
+                )}
                 {step.id === "verify" && headroomCanStart && !headroomRunning && <Button className="mt-3" size="sm" onClick={handleHeadroomStart} disabled={headroomActionLoading}>{headroomActionLoading ? "Starting…" : "Start service"}</Button>}
                 {step.id === "verify" && headroomManaged && headroomRunning && <Button className="mt-3" size="sm" variant="secondary" onClick={handleHeadroomStop} disabled={headroomActionLoading}>Stop service</Button>}
                 {step.id === "enable" && <div className="mt-3 flex items-center gap-3"><Toggle checked={headroomEnabled} disabled={!headroomRunning} onChange={() => handleHeadroomEnabled(!headroomEnabled)} /><span className="text-sm">Use Headroom for context compression</span></div>}

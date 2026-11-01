@@ -1,3 +1,94 @@
+# v3.2.6 (2026-10-27) — Gemini requests no longer end on a model turn
+
+## Antigravity / Gemini translation
+- Gemini rejects any conversation whose final turn belongs to the model:
+  `400 INVALID_ARGUMENT — Requests ending with a model turn are not supported.`
+  Clients that prefill, and agents that replay a trailing assistant message, hit this on
+  every request — including subagent dispatch through the gateway
+- `normalizeGeminiContents()` now closes such a conversation with a neutral user turn after
+  merging consecutive roles, so the request is accepted and the model still answers the real
+  last question. Conversations already ending on a user turn are untouched
+- Proof: `tests/unit/gemini-trailing-model-turn.test.js` (3 cases)
+
+# v3.2.5 (2026-10-26) — Codex entitlement lock, readable Change Log
+
+## Codex account selection
+- One account can be entitled to a plan and still be unable to serve a specific model.
+  Production showed the plus account `9a3ded0d...` failing **10 of 10** requests for
+  `gpt-6.1-sol` with `model_not_found` ("not supported when using Codex with a ChatGPT
+  account"), while the other plus account served **29 of 29**
+- The model-scoped lock existed but used the 5-minute cooldown, so after every cooldown the
+  next request paid the same rejected round trip. Entitlement errors are permanent for the
+  account: the lock TTL is now chosen from the error and is **24 hours** for
+  `model_not_supported` / `model_not_found` / plan wording. Every other model-scoped failure
+  keeps the 5-minute cooldown
+- Proof: `tests/unit/connection-lock-reason.test.js` and the updated
+  `tests/unit/account-modelscoped-skip.test.js`
+
+## Dashboard — Change Log
+- The popup rendered `CHANGELOG.md` through `marked()` with no stylesheet at all. Tailwind's
+  preflight strips heading sizes, list markers and paragraph spacing, so every release block
+  read as one flat wall of text
+- The rendered markdown now has a real reading hierarchy: sized headings, a **sticky version
+  heading** per section, restored bullets with token-coloured markers, readable line height
+  and spacing, styled inline code and code blocks, and link styling
+- The dialog is wider (`max-w-4xl`), declares `role="dialog"`/`aria-modal`, keeps loading and
+  error states visible, and uses a contained scroll area
+- Proof: `tests/unit/changelog-menu.test.js`
+
+# v3.2.4 (2026-10-26) — Codex streams terminate with [DONE]
+
+## Streaming
+- A codex upstream speaks the Responses API while the client asked for OpenAI chat
+  completions. The translator emitted `data: [DONE]` only when **both** sides were the
+  Responses format, so the translated stream closed with no terminator and clients that
+  wait for it hung until their own timeout
+- OpenAI to OpenAI also runs in translate mode, where an incoming sentinel was consumed and
+  never re-emitted, so a stream could end with zero sentinels
+- One rule now drives both paths: `needsDoneSentinel` is true for OpenAI chat completions and
+  the Responses API. Claude, Gemini and Ollama streams are untouched (Gemini rejects the
+  sentinel)
+- Proof: `tests/unit/codex-stream-done.test.js` (3 cases) plus the adjacent stream suites
+
+## Verified on the live gateway
+- `gpt-6.1-sol` combo: non-streaming 200 (`sol-ok`, 2.39s); streaming 200 with the full text
+- `cx/gpt-5.6-luna` and `gpt-5.6-terra` reproduced the missing sentinel; `deepseek-v4.1-flash`
+  exposed the duplicate-sentinel path
+
+# v3.2.3 (2026-10-26) — Hotfix: combo self-member picker, provider error text, codex tests
+
+## Combo member picker (P7 residual)
+- A combo could be offered as a member of **itself**. The add-model picker runs with
+  `includeCombos`, so the combo under edit appeared in its own list; its value resolves
+  back to the same combo, which made clicking it either add a cyclic member (dropped
+  server-side, so nothing appeared to happen) or toggle nothing at all — reported as
+  "the model add with the same name of combo model still happening"
+- `ModelSelectModal` gains `excludeComboNames`, and the combo editor excludes its own
+  name, so the picker can no longer emit a self-reference. Nested combos remain
+  selectable
+- Proof: `tests/unit/combo-model-picker-contract.test.js` asserts the picker instance
+  carries `excludeComboNames={[combo.name]}` and that the modal filters the list
+
+## Provider cards: the contentless "Provider error" placeholder
+- `markAccountUnavailable` wrote the literal `Provider error` as `connection.lastError`
+  whenever a handler passed an empty or non-string error, so almost every failing provider
+  card showed the same message and the real cause (status, upstream text) was lost
+- The lock reason is now derived from whatever the caller supplied: a string is trimmed and
+  bounded, an error-like object contributes its `message`, and an empty value falls back to
+  `Upstream error <status>`
+- Rows already carrying the placeholder are rendered as `Upstream error <errorCode>` without
+  mutating stored data; the next successful request clears them through `clearAccountError`
+- Proof: `tests/unit/connection-lock-reason.test.js` (7 cases)
+
+## Codex image prefetch tests
+- `tests/unit/codex-image-fetch.test.js` mocked `node:dns/promises.lookup` with a single
+  record object, but the SSRF guard calls `lookup(host, { all: true })` and requires an
+  array. The guard therefore treated `example.com` as blocked, no fetch was attempted,
+  and the image stayed a remote URL — two failures that looked like a product bug
+- The mock now returns an address array. No production code changed: the executor and
+  the hardened fetcher were already correct
+- Both tests removed from `tests/__baseline__/known-fails.txt`
+
 # v3.2.2 (2026-10-24) — Routing correctness: priority, plan-aware accounts, edge timeouts
 
 ## Connection priority

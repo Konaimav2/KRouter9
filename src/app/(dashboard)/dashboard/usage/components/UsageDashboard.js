@@ -251,6 +251,20 @@ export default function UsageDashboard({ period, mode, scopeQuery }) {
     return { columns: MODEL_COLUMNS, groups: groupData(sortData(stats.byModel, stats.pending?.byModel || {}, sortBy, sortOrder), "rawModel", sortBy, sortOrder), summary: commonSummary(1), detail: (item) => detail(item, item.rawModel), empty: "No usage recorded yet." };
   }, [sortBy, sortOrder, stats, tableView]);
 
+  // Breakdown: a table whose selected metric is zero in every row is not evidence.
+  // Replace it with an explanation that still names the request count.
+  const breakdownMetric = useMemo(() => {
+    const groups = config?.groups || [];
+    const key = mode === "costs" ? "cost" : "totalTokens";
+    let metric = 0;
+    let requests = 0;
+    for (const group of groups) {
+      metric += Number(group.summary?.[key]) || 0;
+      requests += Number(group.summary?.requests) || 0;
+    }
+    return { metric, requests, hasRows: groups.length > 0 };
+  }, [config, mode]);
+
   if (loading && !stats) return <LoadingBands />;
   if (!stats) return <div className="border border-[var(--danger)] bg-[var(--danger-wash)] p-4 text-sm"><strong>Usage unavailable.</strong> {statsError}<button type="button" onClick={fetchStats} className="ml-3 underline">Retry</button></div>;
 
@@ -259,6 +273,17 @@ export default function UsageDashboard({ period, mode, scopeQuery }) {
     <section className="border border-border bg-surface"><header className="flex min-h-11 items-center gap-3 border-b border-border bg-surface-2 px-4 py-3"><h2 className="font-semibold">Overview</h2>{fetching && <span role="status" className="ml-auto text-xs text-[var(--text-muted)]">Refreshing…</span>}</header><OverviewCards stats={stats} viewMode={mode} density="compact" /></section>
     <section className="border border-border bg-surface"><header className="flex min-h-11 items-center gap-3 border-b border-border bg-surface-2 px-4 py-3"><h2 className="font-semibold">Route activity</h2><span className="ml-auto font-mono tabular-nums text-xs text-[var(--text-muted)]">{stats.activeRequests?.length || 0} active</span></header><div className="grid min-w-0 gap-0 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]"><ProviderTopology providers={providers} activeRequests={stats.activeRequests || []} lastProvider={stats.recentRequests?.[0]?.provider || ""} errorProvider={stats.errorProvider || ""} /><RecentRequests requests={stats.recentRequests || []} /></div></section>
     <section className="border border-border bg-surface"><header className="flex min-h-11 items-center gap-3 border-b border-border bg-surface-2 px-4 py-3"><h2 className="font-semibold">Trend</h2><span className="ml-auto font-mono tabular-nums text-xs text-[var(--text-muted)]">{mode === "tokens" ? "Tokens" : "USD"}</span></header><UsageChart period={period} viewMode={mode} scopeQuery={query} /></section>
-    <section className="border border-border bg-surface"><header className="flex min-h-11 items-center gap-3 border-b border-border bg-surface-2 px-4 py-3 flex-wrap"><h2 className="font-semibold">Breakdown</h2><div className="ml-auto flex items-center gap-2"><label htmlFor="usage-breakdown" className="sr-only">Break down usage by</label><select id="usage-breakdown" value={tableView} onChange={(event) => { setTableView(event.target.value); const params = new URLSearchParams(searchParams.toString()); params.set("table", event.target.value); router.replace(`?${params.toString()}`, { scroll: false }); }} className="h-9 rounded-[var(--radius-control)] border border-[var(--input-border)] bg-[var(--surface)] px-3 text-sm">{TABLE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div></header>{config && <UsageTable title="" columns={config.columns} groupedData={config.groups} tableType={tableView} sortBy={sortBy} sortOrder={sortOrder} onToggleSort={toggleSort} viewMode={mode} storageKey={`usage-ledger:${tableView}`} renderSummaryCells={config.summary} renderDetailCells={config.detail} emptyMessage={config.empty} />}{tableView === "apiKey" && config?.groups?.length > 0 && <div className="border-t border-[var(--ledger-rule)] p-3 text-xs text-[var(--text-muted)]">Deep-link a key group without copying credentials: {config.groups.slice(0, 3).map((group, index) => <Fragment key={group.groupKey}>{index ? " · " : ""}<Link className="text-[var(--primary)] underline" href={`?tab=overview&table=apiKey&key=${encodeURIComponent(group.groupKey)}`}>{group.groupKey}</Link></Fragment>)}</div>}</section>
+    <section className="border border-border bg-surface"><header className="flex min-h-11 items-center gap-3 border-b border-border bg-surface-2 px-4 py-3 flex-wrap"><h2 className="font-semibold">Breakdown</h2><div className="ml-auto flex items-center gap-2"><label htmlFor="usage-breakdown" className="sr-only">Break down usage by</label><select id="usage-breakdown" value={tableView} onChange={(event) => { setTableView(event.target.value); const params = new URLSearchParams(searchParams.toString()); params.set("table", event.target.value); router.replace(`?${params.toString()}`, { scroll: false }); }} className="h-9 rounded-[var(--radius-control)] border border-[var(--input-border)] bg-[var(--surface)] px-3 text-sm">{TABLE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div></header>{config && breakdownMetric.hasRows && breakdownMetric.metric === 0 ? (
+              <div className="flex flex-col items-center gap-1 px-4 py-10 text-center text-sm text-[var(--color-text-muted)]">
+                <span className="font-medium text-[var(--color-text)]">
+                  {mode === "costs" ? "No measured cost for this period" : "No token counts for this period"}
+                </span>
+                <span>
+                  {breakdownMetric.requests > 0
+                    ? `${fmt(breakdownMetric.requests)} requests were recorded, but no ${mode === "costs" ? "cost" : "tokens"} were measured.`
+                    : "Widen the period or clear the scope filter."}
+                </span>
+              </div>
+            ) : config && <UsageTable title="" columns={config.columns} groupedData={config.groups} tableType={tableView} sortBy={sortBy} sortOrder={sortOrder} onToggleSort={toggleSort} viewMode={mode} storageKey={`usage-ledger:${tableView}`} renderSummaryCells={config.summary} renderDetailCells={config.detail} emptyMessage={config.empty} />}{tableView === "apiKey" && config?.groups?.length > 0 && <div className="border-t border-[var(--ledger-rule)] p-3 text-xs text-[var(--text-muted)]">Deep-link a key group without copying credentials: {config.groups.slice(0, 3).map((group, index) => <Fragment key={group.groupKey}>{index ? " · " : ""}<Link className="text-[var(--primary)] underline" href={`?tab=overview&table=apiKey&key=${encodeURIComponent(group.groupKey)}`}>{group.groupKey}</Link></Fragment>)}</div>}</section>
   </div>;
 }

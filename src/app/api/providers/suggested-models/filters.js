@@ -3,8 +3,23 @@ import { normalizeNousFreeModels } from "open-sse/services/nous.js";
 // Free OpenCode models that don't use the "-free" id suffix
 const KNOWN_FREE_OPENCODE_MODELS = ["big-pickle"];
 
-// Upstream returns "Model is unavailable" for this id (2026-09-02) — re-enable when fixed
-const DEAD_FREE_OPENCODE_MODELS = new Set(["deepseek-v4-flash-free"]);
+// The free catalog rotates: a model retired today can be served again tomorrow
+// (`nemotron-3-ultra-free` is served while absent from the catalog). Nothing may therefore
+// stay permanently hidden, so every entry carries the date it was verified and expires.
+// Muse Spark is deliberately not listed — its 410 is months old and the family must be
+// retryable; the live status check reports it instead of a permanent block.
+const DEAD_FREE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+const DEAD_FREE_OPENCODE_MODELS = new Map([
+  ["deepseek-v4-flash-free", "2026-10-25"],
+  ["mimo-v2.5-free", "2026-10-25"],
+  ["ling-3.0-flash-fin-free", "2026-10-25"],
+]);
+
+function isDeadFreeOpencodeModel(id) {
+  const checkedAt = DEAD_FREE_OPENCODE_MODELS.get(id);
+  if (!checkedAt) return false;
+  return Date.now() - Date.parse(checkedAt) < DEAD_FREE_TTL_MS;
+}
 
 export const FILTERS = {
   "nous-free": normalizeNousFreeModels,
@@ -21,7 +36,7 @@ export const FILTERS = {
 
   "opencode-free": (models) =>
     models
-      .filter((m) => (m.id?.endsWith("-free") || KNOWN_FREE_OPENCODE_MODELS.includes(m.id)) && !DEAD_FREE_OPENCODE_MODELS.has(m.id))
+      .filter((m) => (m.id?.endsWith("-free") || KNOWN_FREE_OPENCODE_MODELS.includes(m.id)) && !isDeadFreeOpencodeModel(m.id))
       .map((m) => ({ id: m.id, name: m.id })),
 
   // models.dev returns a large catalog; keep only mimo models

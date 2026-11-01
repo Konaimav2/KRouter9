@@ -19,16 +19,11 @@ export default {
     },
     forceStream: true,
     noAuth: true,
-    quirks: {
-      forceAutoToolChoiceModels: ["muse-spark-1.3-contributor-free"],
-    },
   },
-  models: [
-    // Muse Spark models are served by /inference/v1/responses; the rest stay on
-    // /chat/completions, so the format is declared per-model, not per-provider.
-    { id: "muse-spark-1.2-contributor-free", name: "Muse Spark 1.2 Contributor Free", targetFormat: "openai-responses" },
-    { id: "muse-spark-1.3-contributor-free", name: "Muse Spark 1.3 Contributor Free", targetFormat: "openai-responses" },
-  ],
+  // The two Muse Spark contributor IDs were retired upstream (verified 2026-10-25 against
+  // https://opencode.ai/zen/v1/models and /inference/v1/models). This lane is driven by
+  // modelsFetcher + passthroughModels, so the live catalog is the selection list.
+  models: [],
   modelsFetcher: { url: "https://opencode.ai/zen/v1/models", type: "opencode-free" },
   passthroughModels: true,
 };
