@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { CLI_TOOLS, MITM_TOOLS } from "@/shared/constants/cliTools";
 import { MitmLinkCard } from "./components";
 import ToolSummaryCard from "./components/ToolSummaryCard";
+import SetupWizardCard from "./components/SetupWizardCard";
 
 const ALL_STATUSES_URL = "/api/cli-tools/all-statuses";
 
@@ -41,12 +42,27 @@ export default function CLIToolsPageClient({ machineId }) {
 
   const regularTools = Object.entries(CLI_TOOLS);
   const mitmTools = Object.entries(MITM_TOOLS);
+  const setupTools = Object.entries(CLI_TOOLS).map(([toolId, tool]) => ({
+    id: tool.id || toolId,
+    name: tool.name || toolId,
+    settingsFile: tool.settingsFile,
+    description: tool.description,
+    steps: tool.steps,
+    envVars: tool.envVars,
+  }));
 
   return (
     <div className="mx-auto flex w-full max-w-[72rem] flex-col gap-6 px-1 sm:px-0">
       <section className="min-w-0 overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
         <header className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3">
           <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">01</span>
+          <h2 className="font-semibold">One-Click Setup</h2>
+        </header>
+        <SetupWizardCard tools={setupTools} />
+      </section>
+      <section className="min-w-0 overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
+        <header className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3">
+          <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">02</span>
           <h2 className="font-semibold">Installed clients</h2>
           <span className="data-text ml-auto text-xs text-[var(--color-text-muted)]">
             {regularTools.length} registered
@@ -70,7 +86,7 @@ export default function CLIToolsPageClient({ machineId }) {
       </section>
       <section className="min-w-0 overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
         <header className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3">
-          <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">02</span>
+          <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">03</span>
           <h2 className="font-semibold">Interception tools</h2>
           <span className="data-text ml-auto text-xs text-[var(--color-text-muted)]">
             {mitmTools.length} registered

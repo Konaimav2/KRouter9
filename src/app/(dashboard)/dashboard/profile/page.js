@@ -390,6 +390,11 @@ export default function ProfilePage() {
   };
 
   const updateRequireLogin = async (requireLogin) => {
+    // Turning login off opens every /api route on this instance. Make that explicit
+    // rather than a silent one-click toggle.
+    if (!requireLogin && !window.confirm(
+      "Turn off login?\n\nEvery /api route on this instance becomes reachable without a session. Only do this on a trusted LAN, and never while the dashboard is exposed to the internet."
+    )) return;
     try {
       const res = await fetch("/api/settings", {
         method: "PATCH",
@@ -1114,6 +1119,16 @@ export default function ProfilePage() {
                 disabled={loading}
               />
             </div>
+            {settings.requireLogin !== true && (
+              <p
+                className="border-b border-[var(--color-border)] bg-[var(--color-danger-wash)] px-4 py-3 text-sm text-[var(--color-danger)]"
+                role="alert"
+              >
+                <strong>Login is off.</strong> Every <code>/api</code> route on this
+                instance is reachable without a session. Use this only on a trusted LAN
+                and re-enable it before exposing the dashboard to the internet.
+              </p>
+            )}
             {settings.requireLogin === true && (
               <form
                 onSubmit={handlePasswordChange}

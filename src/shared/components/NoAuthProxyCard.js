@@ -20,6 +20,7 @@ export default function NoAuthProxyCard({ providerId }) {
   const [rotateStrategy, setRotateStrategy] = useState("none");
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -38,6 +39,7 @@ export default function NoAuthProxyCard({ providerId }) {
 
   const save = useCallback(async (poolId, strategy) => {
     setSaving(true);
+    setSaveError("");
     try {
       const res = await fetch("/api/settings", { cache: "no-store" });
       const data = res.ok ? await res.json() : {};
@@ -50,15 +52,31 @@ export default function NoAuthProxyCard({ providerId }) {
       const updated = { ...current };
       if (Object.keys(override).length === 0) delete updated[providerId];
       else updated[providerId] = override;
-      await fetch("/api/settings", {
+      const patchRes = await fetch("/api/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ providerStrategies: updated }),
       });
+      // Reporting "Saved" without checking the response is how a free lane silently
+      // keeps egressing directly while the operator believes it is pool-bound.
+      if (!patchRes.ok) {
+        const payload = await patchRes.json().catch(() => ({}));
+        throw new Error(payload.error || `Save failed (HTTP ${patchRes.status})`);
+      }
       setSavedFlash(true);
       setTimeout(() => setSavedFlash(false), 1500);
     } catch (e) {
       console.log("Save proxy config error:", e);
+      setSaveError(e?.message || "Could not save proxy settings.");
+      // Re-read persisted state so the controls never display a value that was not saved.
+      const persisted = await fetch("/api/settings", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null);
+      if (persisted) {
+        const override = (persisted.providerStrategies || {})[providerId] || {};
+        setProxyPoolId(override.proxyPoolId || NONE_PROXY_POOL_VALUE);
+        setRotateStrategy(override.rotateStrategy || "none");
+      }
     } finally {
       setSaving(false);
     }
@@ -89,6 +107,10 @@ export default function NoAuthProxyCard({ providerId }) {
         </div>
         {savedFlash && <Badge variant="success" size="sm">Saved</Badge>}
       </div>
+
+      {saveError && (
+        <p className="mb-3 text-xs text-danger" role="alert">{saveError}</p>
+      )}
 
       <Select
         label="Proxy Pool"

@@ -26,10 +26,10 @@ function hasValidOpencodeVersion(ua) {
 }
 
 // Models served by /inference/v1/responses; others stay on /chat/completions.
-const RESPONSES_MODELS = new Set([
-  "muse-spark-1.2-contributor-free",
-  "muse-spark-1.3-contributor-free",
-]);
+// The two Muse Spark contributor IDs that used to live here were retired upstream
+// (verified 2026-10-25). isMuseSparkModel() still routes the family by pattern, so a
+// future muse model keeps using the responses endpoint without a static entry.
+const RESPONSES_MODELS = new Set();
 
 let lastTimestamp = 0;
 let counter = 0;
@@ -311,8 +311,9 @@ export class OpenCodeExecutor extends BaseExecutor {
   transformRequest(model, body, stream, credentials) {
     if (body && typeof body === "object" && model && !body.model) body.model = model;
     if (isResponsesModel(model) && body && typeof body === "object") {
-      // Upstream free-tier gate: only muse-spark-1.3-contributor-free is confirmed
-      // auto-only. Demote named/required/none to "auto"; widen the allowlist only
+      // Upstream free-tier gate: the Muse Spark contributor models were retired
+      // (2026-10-25), so no model is auto-only today. Keep the mechanism so a future
+      // upstream-confirmed model can be allowlisted without code changes; widen only
       // with upstream evidence (ported from #4146/7b56f179 tool_choice check).
       if ("tool_choice" in body && body.tool_choice !== "auto"
         && this.config.quirks?.forceAutoToolChoiceModels?.includes(baseModelId(model))) {

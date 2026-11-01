@@ -30,8 +30,19 @@ describe("OpenCode Zen additive scaffold", () => {
       ["openai-responses", "https://opencode.ai/zen/v1/responses"],
     ]);
     expect(provider.transports.every((t) => t.auth.combined)).toBe(true);
-    expect(provider.models.find((m) => m.id === MODEL)).toMatchObject({
-      targetFormat: "openai-responses", supportedFormats: ["openai-responses"],
+    // Retired 2026-10-25 against the live /zen/v1/models list: these must not be
+    // selectable any more, while the live free IDs stay listed.
+    for (const retired of [
+      "deepseek-v4-flash-free",
+      "mimo-v2.5-free",
+      "ling-3.0-flash-fin-free",
+      "muse-spark-1.2-contributor-free",
+      "muse-spark-1.3-contributor-free",
+    ]) {
+      expect(provider.models.find((m) => m.id === retired)).toBeUndefined();
+    }
+    expect(provider.models.find((m) => m.id === "mimo-v2.6-flash-free")).toMatchObject({
+      supportedFormats: ["openai"],
     });
     expect(provider.models.find((m) => m.id === "claude-opus-4-6").supportedFormats).toEqual(["claude"]);
     expect(provider.features).toMatchObject({ usage: true, usageApikey: true });

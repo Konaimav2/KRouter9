@@ -49,14 +49,24 @@ export function normalizeErrorClass(input = {}) {
   return "unknown";
 }
 
-export function errorClassLabel(cls) {
-  switch (cls) {
+export function errorClassLabel(cls) {  switch (cls) {
     case "auth-invalid": return "Auth invalid";
     case "refresh-invalid": return "Refresh invalid";
     case "ratelimited": return "Rate limited";
     case "network": return "Network";
     default: return "Unknown";
   }
+}
+
+// Cards render the stored message verbatim. Rows written before the lock-reason fix can
+// still carry the contentless "Provider error" placeholder, so fall back to the status
+// that caused the lock instead of showing a message that says nothing.
+export function displayConnectionError(input = {}) {
+  const message = String(input.lastError || "").trim();
+  if (message && message !== "Provider error") return message;
+  const code = Number(input.errorCode);
+  if (Number.isFinite(code) && code > 0) return `Upstream error ${code}`;
+  return message;
 }
 
 // Badge variant mapping for the shared Badge component.

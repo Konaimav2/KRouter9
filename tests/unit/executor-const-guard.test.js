@@ -52,12 +52,12 @@ describe("antigravity retry (intentional change: 429=6, 503=3)", () => {
 describe("OpenCode Free endpoint routing", () => {
   const MUSE = "muse-spark-1.2-contributor-free";
 
-  it("declares the Responses format only on the Muse Spark model", () => {
+  it("keeps the free lane on the live fetcher with no stale Responses pin", () => {
     expect(opencode.transport.format).toBeUndefined();
-    const muse = opencode.models.find((m) => m.id === MUSE);
-    expect(muse?.targetFormat).toBe("openai-responses");
-    const muse13 = opencode.models.find((m) => m.id === "muse-spark-1.3-contributor-free");
-    expect(muse13?.targetFormat).toBe("openai-responses");
+    // The Muse Spark contributor IDs were retired upstream (2026-10-25). Routing still
+    // recognizes the family by pattern (covered below), but nothing is pinned statically,
+    // so the free lane selects from the live catalog only.
+    expect(opencode.models).toEqual([]);
   });
 
   it("routes Muse Spark to /responses and every other model to /chat/completions", () => {

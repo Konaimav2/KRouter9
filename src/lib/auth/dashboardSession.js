@@ -9,8 +9,24 @@ import { getSettings } from "@/lib/localDb";
 const DEFAULT_PASSWORD = "123456";
 const SESSION_MAX_AGE_SEC = 24 * 60 * 60;
 
+// Values that shipped in docker-compose.yml / docs. A secret everyone can read is
+// not a secret: it would let anyone mint a valid auth_token offline.
+const PUBLISHED_JWT_SECRETS = new Set([
+  "change-me",
+  "change-me-to-a-long-random-secret",
+  "changeme",
+  "secret",
+  "jwt-secret",
+]);
+
 function loadJwtSecret() {
-  if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
+  const fromEnv = process.env.JWT_SECRET?.trim();
+  if (fromEnv && !PUBLISHED_JWT_SECRETS.has(fromEnv)) return fromEnv;
+  if (fromEnv) {
+    console.warn(
+      "[auth] JWT_SECRET is a published placeholder value. Generating a private secret instead — set JWT_SECRET to a random value (e.g. `openssl rand -hex 32`)."
+    );
+  }
   const file = path.join(DATA_DIR, "jwt-secret");
   try {
     return fs.readFileSync(file, "utf8").trim();
