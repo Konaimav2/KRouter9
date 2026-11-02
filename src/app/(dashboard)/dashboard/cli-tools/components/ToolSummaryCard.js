@@ -46,7 +46,10 @@ export default function ToolSummaryCard({ toolId, tool, status, rowNumber }) {
     tool.description;
 
   return (
-    <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] grid gap-3 px-4 py-3 sm:grid-cols-[2.5rem_minmax(12rem,1fr)_minmax(12rem,1fr)_auto] sm:items-center">
+    <div
+      id={"tool-" + toolId}
+      className="scroll-mt-24 border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] grid gap-3 px-4 py-3 sm:grid-cols-[2.5rem_minmax(12rem,1fr)_minmax(12rem,1fr)_auto] sm:items-center"
+    >
       <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">
         {String(rowNumber).padStart(2, "0")}
       </span>

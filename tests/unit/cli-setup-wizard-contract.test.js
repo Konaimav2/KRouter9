@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { CLI_SCAN_TARGETS } from "../../src/shared/constants/cliScanTargets.js";
 
 // Contract test for the FR-1 setup wizard. The dashboard component is a client
 // component, so these assertions pin the behaviour that the browser walk then proves:
@@ -14,6 +15,30 @@ const SRC = readFileSync(
   ),
   "utf8"
 );
+
+const TOOL_SUMMARY_SRC = readFileSync(
+  resolve(
+    process.cwd(),
+    "src/app/(dashboard)/dashboard/cli-tools/components/ToolSummaryCard.js"
+  ),
+  "utf8"
+);
+
+const ALL_STATUS_GETTER_IDS = [
+  "claude",
+  "codex",
+  "opencode",
+  "droid",
+  "openclaw",
+  "hermes",
+  "cowork",
+  "cline",
+  "kilo",
+  "deepseek-tui",
+  "jcode",
+  "grok-build",
+  "devin",
+];
 
 describe("CLI setup wizard contract", () => {
   it("reads detection from the all-statuses endpoint", () => {
@@ -86,5 +111,37 @@ describe("CLI setup wizard contract", () => {
     expect(SRC).toMatch(/\(\) => ""/);
     expect(SRC).not.toMatch(/typeof window !== "undefined" \? window\.location\.origin/);
     expect(SRC).toMatch(/const snippet = !origin/);
+  });
+
+  it("covers all 13 status-getter tools in CLI_SCAN_TARGETS with non-empty probe lists", () => {
+    for (const toolId of ALL_STATUS_GETTER_IDS) {
+      expect(CLI_SCAN_TARGETS[toolId]).toBeDefined();
+      expect(Array.isArray(CLI_SCAN_TARGETS[toolId])).toBe(true);
+      expect(CLI_SCAN_TARGETS[toolId].length).toBeGreaterThan(0);
+      for (const target of CLI_SCAN_TARGETS[toolId]) {
+        expect(typeof target).toBe("string");
+        expect(target.trim().length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("imports CLI_SCAN_TARGETS and renders scanned targets or unregistered message in Step 2", () => {
+    expect(SRC).toContain("CLI_SCAN_TARGETS");
+    expect(SRC).toContain("Scanned:");
+    expect(SRC).toContain("No scanner registered for this client.");
+    expect(SRC).toMatch(/CLI_SCAN_TARGETS\[selectedToolId\]/);
+  });
+
+  it("adds scrollable row anchors to ToolSummaryCard and links from SetupWizardCard", () => {
+    // ToolSummaryCard must provide id={"tool-" + toolId} and scroll-mt-24
+    expect(TOOL_SUMMARY_SRC).toMatch(/id=\{["']tool-["']\s*\+\s*toolId\}/);
+    expect(TOOL_SUMMARY_SRC).toContain("scroll-mt-24");
+
+    // SetupWizardCard must provide an Open <tool name> setup link targeting that anchor
+    expect(SRC).toMatch(/href=\{`#tool-\$\{selectedToolId\}`\}/);
+    expect(SRC).toMatch(/Open \{selected\?\.name\} setup/);
+
+    // Setup link is hidden or disabled when tool is not in the installed list
+    expect(SRC).toMatch(/tools\.some\(\(t\) => t\.id === selectedToolId\)/);
   });
 });

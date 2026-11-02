@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useSyncExternalStore } from "react";
 import Icon from "@/shared/components/Icon";
+import { CLI_SCAN_TARGETS } from "@/shared/constants/cliScanTargets";
 
 const subscribeToOrigin = () => () => {};
 
@@ -228,6 +229,30 @@ export default function SetupWizardCard({ tools = [] }) {
           </button>
           {renderStatus()}
         </div>
+        {CLI_SCAN_TARGETS[selectedToolId] && CLI_SCAN_TARGETS[selectedToolId].length > 0 ? (
+          <p className="text-xs text-[var(--color-text-muted)]">
+            <span className="font-semibold">Scanned:</span>{" "}
+            {CLI_SCAN_TARGETS[selectedToolId].map((target, idx) => (
+              <span key={target}>
+                {idx > 0 ? ", " : ""}
+                <code className="font-mono">{target}</code>
+              </span>
+            ))}
+          </p>
+        ) : (
+          <p className="text-xs text-[var(--color-text-muted)]">
+            No scanner registered for this client.
+          </p>
+        )}
+        {selectedToolId && tools.some((t) => t.id === selectedToolId) ? (
+          <a
+            href={`#tool-${selectedToolId}`}
+            className="inline-flex min-h-[36px] w-fit items-center gap-1.5 text-xs font-medium text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
+          >
+            <span>Open {selected?.name} setup</span>
+            <Icon name="arrow_downward" size={14} />
+          </a>
+        ) : null}
       </div>
 
       {/* Step 3: Generated Snippet */}
