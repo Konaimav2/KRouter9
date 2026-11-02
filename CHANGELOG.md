@@ -1,3 +1,14 @@
+# v3.3.5 (2026-11-02) — No install prompt while Headroom is running
+
+## Token Saver
+- The managed-install command is hidden once the service is reachable, so a running service
+  never receives a static setup prompt in either mode: local managed install or published
+  container. Only the live service state and measured evidence remain
+- Contract test extended to pin both the Complete state and the hidden prompt
+
+## Notes
+- 3.3.4 passed QA but was not deployed. This is a one-line truth fix found in the QA notes
+
 # v3.3.4 (2026-11-02) — Dual-stack Headroom and install-state fixes
 
 ## Token Saver
