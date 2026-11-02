@@ -1,3 +1,24 @@
+# v3.3.12 (2026-11-03) — API keys reveal only on explicit selection
+
+## CLI Tools (FR-2)
+- `ApiKeySelect` no longer resolves and passes a raw key on mount. The control starts with
+  `Select a key…`, and a secret is fetched only when the user picks a key from the list
+- Deleting a saved key preset no longer auto-reveals a different key; the selection is cleared
+  and the user picks again
+- The selector still resolves exactly one key id through the guarded single-record endpoint;
+  list payloads keep carrying `maskedKey` only
+- Contract test `tests/unit/apikey-select-confirm-reveal.test.js` (4/4) pins the no-auto-reveal
+  rule, the single call site, and the placeholder state
+
+## Evidence additions
+- Token Saver counters are compared with `/api/headroom/proxy/stats` in the browser
+  (`MATCH before=19,832 saved=11,030`)
+- The Claude Code configured-client run now uses the exact rendered wizard snippet
+  `export ANTHROPIC_BASE_URL="http://127.0.0.1:20129/v1"`
+
+## Notes
+- Security-flow fix; no API or data change. `cli/` stays 1.0.0
+
 # v3.3.11 (2026-11-03) — Wizard content fits narrow screens
 
 ## CLI Tools (FR-1/FR-11)
