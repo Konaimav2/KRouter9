@@ -47,7 +47,7 @@ export default function CLIToolsPageClient({ machineId }) {
     name: tool.name || toolId,
     settingsFile: tool.settingsFile,
     description: tool.description,
-    steps: tool.steps,
+    guideSteps: tool.guideSteps,
     envVars: tool.envVars,
   }));
 
