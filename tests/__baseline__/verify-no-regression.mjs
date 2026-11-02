@@ -27,12 +27,25 @@ const nowFails = r.testResults.flatMap(f =>
     .map(a => fileKey(f.name) + " :: " + a.fullName)
 );
 
+// Suites can fail before any assertion runs (collection/import errors). Those never
+// appear in known-fails.txt, so they get their own baseline list.
+const knownSuiteFails = new Set(
+  readFileSync(new URL("./known-failed-suites.txt", import.meta.url), "utf8")
+    .split("\n").map(s => s.trim()).filter(Boolean)
+);
+const baseName = (name) => String(name || "").split("/").pop();
+const nowSuiteFails = r.testResults
+  .filter(t => t.status === "failed" && !t.assertionResults.some(a => a.status === "failed"))
+  .map(t => baseName(t.name));
+const newSuiteFails = nowSuiteFails.filter(name => !knownSuiteFails.has(name));
+
 // Regression = fail bây giờ NHƯNG không có trong baseline known-fails
 const regressions = nowFails.filter(f => !knownFails.has(f));
 
-if (regressions.length) {
-  console.error(`\n❌ REGRESSION: ${regressions.length} test pass→fail:\n`);
+if (regressions.length || newSuiteFails.length) {
+  console.error(`\n❌ REGRESSION: ${regressions.length} test pass→fail, ${newSuiteFails.length} new suite failure(s):\n`);
   regressions.forEach(f => console.error("  - " + f));
+  newSuiteFails.forEach(f => console.error("  - suite: " + f));
   process.exit(1);
 }
-console.log(`✅ No regression. (now fails=${nowFails.length}, baseline known=${knownFails.size}, all known)`);
+console.log(`✅ No regression. (now fails=${nowFails.length}, baseline known=${knownFails.size}, suite fails=${nowSuiteFails.length} all known)`);
