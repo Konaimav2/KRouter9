@@ -1,3 +1,31 @@
+# v3.3.3 (2026-11-02) — Judge fixes: pinned DNS, per-stage evidence, published Headroom image
+
+## Security
+- The Headroom proxy now validates DNS once and pins that address into the socket lookup.
+  A second resolution can no longer redirect the request to a public or metadata address
+  (`src/lib/headroom/pinnedRequest.js`, 6 tests including a hostname that never resolves)
+
+## Token Saver
+- Savings evidence is per stage: PXPIPE (measured from `/api/pxpipe/status`), Output
+  compression (measured Headroom totals), Caveman and Ponytail (enabled state, explicitly
+  "not measured per request"). A failed stage shows its own error and never blanks the panel
+- A running Headroom service no longer shows the container setup prompt
+
+## CLI Tools
+- The setup wizard lists the exact binaries and files each status check reads
+- Every installed-client row has an anchor, and the wizard links straight to its setup card
+  with the existing Apply / model search / clear controls
+
+## Headroom deployment
+- The proxy image is published at `ghcr.io/konaimav2/headroom:0.42.0` by a dedicated CI workflow
+- Setup is one `docker run`; there is no Dockerfile to write by hand. The pinned command keeps
+  loopback-only publishing and the container bind acknowledgement
+
+## Notes
+- `cli/` stays 1.0.0
+- FR-5 remains deferred to the next release
+- `/api/usage/chart` still ignores `startDate`/`endDate`; tracked for 3.3.4
+
 # v3.3.2 (2026-11-02) — No invented setup snippet
 
 ## CLI setup wizard
