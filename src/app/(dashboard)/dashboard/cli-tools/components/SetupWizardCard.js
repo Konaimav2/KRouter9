@@ -214,7 +214,7 @@ export default function SetupWizardCard({ tools = [] }) {
   return (
     <div className="grid gap-4 p-4 lg:grid-cols-3">
       {/* Step 1: Auto-detect / Select Client */}
-      <div className="flex flex-col gap-2">
+      <div className="flex min-w-0 flex-col gap-2">
         <label
           htmlFor="setup-tool-select"
           className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]"
@@ -347,7 +347,7 @@ export default function SetupWizardCard({ tools = [] }) {
       </div>
 
       {/* Step 2: Check Status / Install Mode */}
-      <div id="setup-step-2" className="flex flex-col gap-2">
+      <div id="setup-step-2" className="flex min-w-0 flex-col gap-2">
         <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
           Step 2: Check Status
         </span>
@@ -369,7 +369,7 @@ export default function SetupWizardCard({ tools = [] }) {
         </div>
 
         {selectedScanItem ? (
-          <p className="text-xs text-[var(--color-text-muted)]">
+          <p className="break-words text-xs text-[var(--color-text-muted)]">
             <span className="font-semibold">Detector status:</span>{" "}
             {selectedScanItem.error
               ? "Check failed"
@@ -384,12 +384,12 @@ export default function SetupWizardCard({ tools = [] }) {
         )}
 
         {CLI_SCAN_TARGETS[selectedToolId] && CLI_SCAN_TARGETS[selectedToolId].length > 0 ? (
-          <p className="text-xs text-[var(--color-text-muted)]">
+          <p className="break-words text-xs text-[var(--color-text-muted)]">
             <span className="font-semibold">Scanned:</span>{" "}
             {CLI_SCAN_TARGETS[selectedToolId].map((target, idx) => (
               <span key={target}>
                 {idx > 0 ? ", " : ""}
-                <code className="font-mono">{target}</code>
+                <code className="break-all font-mono">{target}</code>
               </span>
             ))}
           </p>
@@ -410,13 +410,13 @@ export default function SetupWizardCard({ tools = [] }) {
       </div>
 
       {/* Step 3: Generated Snippet / Done */}
-      <div className="flex flex-col gap-2">
+      <div className="flex min-w-0 flex-col gap-2">
         <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
           Step 3: Environment Setup
         </span>
         {selected?.settingsFile ? (
           <p className="text-xs text-[var(--color-text-muted)]">
-            Config file: <code className="font-mono">{selected.settingsFile}</code>
+            Config file: <code className="break-all font-mono">{selected.settingsFile}</code>
           </p>
         ) : null}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
