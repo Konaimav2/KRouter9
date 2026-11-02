@@ -1,3 +1,12 @@
+# v3.3.2 (2026-11-02) — No invented setup snippet
+
+## CLI setup wizard
+- A client that declares neither copyable `guideSteps` values nor `envVars.baseUrl` (Codex) now
+  shows "No copy-paste snippet is declared for this client." instead of a borrowed Claude
+  `ANTHROPIC_BASE_URL` export. The wizard only prints what the catalog declares
+- Copy is disabled while the gateway origin is unresolved or no snippet is declared
+- Contract tests updated (9 cases)
+
 # v3.3.1 (2026-11-02) — Setup wizard fixes caught in 3.3.0 QA
 
 ## CLI setup wizard
