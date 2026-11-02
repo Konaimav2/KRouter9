@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import dns from "node:dns/promises";
 import net from "node:net";
+import { Readable } from "node:stream";
 import { getSettings } from "@/lib/localDb";
 import { DEFAULT_HEADROOM_URL } from "@/lib/headroom/detect";
+import { isPrivateOrLoopback, requestPinned } from "@/lib/headroom/pinnedRequest";
 
 export const dynamic = "force-dynamic";
 
@@ -37,24 +39,9 @@ async function getTargetBase() {
   if (!addresses.length || addresses.some((address) => !isPrivateOrLoopback(address))) {
     throw new Error("Headroom URL must resolve to a loopback or private address");
   }
-  return target;
-}
-
-function isPrivateOrLoopback(address) {
-  if (net.isIPv4(address)) {
-    if (address === "0.0.0.0") return false;
-    if (address.startsWith("127.")) return true;
-    if (address.startsWith("10.")) return true;
-    if (address.startsWith("192.168.")) return true;
-    if (/^172\.(1[6-9]|2\d|3[01])\./.test(address)) return true;
-    return false;
-  }
-  const low = address.toLowerCase();
-  if (low === "::1") return true;
-  if (low === "::") return false;
-  if (low.startsWith("::ffff:")) return isPrivateOrLoopback(low.slice("::ffff:".length));
-  if (low.startsWith("fc") || low.startsWith("fd")) return true; // unique-local
-  return false; // public + link-local (fe80::/10) rejected
+  // Pin the address that was just validated. The socket must never resolve the
+  // hostname again, otherwise a rebinding answer bypasses this check.
+  return { target, address: addresses[0] };
 }
 
 function buildTargetUrl(base, path, search) {
@@ -85,40 +72,50 @@ function rewriteDashboardHtml(html) {
   );
 }
 
+async function readBody(stream) {
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(chunk);
+  return Buffer.concat(chunks).toString("utf8");
+}
+
 async function proxy(request, { params }) {
   try {
-    const base = await getTargetBase();
+    const { target: base, address } = await getTargetBase();
     const { search } = new URL(request.url);
     const path = (await params).path || [];
     const target = buildTargetUrl(base, path, search);
     const method = request.method;
     const hasBody = !["GET", "HEAD"].includes(method);
 
-    const response = await fetch(target, {
+    const response = await requestPinned(target, {
       method,
-      headers: forwardedHeaders(request, target),
-      body: hasBody ? request.body : undefined,
-      duplex: hasBody ? "half" : undefined,
-      redirect: "manual",
+      headers: Object.fromEntries(forwardedHeaders(request, target).entries()),
+      body: hasBody ? request.body : null,
+      address,
     });
 
-    const headers = new Headers(response.headers);
-    for (const header of headers.keys()) {
+    const headers = new Headers();
+    for (const [key, value] of Object.entries(response.headers)) {
+      if (value !== undefined) {
+        headers.set(key, Array.isArray(value) ? value.join(", ") : value);
+      }
+    }
+    for (const header of [...headers.keys()]) {
       if (HOP_BY_HOP_HEADERS.has(header.toLowerCase())) headers.delete(header);
     }
 
     if (path.join("/") === "dashboard") {
-      const contentType = response.headers.get("content-type") || "";
+      const contentType = headers.get("content-type") || "";
       if (contentType.includes("text/html")) {
         headers.delete("content-length");
-        return new NextResponse(rewriteDashboardHtml(await response.text()), {
-          status: response.status,
+        return new NextResponse(rewriteDashboardHtml(await readBody(response)), {
+          status: response.statusCode,
           headers,
         });
       }
     }
 
-    return new NextResponse(response.body, { status: response.status, headers });
+    return new NextResponse(Readable.toWeb(response), { status: response.statusCode, headers });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
