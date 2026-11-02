@@ -61,4 +61,21 @@ export const CLI_SCAN_TARGETS = {
     "candidate installer binary paths",
     "devin --version probe",
   ],
+  cursor: [
+    "~/.cursor",
+    "~/.config/Cursor",
+    "~/.cursor/extensions",
+    "which cursor",
+  ],
+  roo: [
+    "~/.vscode/extensions/roo*",
+    "~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline",
+    "~/.config/Roo-Cline",
+  ],
+  vscode: [
+    "~/.vscode",
+    "~/.config/Code",
+    "~/Library/Application Support/Code",
+    "which code",
+  ],
 };
