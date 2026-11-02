@@ -1,3 +1,19 @@
+# v3.3.4 (2026-11-02) — Dual-stack Headroom and install-state fixes
+
+## Token Saver
+- The Headroom proxy now tries every validated address (IPv6 first, IPv4 next) instead of
+  pinning the first answer. On hosts where `localhost` resolves to `::1` and the sidecar is
+  published only on `127.0.0.1`, the savings row showed "stats unavailable" and the service
+  looked unreachable. Both are fixed, with a dual-stack regression test
+- The install step reads **Complete** as soon as the service is reachable, even when the
+  gateway has no local Python or headroom binary (container mode). The "Approval required"
+  recovery text no longer appears while a service is running
+
+## Notes
+- Caught by the 3.3.3 QA gate before deployment. 3.3.3 was built but never shipped
+- The pinned-address security property is unchanged: the socket still never re-resolves the
+  hostname; it only chooses among the addresses that were validated
+
 # v3.3.3 (2026-11-02) — Judge fixes: pinned DNS, per-stage evidence, published Headroom image
 
 ## Security
