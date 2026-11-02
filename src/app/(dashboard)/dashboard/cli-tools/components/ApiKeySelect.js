@@ -1,7 +1,7 @@
 "use client";
 
 import Icon from "@/shared/components/Icon";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { readKeyPresets, upsertKeyPreset, deleteKeyPreset, subscribeKeyPresets } from "./cliEndpointPresets";
 
 const CUSTOM_VALUE = "__custom__";
