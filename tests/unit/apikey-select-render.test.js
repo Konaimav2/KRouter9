@@ -22,7 +22,7 @@ function loadComponent() {
     presets: [[presetReact, { runtime: "classic" }]],
     plugins: [transformModulesCommonjs],
   }).code;
-  const module = { exports: {} };
+  const mod = { exports: {} };
   const requireShim = (id) => {
     if (id === "react") return React;
     if (id.includes("shared/components/Icon")) return { default: () => null };
@@ -38,11 +38,11 @@ function loadComponent() {
   };
   new Function("require", "module", "exports", "React", code)(
     requireShim,
-    module,
-    module.exports,
+    mod,
+    mod.exports,
     React
   );
-  return module.exports.default;
+  return mod.exports.default;
 }
 
 describe("ApiKeySelect renders", () => {
