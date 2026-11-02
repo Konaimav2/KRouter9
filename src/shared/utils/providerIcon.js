@@ -11,6 +11,9 @@ const ICON_ALIASES = {
 // Runtime only — first 404 remembers id for the whole session
 const failedIds = new Set();
 
+// Generated connection ids end in a UUID; those providers never ship a logo file.
+const CUSTOM_CONNECTION_ID = /-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function normalizeId(providerId) {
   if (!providerId || typeof providerId !== "string") return "";
   return providerId.trim().toLowerCase();
@@ -26,10 +29,14 @@ export function resolveProviderIconId(providerId) {
   return aliased;
 }
 
-/** `/providers/{id}.png` or null when previously failed. */
+/** `/providers/{id}.png` or null when no logo can exist (custom connection or prior 404). */
 export function getProviderIconSrc(providerId) {
   const id = resolveProviderIconId(providerId);
-  return id ? `/providers/${id}.png` : null;
+  if (!id) return null;
+  // Custom connections use generated UUID ids; there is no logo file for them,
+  // so never issue a request that is guaranteed to 404.
+  if (CUSTOM_CONNECTION_ID.test(id)) return null;
+  return `/providers/${id}.png`;
 }
 
 /** Call from img onError so later mounts skip the request. */
