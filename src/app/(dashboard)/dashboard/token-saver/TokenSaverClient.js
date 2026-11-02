@@ -606,7 +606,7 @@ export default function TokenSaverClient() {
       body: !headroomLocalUrl
         ? "Run the published image as a sidecar on the Docker host: publish the port on loopback only, then test the service below. No server files to edit."
         : 'Package source: PyPI package headroom-ai with the proxy extra. Installation never runs on page load.',
-      command: headroomLocalUrl ? 'pip install "headroom-ai[proxy]"' : null,
+      command: headroomLocalUrl && !headroomRunning ? 'pip install "headroom-ai[proxy]"' : null,
       recovery: !headroomRunning && headroomLocalUrl && !headroomStatus.installed ? "Run the reviewed command externally, then re-check." : null,
     },
     {

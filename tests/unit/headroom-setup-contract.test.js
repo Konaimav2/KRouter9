@@ -62,6 +62,8 @@ describe("Token Saver verification contract", () => {
     expect(UI).toContain("!headroomLocalUrl && !headroomRunning");
     // A reachable service is "Complete" even without a locally installed binary.
     expect(UI).toMatch(/state: headroomRunning \? "Complete"/);
+    // And it must not receive a static install prompt either.
+    expect(UI).toContain("headroomLocalUrl && !headroomRunning ?");
   });
 
   it("tests through the guarded dashboard proxy", () => {
