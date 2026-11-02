@@ -103,4 +103,19 @@ describe("requestPinned", () => {
       body: '{"hello":"world"}',
     });
   });
+
+  it("falls back to IPv4 when the first validated address refuses (dual-stack loopback)", async () => {
+    // The server listens on 127.0.0.1 only. ::1 is offered first, as localhost
+    // resolution commonly does, and must not make the proxy row unavailable.
+    const target = new URL(`http://rebind.invalid:${port}/health`);
+    const response = await requestPinned(target, {
+      method: "GET",
+      headers: {},
+      addresses: ["::1", "127.0.0.1"],
+    });
+    const chunks = [];
+    for await (const chunk of response) chunks.push(chunk);
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(Buffer.concat(chunks).toString("utf8")).path).toBe("/health");
+  });
 });

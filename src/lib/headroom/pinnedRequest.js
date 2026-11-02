@@ -25,22 +25,25 @@ export function isPrivateOrLoopback(address) {
 }
 
 /**
- * A dns.lookup replacement that always answers with the address validated by
- * the caller. Pinning this at connect time is what closes the DNS-rebinding
- * window: the hostname is never resolved a second time by the socket.
+ * A dns.lookup replacement that always answers with addresses the caller has
+ * already validated. Pinning this at connect time is what closes the
+ * DNS-rebinding window: the hostname is never resolved a second time by the
+ * socket. Multiple addresses are returned for dual-stack happy-eyeballs so a
+ * service bound only to IPv4 still connects when ::1 is offered first.
  */
 export function createPinnedLookup(address) {
-  const family = net.isIP(address);
+  const list = Array.isArray(address) ? address : [address];
+  const entries = list.map((entry) => ({ address: entry, family: net.isIP(entry) }));
   return (hostname, options, callback) => {
     if (typeof options === "function") {
       callback = options;
       options = {};
     }
     if (options?.all) {
-      callback(null, [{ address, family }]);
+      callback(null, entries);
       return;
     }
-    callback(null, address, family);
+    callback(null, entries[0].address, entries[0].family);
   };
 }
 
@@ -48,9 +51,10 @@ export function createPinnedLookup(address) {
  * Perform the outbound request against a pre-validated address while keeping
  * the original hostname for the Host header and TLS SNI.
  */
-export function requestPinned(target, { method, headers, body, address } = {}) {
+export function requestPinned(target, { method, headers, body, address, addresses } = {}) {
   const isHttps = target.protocol === "https:";
   const mod = isHttps ? https : http;
+  const pinned = addresses || address;
   const options = {
     protocol: target.protocol,
     hostname: target.hostname,
@@ -58,7 +62,9 @@ export function requestPinned(target, { method, headers, body, address } = {}) {
     path: `${target.pathname}${target.search}`,
     method,
     headers,
-    lookup: createPinnedLookup(address),
+    lookup: createPinnedLookup(pinned),
+    // Try every validated address (IPv6 first is fine; IPv4 is attempted too).
+    autoSelectFamily: true,
   };
   if (isHttps && !net.isIP(target.hostname)) {
     options.servername = target.hostname;
