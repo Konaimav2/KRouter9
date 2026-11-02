@@ -85,4 +85,13 @@ describe("Token Saver per-stage evidence contract (FR-4)", () => {
     expect(pxpipeRow).toContain("stats unavailable");
     expect(pxpipeRow).not.toContain("0 → 0");
   });
+
+  it("never shows an enabled state that the settings write did not persist", () => {
+    expect(UI).toMatch(/if \(!res\.ok\)/);
+    expect(UI).toContain("setSettingsActionError");
+    expect(UI).toContain("Settings not saved");
+    expect(UI).toMatch(/setCavemanEnabled\(previous\)/);
+    expect(UI).toMatch(/setPonytailEnabled\(previous\)/);
+    expect(UI).toMatch(/setHeadroomEnabled\(previous\.enabled\)/);
+  });
 });
