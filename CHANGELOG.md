@@ -1,3 +1,22 @@
+# v3.3.1 (2026-11-02) — Setup wizard fixes caught in 3.3.0 QA
+
+## CLI setup wizard
+- Snippets now come from the catalog's `guideSteps`. 3.3.0 read a `steps` key that no tool
+  defines, so every client rendered Claude's `ANTHROPIC_BASE_URL` fallback instead of its own
+  command
+- Detection uses the status payload's `installed` flag: `installed: false` is **absent**, a
+  `null` entry (the getter threw) is **check-failed**, and a missing entry is **unavailable**.
+  3.3.0 reported **detected** whenever any object came back, so an uninstalled Codex showed as
+  detected
+- The gateway origin is resolved with `useSyncExternalStore`, so the server and first client
+  render agree. This removes the React #418 hydration text mismatch on the CLI Tools page
+- Contract tests updated to these semantics (9 cases)
+
+## Notes
+- Found by the 3.3.0 QA gate before any deployment. 3.3.0's image was built but never shipped.
+- Known, not fixed here: `/api/usage/chart` ignores `startDate`/`endDate`, so the usage trend is
+  not range-scoped. Tracked for 3.3.2.
+
 # v3.3.0 (2026-11-02) — Setup wizard, savings evidence, Headroom sidecar, security hardening
 
 ## CLI setup wizard
