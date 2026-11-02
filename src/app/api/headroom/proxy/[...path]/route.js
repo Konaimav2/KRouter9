@@ -39,9 +39,9 @@ async function getTargetBase() {
   if (!addresses.length || addresses.some((address) => !isPrivateOrLoopback(address))) {
     throw new Error("Headroom URL must resolve to a loopback or private address");
   }
-  // Pin the address that was just validated. The socket must never resolve the
+  // Pin the addresses that were just validated. The socket must never resolve the
   // hostname again, otherwise a rebinding answer bypasses this check.
-  return { target, address: addresses[0] };
+  return { target, addresses };
 }
 
 function buildTargetUrl(base, path, search) {
@@ -80,7 +80,7 @@ async function readBody(stream) {
 
 async function proxy(request, { params }) {
   try {
-    const { target: base, address } = await getTargetBase();
+    const { target: base, addresses } = await getTargetBase();
     const { search } = new URL(request.url);
     const path = (await params).path || [];
     const target = buildTargetUrl(base, path, search);
@@ -91,7 +91,7 @@ async function proxy(request, { params }) {
       method,
       headers: Object.fromEntries(forwardedHeaders(request, target).entries()),
       body: hasBody ? request.body : null,
-      address,
+      addresses,
     });
 
     const headers = new Headers();

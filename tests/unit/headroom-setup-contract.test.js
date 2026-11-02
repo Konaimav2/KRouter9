@@ -60,6 +60,8 @@ describe("Token Saver verification contract", () => {
     expect(UI).toContain("HEADROOM_IMAGE");
     expect(UI).not.toContain("Copy Dockerfile");
     expect(UI).toContain("!headroomLocalUrl && !headroomRunning");
+    // A reachable service is "Complete" even without a locally installed binary.
+    expect(UI).toMatch(/state: headroomRunning \? "Complete"/);
   });
 
   it("tests through the guarded dashboard proxy", () => {
