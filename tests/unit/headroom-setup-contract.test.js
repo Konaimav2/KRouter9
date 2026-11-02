@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import {
   HEADROOM_VERSION,
   HEADROOM_PORT,
+  HEADROOM_IMAGE,
   HEADROOM_COMPRESSORS,
   buildHeadroomDockerfile,
   buildHeadroomRunCommand,
@@ -23,7 +24,8 @@ const UI = readFileSync(
 describe("Headroom container setup constants", () => {
   it("pins the package version in both artifacts", () => {
     expect(buildHeadroomDockerfile()).toContain(`headroom-ai[proxy]==${HEADROOM_VERSION}`);
-    expect(buildHeadroomRunCommand()).toContain(`headroom-ai:${HEADROOM_VERSION}`);
+    expect(buildHeadroomRunCommand()).toContain(HEADROOM_IMAGE);
+    expect(HEADROOM_IMAGE).toMatch(/^ghcr\.io\/konaimav2\/headroom:/);
   });
 
   it("publishes the port on loopback only", () => {

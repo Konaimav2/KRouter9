@@ -1,7 +1,7 @@
 export const HEADROOM_VERSION = "0.42.0";
 export const HEADROOM_PORT = 8787;
 export const HEADROOM_CONTAINER_NAME = "headroom";
-export const HEADROOM_IMAGE = "headroom-ai:0.42.0";
+export const HEADROOM_IMAGE = "ghcr.io/konaimav2/headroom:0.42.0";
 export const HEADROOM_COMPRESSORS = ["smart_crusher", "search", "log", "tabular", "config", "html"];
 export const HEADROOM_SAMPLE_LINES = 40;
 
