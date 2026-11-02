@@ -543,10 +543,13 @@ export default function TokenSaverClient() {
         let saved = Number(data?.tokensSavedEst ?? data?.windows?.all?.tokensSavedEst);
         let pct = data?.savedPct ?? data?.windows?.all?.savedPct;
 
+        let fallbackFailed = false;
         if (!Number.isFinite(before)) {
           try {
             const statsRes = await fetch("/api/pxpipe/stats");
-            if (statsRes.ok) {
+            if (!statsRes.ok) {
+              fallbackFailed = true;
+            } else {
               const statsData = await statsRes.json();
               const w = statsData?.windows?.all;
               if (w && Number.isFinite(Number(w.tokensBeforeEst))) {
@@ -557,11 +560,14 @@ export default function TokenSaverClient() {
               }
             }
           } catch {
-            // Keep status result
+            fallbackFailed = true;
           }
         }
 
-        if (Number.isFinite(before) && before > 0) {
+        if (!Number.isFinite(before)) {
+          // A failed fallback read is an error, never "no traffic yet".
+          setPxpipeSavings(fallbackFailed ? { error: true } : { awaiting: true });
+        } else if (before > 0) {
           setPxpipeSavings({
             before,
             after: Number.isFinite(after) ? after : Math.max(0, before - saved),
