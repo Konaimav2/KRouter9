@@ -90,7 +90,7 @@ export default function SetupWizardCard({ tools = [] }) {
       ? stepValues.join("\n\n")
       : selected?.envVars?.baseUrl
         ? `export ${selected.envVars.baseUrl}="${baseUrl}"`
-        : `export ANTHROPIC_BASE_URL="${baseUrl}"`;
+        : "";
 
   const handleCopy = async () => {
     if (typeof navigator === "undefined" || !navigator.clipboard) return;
@@ -245,7 +245,7 @@ export default function SetupWizardCard({ tools = [] }) {
             suppressHydrationWarning
             className="min-h-[48px] flex-1 overflow-x-auto rounded border border-[var(--color-border)] bg-[var(--color-code-bg)] px-3 py-3 font-mono text-xs text-[var(--color-text)] flex items-center"
           >
-            <code>{snippet || "Resolving gateway URL…"}</code>
+            <code>{!origin ? "Resolving gateway URL…" : snippet || "No copy-paste snippet is declared for this client."}</code>
           </pre>
           <button
             type="button"

@@ -70,15 +70,14 @@ describe("CLI setup wizard contract", () => {
     expect(SRC).toMatch(/visibleTools\.some\(\(tool\) => tool\.id === selectedId\)/);
   });
 
-  it("builds the snippet from guideSteps before the generic fallback", () => {
+  it("builds the snippet from guideSteps and never invents a generic one", () => {
     expect(SRC).toContain("{{baseUrl}}");
     expect(SRC).toContain("replaceAll");
     expect(SRC).toMatch(/selected\?\.guideSteps\s*\?\?\s*selected\?\.steps/);
     expect(SRC).toMatch(/selected\?\.envVars\?\.baseUrl/);
-    // The generic export stays as the last resort, not the first choice.
-    expect(SRC.indexOf("selected?.guideSteps")).toBeLessThan(
-      SRC.indexOf("export ANTHROPIC_BASE_URL=")
-    );
+    // A client that declares no copyable value must say so, never borrow Claude's env var.
+    expect(SRC).not.toContain("ANTHROPIC_BASE_URL");
+    expect(SRC).toContain("No copy-paste snippet is declared");
   });
 
   it("resolves the origin after hydration so server and client markup match", () => {
