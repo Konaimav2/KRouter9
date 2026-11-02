@@ -1,3 +1,19 @@
+# v3.3.13 (2026-11-03) — Fix the key selector render crash from 3.3.12
+
+## CLI Tools (FR-2)
+- 3.3.12 removed the `useEffect` import from `ApiKeySelect.js` while the component still
+  subscribes to saved key presets in an effect. Any surface that rendered the selector threw
+  `ReferenceError: useEffect is not defined`. The import is restored
+- Found by an adversarial render check, not by the source-string contract test. The new
+  `tests/unit/apikey-select-render.test.js` mounts the component through the real React
+  renderer and would fail with that exact error; it passes now (2/2), and fails if the import
+  is removed (mutation-checked)
+
+## Notes
+- The no-auto-reveal behavior from 3.3.12 is unchanged: placeholder start, explicit selection
+  only, no fallback reveal on preset delete
+- `cli/` stays 1.0.0
+
 # v3.3.12 (2026-11-03) — API keys reveal only on explicit selection
 
 ## CLI Tools (FR-2)
