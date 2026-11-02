@@ -1,3 +1,14 @@
+# v3.3.9 (2026-11-03) — No stats call while Headroom is known down
+
+## Token Saver
+- The savings effect is gated on the status probe. While Headroom is unreachable the page no
+  longer calls the stats route, so the down state shows the error row without a guaranteed 500
+  in the browser console. When the service comes back the numbers load without a page reload
+- A running service with zero traffic still reads "Awaiting measured traffic" from 3.3.8
+
+## Notes
+- Final truthfulness pass on the FR-9 stop/start cycle; no routing or setup change
+
 # v3.3.8 (2026-11-03) — A quiet service is not a broken one
 
 ## Token Saver
