@@ -9,17 +9,24 @@ const subscribeToOrigin = () => () => {};
 export default function SetupWizardCard({ tools = [] }) {
   const [selectedId, setSelectedId] = useState("");
   const [query, setQuery] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const [scanResults, setScanResults] = useState(null);
+
+  const allTools = tools.some((t) => t.id === "vscode")
+    ? tools
+    : [...tools, { id: "vscode", name: "VS Code", description: "Visual Studio Code editor" }];
+
   const normalizedQuery = query.trim().toLowerCase();
   const visibleTools = normalizedQuery
-    ? tools.filter((tool) => `${tool.name} ${tool.id}`.toLowerCase().includes(normalizedQuery))
-    : tools;
+    ? allTools.filter((tool) => `${tool.name} ${tool.id}`.toLowerCase().includes(normalizedQuery))
+    : allTools;
   // Derived, not an effect: the first visible tool is the default, and a filter that hides
   // the previous selection moves to the first match instead of leaving a dead control.
   const selectedToolId =
     selectedId && visibleTools.some((tool) => tool.id === selectedId)
       ? selectedId
       : visibleTools[0]?.id || "";
-  const selected = tools.find((t) => t.id === selectedToolId) || null;
+  const selected = allTools.find((t) => t.id === selectedToolId) || null;
   const [checking, setChecking] = useState(false);
   const [statusState, setStatusState] = useState(null);
   const [copied, setCopied] = useState(false);
@@ -75,6 +82,38 @@ export default function SetupWizardCard({ tools = [] }) {
       setStatusState("check-failed");
     } finally {
       setChecking(false);
+    }
+  };
+
+  const handleAutoDetect = async () => {
+    setScanning(true);
+    try {
+      const res = await fetch("/api/cli-tools/scan");
+      if (!res.ok) {
+        setScanResults([]);
+        return;
+      }
+      const data = await res.json();
+      setScanResults(data?.results || []);
+    } catch {
+      setScanResults([]);
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const handleSelectScanResult = (toolId, scanResult) => {
+    setSelectedId(toolId);
+    if (scanResult?.detected) {
+      setStatusState("detected");
+    } else if (scanResult?.error) {
+      setStatusState("check-failed");
+    } else {
+      setStatusState(null);
+    }
+    const step2El = document.getElementById("setup-step-2");
+    if (step2El) {
+      step2El.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
   };
 
@@ -163,16 +202,104 @@ export default function SetupWizardCard({ tools = [] }) {
     return null;
   };
 
+  const selectedScanItem = scanResults
+    ? scanResults.find((r) => r.id === selectedToolId)
+    : null;
+
   return (
     <div className="grid gap-4 p-4 lg:grid-cols-3">
-      {/* Step 1: Select Tool */}
+      {/* Step 1: Auto-detect / Select Client */}
       <div className="flex flex-col gap-2">
         <label
           htmlFor="setup-tool-select"
           className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]"
         >
-          Step 1: Select Client
+          Step 1: Auto-detect
         </label>
+        <button
+          type="button"
+          onClick={handleAutoDetect}
+          disabled={scanning}
+          className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded border border-[var(--color-primary)] bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
+        >
+          <Icon
+            name={scanning ? "progress_activity" : "radar"}
+            size={16}
+            className={scanning ? "animate-spin" : ""}
+          />
+          <span>{scanning ? "Scanning..." : "Auto-detect all applications"}</span>
+        </button>
+
+        {scanResults !== null && (
+          <div className="flex flex-col gap-1 rounded border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
+            <span className="px-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+              Scan Results ({scanResults.filter((r) => r.detected).length} detected)
+            </span>
+            <div className="flex flex-col divide-y divide-[var(--color-border)]">
+              {scanResults.map((result) => {
+                const isSelected = result.id === selectedToolId;
+                const state = result.error
+                  ? "check-failed"
+                  : result.detected
+                    ? "detected"
+                    : "not-found";
+                return (
+                  <button
+                    key={result.id}
+                    type="button"
+                    onClick={() => handleSelectScanResult(result.id, result)}
+                    className={`flex items-center justify-between gap-2 p-1.5 text-left text-xs transition-colors hover:bg-[var(--color-surface-hover)] ${
+                      isSelected ? "bg-[var(--color-surface-raised)] font-medium" : ""
+                    }`}
+                  >
+                    <div className="flex min-w-0 flex-col">
+                      <span className="truncate">{result.name}</span>
+                      {result.detected && result.evidence?.length > 0 && (
+                        <span
+                          className="truncate font-mono text-[10px] text-[var(--color-text-muted)]"
+                          title={result.evidence.join(", ")}
+                        >
+                          {result.evidence[0]}
+                        </span>
+                      )}
+                    </div>
+                    <div className="shrink-0">
+                      {state === "detected" && (
+                        <span
+                          data-scan-state="detected"
+                          className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--color-success)]"
+                        >
+                          <Icon name="check_circle" size={13} />
+                          <span>Detected</span>
+                        </span>
+                      )}
+                      {state === "not-found" && (
+                        <span
+                          data-scan-state="not-found"
+                          className="inline-flex items-center gap-1 text-[11px] text-[var(--color-text-muted)]"
+                        >
+                          <Icon name="cancel" size={13} />
+                          <span>Not found</span>
+                        </span>
+                      )}
+                      {state === "check-failed" && (
+                        <span
+                          data-scan-state="check-failed"
+                          className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--color-danger)]"
+                          title={result.error || "Check failed"}
+                        >
+                          <Icon name="warning" size={13} />
+                          <span>Check failed</span>
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <label
           htmlFor="setup-tool-search"
           className="text-xs text-[var(--color-text-muted)]"
@@ -208,8 +335,8 @@ export default function SetupWizardCard({ tools = [] }) {
         )}
       </div>
 
-      {/* Step 2: Check Status */}
-      <div className="flex flex-col gap-2">
+      {/* Step 2: Check Status / Install Mode */}
+      <div id="setup-step-2" className="flex flex-col gap-2">
         <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
           Step 2: Check Status
         </span>
@@ -229,6 +356,22 @@ export default function SetupWizardCard({ tools = [] }) {
           </button>
           {renderStatus()}
         </div>
+
+        {selectedScanItem ? (
+          <p className="text-xs text-[var(--color-text-muted)]">
+            <span className="font-semibold">Detector status:</span>{" "}
+            {selectedScanItem.error
+              ? "Check failed"
+              : selectedScanItem.detected
+                ? `Detected (${selectedScanItem.evidence.join(", ")})`
+                : "Not found"}
+          </p>
+        ) : (
+          <p className="text-xs text-[var(--color-text-muted)]">
+            Not scanned — no local detector
+          </p>
+        )}
+
         {CLI_SCAN_TARGETS[selectedToolId] && CLI_SCAN_TARGETS[selectedToolId].length > 0 ? (
           <p className="text-xs text-[var(--color-text-muted)]">
             <span className="font-semibold">Scanned:</span>{" "}
@@ -244,7 +387,7 @@ export default function SetupWizardCard({ tools = [] }) {
             No scanner registered for this client.
           </p>
         )}
-        {selectedToolId && tools.some((t) => t.id === selectedToolId) ? (
+        {selectedToolId && (tools.some((t) => t.id === selectedToolId) || selectedToolId === "vscode") ? (
           <a
             href={`#tool-${selectedToolId}`}
             className="inline-flex min-h-[36px] w-fit items-center gap-1.5 text-xs font-medium text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
@@ -255,7 +398,7 @@ export default function SetupWizardCard({ tools = [] }) {
         ) : null}
       </div>
 
-      {/* Step 3: Generated Snippet */}
+      {/* Step 3: Generated Snippet / Done */}
       <div className="flex flex-col gap-2">
         <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
           Step 3: Environment Setup
@@ -268,7 +411,7 @@ export default function SetupWizardCard({ tools = [] }) {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <pre
             suppressHydrationWarning
-            className="min-h-[48px] flex-1 overflow-x-auto rounded border border-[var(--color-border)] bg-[var(--color-code-bg)] px-3 py-3 font-mono text-xs text-[var(--color-text)] flex items-center"
+            className="flex min-h-[48px] flex-1 items-center overflow-x-auto rounded border border-[var(--color-border)] bg-[var(--color-code-bg)] px-3 py-3 font-mono text-xs text-[var(--color-text)]"
           >
             <code>{!origin ? "Resolving gateway URL…" : snippet || "No copy-paste snippet is declared for this client."}</code>
           </pre>
