@@ -499,6 +499,9 @@ export default function TokenSaverClient() {
   }, []);
 
   useEffect(() => {
+    // Do not call the stats route while the service is known to be unreachable:
+    // the status probe already answered, and a 500 here only adds console noise.
+    if (headroomStatus.loading || !headroomStatus.running) return undefined;
     let alive = true;
     fetch("/api/headroom/proxy/stats")
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error("stats"))))
@@ -524,7 +527,7 @@ export default function TokenSaverClient() {
       })
       .catch(() => { if (alive) setSavings({ error: true }); });
     return () => { alive = false; };
-  }, []);
+  }, [headroomStatus.loading, headroomStatus.running]);
 
   useEffect(() => {
     let alive = true;
@@ -760,7 +763,7 @@ export default function TokenSaverClient() {
                   </td>
                   <td className="p-2">
                     <div className="space-y-0.5">
-                      {savings?.error ? (
+                      {savings?.error || (!headroomStatus.loading && !headroomStatus.running) ? (
                         <span role="alert" className="font-mono text-danger">stats unavailable</span>
                       ) : savings?.before != null ? (
                         <span className="font-mono tabular-nums">
