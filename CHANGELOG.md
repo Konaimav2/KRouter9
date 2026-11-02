@@ -1,3 +1,15 @@
+# v3.3.8 (2026-11-03) — A quiet service is not a broken one
+
+## Token Saver
+- When Headroom answers but has no measured traffic yet, the Output compression row now says
+  **Awaiting measured traffic** instead of the red **stats unavailable**. Only a failed request
+  is an error; a healthy service with zero requests is not
+- Found in the FR-9 stop/start cycle: restarting the sidecar clears its in-memory counters and
+  the row was mislabelled until real traffic arrived
+
+## Notes
+- Contract test extended to pin both the error and the empty state
+
 # v3.3.7 (2026-11-03) — No 404s for custom-provider logos
 
 ## Usage / Providers
