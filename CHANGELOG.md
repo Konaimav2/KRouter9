@@ -1,3 +1,15 @@
+# v3.3.7 (2026-11-03) — No 404s for custom-provider logos
+
+## Usage / Providers
+- Custom connections use generated UUID ids and never ship a logo file. The icon resolver
+  now returns no image for those ids and renders the existing text fallback, so the usage
+  page no longer issues guaranteed-404 requests (five console errors in the QA snapshot)
+- Known providers keep their packaged logos; the one-time missing-icon cache is unchanged
+
+## Notes
+- Found by the InstaBox console-error gate on 3.3.6. No functional change to routing,
+  token saving or the CLI wizard
+
 # v3.3.6 (2026-11-03) — FR-1 auto-detect, honest stage toggles, FR-9 scope record
 
 ## CLI Tools (FR-1)
