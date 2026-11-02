@@ -1,3 +1,20 @@
+# v3.3.11 (2026-11-03) — Wizard content fits narrow screens
+
+## CLI Tools (FR-1/FR-11)
+- Scan results and the `Scanned:` targets no longer force a ~506 px minimum width on phones.
+  Long paths wrap (`break-all`), the two status lines break words, and the three wizard steps
+  are allowed to shrink (`min-w-0`)
+- Fixes the horizontal shift that appeared after using the `Open <tool> setup` anchor on a
+  360–414 px viewport: the anchor scrolled a too-wide wizard column and pushed the page header
+  off the left edge
+
+## QA tooling
+- The InstaBox overflow check now ignores elements clipped inside a horizontally scrollable
+  strip and still measures the strip itself, matching the intentionally-scrollable exception
+
+## Notes
+- Found by post-step measurement on the real page, not the login page; no data or API change
+
 # v3.3.10 (2026-11-03) — Judge findings: failed scans and failed stats reads
 
 ## CLI Tools (FR-1)
