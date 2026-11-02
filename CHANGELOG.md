@@ -1,3 +1,28 @@
+# v3.3.6 (2026-11-03) — FR-1 auto-detect, honest stage toggles, FR-9 scope record
+
+## CLI Tools (FR-1)
+- Step 1 is now **Auto-detect**: one button scans Cursor, Codex, Cline, Roo, OpenCode,
+  OpenClaw, Hermes and VS Code with read-only path and `which` probes, and lists each result
+  as Detected, Not found, or Check failed. Clicking a result selects the client and moves to
+  the status step; the manual search/select path stays
+- Per-client `Scanned:` targets now include Cursor, Roo and VS Code
+- Detection is read-only, user-scope only, and a thrown probe is never reported as "not found"
+
+## Token Saver (FR-4)
+- Stage toggles no longer show an enabled state the server did not persist: the settings
+  write is checked, a failure reverts the control, and the page shows `Settings not saved: …`
+- Applies to Caveman, Ponytail, Headroom, PXPIPE and the Headroom URL / timeout fields
+
+## FR-9 scope
+- Owner decision recorded in `labs/wave-3.3.0/SCOPE-DECISIONS.md`: Headroom stays host-managed
+  with a published image and a single run command; no Docker socket or socket proxy is exposed
+  to the gateway. The dashboard keeps real state and measured evidence, and managed
+  start/stop stays local-binary only
+
+## Notes
+- 3.3.5 passed QA but was not deployed; this release carries the FR-1 and FR-4 fixes
+- `cli/` stays 1.0.0
+
 # v3.3.5 (2026-11-02) — No install prompt while Headroom is running
 
 ## Token Saver
