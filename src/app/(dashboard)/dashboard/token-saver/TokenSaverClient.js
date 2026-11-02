@@ -72,17 +72,19 @@ export default function TokenSaverClient() {
   const [locale, setLocale] = useState("en");
 
   const { copied, copy } = useCopyToClipboard();
+  const [settingsActionError, setSettingsActionError] = useState("");
 
   const patchSetting = async (patch) => {
-    try {
-      await fetch("/api/settings", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
-      });
-    } catch (error) {
-      console.log("Error updating setting:", error);
+    const res = await fetch("/api/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Settings update failed (HTTP ${res.status})`);
     }
+    return true;
   };
 
   // Locale synchronization intentionally updates local presentation state.
@@ -103,7 +105,7 @@ export default function TokenSaverClient() {
     if (!settingsLoading && !settingsError && current?.wenyan && !isWenyanLocale) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setCavemanLevel("ultra");
-      patchSetting({ cavemanLevel: "ultra" });
+      patchSetting({ cavemanLevel: "ultra" }).catch((error) => setSettingsActionError(error.message));
     }
   }, [isWenyanLocale, cavemanLevel, settingsLoading, settingsError]);
 
@@ -120,23 +122,45 @@ export default function TokenSaverClient() {
     }
   };
 
-  const handleCavemanEnabled = (value) => {
+  const handleCavemanEnabled = async (value) => {
+    const previous = cavemanEnabled;
     setCavemanEnabled(value);
-    patchSetting({ cavemanEnabled: value });
+    try {
+      await patchSetting({ cavemanEnabled: value });
+      setSettingsActionError("");
+    } catch (error) {
+      setCavemanEnabled(previous);
+      setSettingsActionError(error.message);
+    }
   };
 
-  const handleHeadroomEnabled = (value) => {
+  const handleHeadroomEnabled = async (value) => {
     const nextUrl = headroomUrl.trim() || "http://localhost:8787";
+    const previous = { enabled: headroomEnabled, url: headroomUrl };
     setHeadroomUrl(nextUrl);
     setHeadroomEnabled(value);
-    patchSetting({ headroomEnabled: value, headroomUrl: nextUrl });
+    try {
+      await patchSetting({ headroomEnabled: value, headroomUrl: nextUrl });
+      setSettingsActionError("");
+    } catch (error) {
+      setHeadroomEnabled(previous.enabled);
+      setHeadroomUrl(previous.url);
+      setSettingsActionError(error.message);
+    }
   };
 
   const handleHeadroomUrlBlur = async () => {
     const next = headroomUrl.trim() || "http://localhost:8787";
+    const previous = headroomUrl;
     setHeadroomUrl(next);
-    await patchSetting({ headroomUrl: next });
-    refreshHeadroomStatus();
+    try {
+      await patchSetting({ headroomUrl: next });
+      setSettingsActionError("");
+      refreshHeadroomStatus();
+    } catch (error) {
+      setHeadroomUrl(previous);
+      setSettingsActionError(error.message);
+    }
   };
 
   const refreshHeadroomStatus = useCallback(async () => {
@@ -339,7 +363,12 @@ export default function TokenSaverClient() {
     if (extra === "code") setCodeAware(value);
     if (extra === "ml") setKompress(value);
     const key = extra === "code" ? "headroomCodeAware" : "headroomKompress";
-    await patchSetting({ [key]: value });
+    try {
+      await patchSetting({ [key]: value });
+    } catch (error) {
+      setExtrasActionError(error.message);
+      return;
+    }
     if (!headroomStatus.running) return;
     setRestartingProxy(true);
     try {
@@ -359,17 +388,24 @@ export default function TokenSaverClient() {
     // Picking a wenyan level is the explicit opt-in (server falls back to
     // "ultra" without it); leaving wenyan clears the opt-in.
     const picked = CAVEMAN_LEVELS.find((lvl) => lvl.id === level);
-    patchSetting({ cavemanLevel: level, cavemanWenyanOptIn: !!picked?.wenyan });
+    patchSetting({ cavemanLevel: level, cavemanWenyanOptIn: !!picked?.wenyan }).catch((error) => setSettingsActionError(error.message));
   };
 
-  const handlePonytailEnabled = (value) => {
+  const handlePonytailEnabled = async (value) => {
+    const previous = ponytailEnabled;
     setPonytailEnabled(value);
-    patchSetting({ ponytailEnabled: value });
+    try {
+      await patchSetting({ ponytailEnabled: value });
+      setSettingsActionError("");
+    } catch (error) {
+      setPonytailEnabled(previous);
+      setSettingsActionError(error.message);
+    }
   };
 
   const handlePonytailLevel = (level) => {
     setPonytailLevel(level);
-    patchSetting({ ponytailLevel: level });
+    patchSetting({ ponytailLevel: level }).catch((error) => setSettingsActionError(error.message));
   };
 
   const refreshPxpipeStatus = useCallback(async () => {
@@ -416,20 +452,20 @@ export default function TokenSaverClient() {
 
   const handlePxpipeEnabled = (value) => {
     setPxpipeEnabled(value);
-    patchSetting({ pxpipeEnabled: value });
+    patchSetting({ pxpipeEnabled: value }).catch((error) => setSettingsActionError(error.message));
   };
 
   const handlePxpipeMinCharsBlur = () => {
     const next = Math.max(0, Number(pxpipeMinChars) || 25000);
     setPxpipeMinChars(next);
-    patchSetting({ pxpipeMinChars: next });
+    patchSetting({ pxpipeMinChars: next }).catch((error) => setSettingsActionError(error.message));
   };
 
   const handleHeadroomTimeoutBlur = () => {
     const raw = Math.round(Number(headroomTimeoutMs));
     const next = Number.isFinite(raw) && raw > 0 ? raw : 3000;
     setHeadroomTimeoutMs(next);
-    patchSetting({ headroomTimeoutMs: next });
+    patchSetting({ headroomTimeoutMs: next }).catch((error) => setSettingsActionError(error.message));
   };
 
   // Proves the proxy end to end: /health can be green while /v1/compress is broken.
@@ -642,6 +678,12 @@ export default function TokenSaverClient() {
         <h2 className="font-semibold">Token saver stages</h2>
         <p className="font-mono text-xs tabular-nums text-text-muted">{[rtkEnabled, headroomEnabled, cavemanEnabled, ponytailEnabled].filter(Boolean).length} / 4 stages enabled</p>
       </div>
+
+      {settingsActionError && (
+        <p role="alert" className="border border-danger bg-[var(--color-danger-wash)] px-3 py-2 text-xs text-danger">
+          Settings not saved: {settingsActionError}
+        </p>
+      )}
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.7fr)]">
         <section aria-labelledby="pipeline-title" className="border border-border bg-surface">
