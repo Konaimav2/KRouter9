@@ -1,3 +1,52 @@
+# v3.3.0 (2026-11-02) — Setup wizard, savings evidence, Headroom sidecar, security hardening
+
+## CLI setup wizard
+- The CLI Tools page now has a setup wizard: search tools by name or id, and the selection
+  follows the first visible match instead of staying on a filtered-out row
+- Snippets are built per tool from its declared steps (`{{baseUrl}}` → the gateway origin), then
+  from `envVars.baseUrl`, then the generic `export` line — never a fabricated command
+- Four honest states: detected, absent, check-failed, unavailable. A missing status key is not
+  "absent"
+- Only a declared `settingsFile` is shown; the wizard never invents a config path
+- Contract: `tests/unit/cli-setup-wizard-contract.test.js` (8 cases)
+
+## Savings evidence
+- The Token Saver savings panel reads `/api/headroom/proxy/stats` and shows Before / After /
+  Saved from `summary.compression`
+- Explicitly labelled as the Headroom service's own totals, never as this gateway's billing
+- A failed request shows "stats unavailable" instead of zeros
+
+## Headroom automation
+- Token Saver ships the pinned setup: Dockerfile, run command, loopback-only publish, sample
+  payload, and a Test service button through the SSRF-guarded `/api/headroom/proxy/v1/compress`
+- The container setup and enablement steps are copy-paste ready; Kompress stays off by default
+  because it triples idle memory
+- Contract: `tests/unit/headroom-setup-contract.test.js` (8 cases)
+
+## Security
+- **S1** compose aborts when `INITIAL_PASSWORD` or `JWT_SECRET` is unset, and the dashboard
+  session rejects the published placeholder secret
+- **S2** endpoint keys are never rendered into a `title` attribute
+- **S3** proxy save checks `res.ok`, surfaces failures with `role="alert"`, and re-reads state
+- **S4** `requireLogin=false` requires confirmation and shows a warning banner
+- **S5** the Headroom proxy resolves DNS and refuses link-local and public targets (SSRF)
+- **S6** Next.js 16.3.4 → 16.4.3
+
+## Routing and usage
+- **FR-3** free-lane proxy binding is strict: direct egress is refused while bound or rotating,
+  and the failure names the pool and the tried accounts
+- **FR-6** usage zero-gates the selected metric and replaces an all-zero table with an
+  explanatory state
+- **FR-7** combo members can be renamed inline, in place, without creating a new combo
+- **FR-8/8b** dead OpenCode free ids are removed from both registries, a guard blocks them at
+  request time, `nemotron-3-ultra-free` is restored after live proof, and a new status endpoint
+  classifies 429 live / 410 retired / 400 unavailable with a 14-day TTL. Dashboard card added
+
+## Notes
+- `cli/` stays at 1.0.0
+- FR-5 (Console Log Headroom panel) is deferred to 3.3.1
+- Builds for this release run in CI, not on the local 4 GB host
+
 # v3.2.6 (2026-10-27) — Gemini requests no longer end on a model turn
 
 ## Antigravity / Gemini translation
