@@ -1,3 +1,27 @@
+# v3.3.10 (2026-11-03) — Judge findings: failed scans and failed stats reads
+
+## CLI Tools (FR-1)
+- A scan that returns a non-OK response or throws now shows `Scan failed (HTTP n)` /
+  `Scan failed: <reason>` and keeps the results list hidden. It never renders
+  "Scan Results (0 detected)" for a request that failed
+
+## Token Saver (FR-4)
+- A failed PXPIPE fallback statistics read is now an error (`stats unavailable`), not
+  "Awaiting measured traffic". Only a reachable service with zero traffic says awaiting
+
+## QA baseline (FR-11)
+- `tests/__baseline__/known-failed-suites.txt` plus the comparator now account for
+  suite-level collection failures (six known, unchanged since 3.3.3). A new suite failure
+  fails the gate instead of being reported after the assertion count
+
+## QA tooling
+- InstaBox `qa.mjs` now measures overflow and takes the viewport screenshot after the
+  step sequence, so ten-viewport geometry claims describe the page the steps reached,
+  not the pre-login landing page
+
+## Notes
+- No routing, provider, combo or auth change
+
 # v3.3.9 (2026-11-03) — No stats call while Headroom is known down
 
 ## Token Saver
