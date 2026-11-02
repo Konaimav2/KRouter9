@@ -1,0 +1,6 @@
+cline-auth.test.js
+db-benchmark.test.js
+embeddings.cloud.test.js
+kimchi-strip-reasoning.test.js
+kimchi.test.js
+wave-c-saver-ui.test.js
