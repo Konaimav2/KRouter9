@@ -1,7 +1,7 @@
 "use client";
 
 import Icon from "@/shared/components/Icon";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { readKeyPresets, upsertKeyPreset, deleteKeyPreset, subscribeKeyPresets } from "./cliEndpointPresets";
 
 const CUSTOM_VALUE = "__custom__";
@@ -30,7 +30,6 @@ export default function ApiKeySelect({ value, onChange, apiKeys = [], cloudEnabl
   const [selectedId, setSelectedId] = useState(null);
   const [resolving, setResolving] = useState(false);
   const [resolveError, setResolveError] = useState(null);
-  const autoPickedRef = useRef(false);
 
   useEffect(() => {
     const sync = () => setSavedKeys(readKeyPresets());
@@ -64,20 +63,12 @@ export default function ApiKeySelect({ value, onChange, apiKeys = [], cloudEnabl
     }
   };
 
-  // Default to the first list key (resolved via guarded reveal, once).
-  useEffect(() => {
-    if (!autoPickedRef.current && !value && !customMode && !selectedId && apiKeys.length > 0) {
-      autoPickedRef.current = true;
-      selectKeyId(apiKeys[0].id);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiKeys]);
-
   // Derive the active option from selection — no sync effects needed when the parent updates it
   const matched = selectedId ? options.find((o) => o.value === selectedId) : null;
   const savedMatch = !matched && value ? options.find((o) => o.value === value || o.url === value) : null;
   const active = matched || savedMatch;
-  const mode = active ? active.value : (customMode || value ? CUSTOM_VALUE : (options[0]?.value ?? CUSTOM_VALUE));
+  // No implicit selection: a raw secret is fetched only after the user picks a key.
+  const mode = active ? active.value : (customMode || value ? CUSTOM_VALUE : "");
   const inputValue = customMode ? customInput : (value || "");
   const isSaved = typeof mode === "string" && mode.startsWith("saved:");
   const isCustom = mode === CUSTOM_VALUE;
@@ -86,6 +77,11 @@ export default function ApiKeySelect({ value, onChange, apiKeys = [], cloudEnabl
 
   const handleSelect = (e) => {
     const next = e.target.value;
+    if (!next) {
+      setSelectedId(null);
+      onChange("");
+      return;
+    }
     if (next === SAVE_VALUE) {
       upsertKeyPreset((value || "").trim());
       return;
@@ -123,9 +119,8 @@ export default function ApiKeySelect({ value, onChange, apiKeys = [], cloudEnabl
     setCustomMode(false);
     setCustomInput("");
     setSelectedId(null);
-    const fallback = options.find((o) => o.value !== CUSTOM_VALUE && o.value !== mode);
-    if (fallback?.keyId) { selectKeyId(fallback.keyId); return; }
-    onChange(fallback ? (fallback.url ?? fallback.value) : "");
+    // Deleting a preset never reveals another secret; the user picks again.
+    onChange("");
   };
 
   if (noKeys) {
@@ -145,6 +140,7 @@ export default function ApiKeySelect({ value, onChange, apiKeys = [], cloudEnabl
           disabled={resolving}
           className="flex-1 min-w-0 px-2 py-2 bg-surface rounded text-xs border border-border focus:outline-none focus:ring-1 focus:ring-primary/50 sm:py-1.5"
         >
+          <option value="">Select a key…</option>
           {options.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
