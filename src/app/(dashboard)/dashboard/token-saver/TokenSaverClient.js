@@ -506,8 +506,14 @@ export default function TokenSaverClient() {
         if (!alive) return;
         const compression = data?.summary?.compression;
         const before = Number(compression?.total_tokens_before);
-        if (!Number.isFinite(before) || before <= 0) {
+        if (!Number.isFinite(before)) {
           setSavings({ error: true });
+          return;
+        }
+        if (before <= 0) {
+          // The service answered; there is simply no traffic yet. That is not
+          // an error, and it must not be reported as one.
+          setSavings({ empty: true });
           return;
         }
         setSavings({

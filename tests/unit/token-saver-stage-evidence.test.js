@@ -69,6 +69,8 @@ describe("Token Saver per-stage evidence contract (FR-4)", () => {
     // Both Headroom and PXPIPE have dedicated error states
     expect(UI).toContain("stats unavailable");
     expect(UI).toContain("setSavings({ error: true })");
+    // A healthy service with no traffic yet is empty, not an error.
+    expect(UI).toContain("setSavings({ empty: true })");
     expect(UI).toContain("setPxpipeSavings({ error: true })");
 
     // Output compression keeps the qualifier even when unavailable
