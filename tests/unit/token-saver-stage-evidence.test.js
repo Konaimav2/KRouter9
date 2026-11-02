@@ -71,6 +71,8 @@ describe("Token Saver per-stage evidence contract (FR-4)", () => {
     expect(UI).toContain("setSavings({ error: true })");
     // A healthy service with no traffic yet is empty, not an error.
     expect(UI).toContain("setSavings({ empty: true })");
+    // A failed PXPIPE fallback read is an error, not "awaiting traffic".
+    expect(UI).toContain("fallbackFailed ? { error: true } : { awaiting: true }");
     // The savings read is gated on the status probe, so a down service is an
     // error state without a guaranteed-500 request from the browser.
     expect(UI).toContain("if (headroomStatus.loading || !headroomStatus.running) return undefined;");

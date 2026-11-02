@@ -107,6 +107,14 @@ describe("SetupWizardCard auto-detect integration", () => {
     expect(WIZARD_SRC).toContain("<span>Check failed</span>");
   });
 
+  it("reports a failed scan instead of claiming zero applications", () => {
+    expect(WIZARD_SRC).toContain("const [scanError, setScanError]");
+    expect(WIZARD_SRC).toContain("Scan failed (HTTP");
+    expect(WIZARD_SRC).toContain("Scan failed: ");
+    expect(WIZARD_SRC).toContain("setScanResults(null)");
+    expect(WIZARD_SRC).toContain("!scanError && scanResults !== null");
+  });
+
   it("displays the 'Not scanned — no local detector' fallback for unscanned tools", () => {
     expect(WIZARD_SRC).toContain("Not scanned — no local detector");
   });

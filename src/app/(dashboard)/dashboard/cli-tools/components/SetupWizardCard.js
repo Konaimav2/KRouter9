@@ -11,6 +11,7 @@ export default function SetupWizardCard({ tools = [] }) {
   const [query, setQuery] = useState("");
   const [scanning, setScanning] = useState(false);
   const [scanResults, setScanResults] = useState(null);
+  const [scanError, setScanError] = useState("");
 
   const allTools = tools.some((t) => t.id === "vscode")
     ? tools
@@ -87,16 +88,20 @@ export default function SetupWizardCard({ tools = [] }) {
 
   const handleAutoDetect = async () => {
     setScanning(true);
+    setScanError("");
     try {
       const res = await fetch("/api/cli-tools/scan");
       if (!res.ok) {
-        setScanResults([]);
+        // A failed scan is a failed scan, never "0 applications detected".
+        setScanResults(null);
+        setScanError(`Scan failed (HTTP ${res.status})`);
         return;
       }
       const data = await res.json();
       setScanResults(data?.results || []);
-    } catch {
-      setScanResults([]);
+    } catch (error) {
+      setScanResults(null);
+      setScanError(`Scan failed: ${error?.message || "network error"}`);
     } finally {
       setScanning(false);
     }
@@ -230,7 +235,13 @@ export default function SetupWizardCard({ tools = [] }) {
           <span>{scanning ? "Scanning..." : "Auto-detect all applications"}</span>
         </button>
 
-        {scanResults !== null && (
+        {scanError && (
+          <p role="alert" className="rounded border border-[var(--color-danger)] bg-[var(--color-danger-wash)] px-2 py-1.5 text-xs text-[var(--color-danger)]">
+            {scanError}
+          </p>
+        )}
+
+        {!scanError && scanResults !== null && (
           <div className="flex flex-col gap-1 rounded border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
             <span className="px-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
               Scan Results ({scanResults.filter((r) => r.detected).length} detected)
