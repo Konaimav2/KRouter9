@@ -56,6 +56,12 @@ describe("Headroom container setup constants", () => {
 });
 
 describe("Token Saver verification contract", () => {
+  it("uses the published image and hides the container prompt once running", () => {
+    expect(UI).toContain("HEADROOM_IMAGE");
+    expect(UI).not.toContain("Copy Dockerfile");
+    expect(UI).toContain("!headroomLocalUrl && !headroomRunning");
+  });
+
   it("tests through the guarded dashboard proxy", () => {
     expect(UI).toContain("/api/headroom/proxy/v1/compress");
     expect(UI).not.toContain('fetch(`${headroomUrl}');
