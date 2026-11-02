@@ -71,6 +71,10 @@ describe("Token Saver per-stage evidence contract (FR-4)", () => {
     expect(UI).toContain("setSavings({ error: true })");
     // A healthy service with no traffic yet is empty, not an error.
     expect(UI).toContain("setSavings({ empty: true })");
+    // The savings read is gated on the status probe, so a down service is an
+    // error state without a guaranteed-500 request from the browser.
+    expect(UI).toContain("if (headroomStatus.loading || !headroomStatus.running) return undefined;");
+    expect(UI).toContain("}, [headroomStatus.loading, headroomStatus.running]);");
     expect(UI).toContain("setPxpipeSavings({ error: true })");
 
     // Output compression keeps the qualifier even when unavailable
