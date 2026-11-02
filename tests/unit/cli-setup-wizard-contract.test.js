@@ -20,10 +20,12 @@ describe("CLI setup wizard contract", () => {
     expect(SRC).toContain("/api/cli-tools/all-statuses");
   });
 
-  it("distinguishes a missing key from an explicit null", () => {
-    // undefined => unavailable (no checker), null => absent.
-    expect(SRC).toMatch(/undefined[\s\S]{0,80}unavailable/);
-    expect(SRC).toMatch(/null[\s\S]{0,80}absent/);
+  it("maps status payloads to the four states instead of treating any object as detected", () => {
+    // undefined => no checker, null => the getter threw, installed:false => absent.
+    expect(SRC).toMatch(/toolData === undefined[\s\S]{0,120}unavailable/);
+    expect(SRC).toMatch(/toolData === null[\s\S]{0,120}check-failed/);
+    expect(SRC).toMatch(/installed === false[\s\S]{0,80}absent/);
+    expect(SRC).toMatch(/installed === true[\s\S]{0,80}detected/);
     expect(SRC).toContain("No checker for this client");
   });
 
@@ -68,14 +70,22 @@ describe("CLI setup wizard contract", () => {
     expect(SRC).toMatch(/visibleTools\.some\(\(tool\) => tool\.id === selectedId\)/);
   });
 
-  it("builds the snippet from the tool metadata before the generic fallback", () => {
+  it("builds the snippet from guideSteps before the generic fallback", () => {
     expect(SRC).toContain("{{baseUrl}}");
     expect(SRC).toContain("replaceAll");
-    expect(SRC).toMatch(/selected\?\.steps/);
+    expect(SRC).toMatch(/selected\?\.guideSteps\s*\?\?\s*selected\?\.steps/);
     expect(SRC).toMatch(/selected\?\.envVars\?\.baseUrl/);
     // The generic export stays as the last resort, not the first choice.
-    expect(SRC.indexOf("selected?.steps")).toBeLessThan(
+    expect(SRC.indexOf("selected?.guideSteps")).toBeLessThan(
       SRC.indexOf("export ANTHROPIC_BASE_URL=")
     );
+  });
+
+  it("resolves the origin after hydration so server and client markup match", () => {
+    expect(SRC).toContain("useSyncExternalStore");
+    expect(SRC).toMatch(/\(\) => window\.location\.origin/);
+    expect(SRC).toMatch(/\(\) => ""/);
+    expect(SRC).not.toMatch(/typeof window !== "undefined" \? window\.location\.origin/);
+    expect(SRC).toMatch(/const snippet = !origin/);
   });
 });

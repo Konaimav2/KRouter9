@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useSyncExternalStore } from "react";
 import Icon from "@/shared/components/Icon";
+
+const subscribeToOrigin = () => () => {};
 
 export default function SetupWizardCard({ tools = [] }) {
   const [selectedId, setSelectedId] = useState("");
@@ -22,9 +24,13 @@ export default function SetupWizardCard({ tools = [] }) {
   const [copied, setCopied] = useState(false);
   const copyTimeoutRef = useRef(null);
 
-  // Computed at render time; the snippet only renders after an explicit check, so this
-  // never participates in hydration.
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  // Server and first client render agree on ""; the snapshot switches to the real
+  // origin after hydration, so the snippet never causes a text mismatch.
+  const origin = useSyncExternalStore(
+    subscribeToOrigin,
+    () => window.location.origin,
+    () => ""
+  );
 
   useEffect(() => {
     return () => {
@@ -50,11 +56,19 @@ export default function SetupWizardCard({ tools = [] }) {
       const data = await res.json();
       const toolData = data?.[selectedToolId];
       if (toolData === undefined) {
+        // No status checker registered for this client.
         setStatusState("unavailable");
       } else if (toolData === null) {
+        // The batch endpoint uses null when the getter threw.
+        setStatusState("check-failed");
+      } else if (toolData.error) {
+        setStatusState("check-failed");
+      } else if (toolData.installed === true) {
+        setStatusState("detected");
+      } else if (toolData.installed === false) {
         setStatusState("absent");
       } else {
-        setStatusState("detected");
+        setStatusState("unavailable");
       }
     } catch {
       setStatusState("check-failed");
@@ -63,16 +77,20 @@ export default function SetupWizardCard({ tools = [] }) {
     }
   };
 
-  const baseUrl = `${origin}/v1`;
+  const baseUrl = origin ? `${origin}/v1` : "";
   const interpolate = (value) => String(value).replaceAll("{{baseUrl}}", baseUrl);
-  const stepValues = Array.isArray(selected?.steps)
-    ? selected.steps.map((step) => step.value).filter(Boolean).map(interpolate)
+  // The catalog stores copyable values under guideSteps; steps is a legacy alias.
+  const guideSteps = selected?.guideSteps ?? selected?.steps;
+  const stepValues = Array.isArray(guideSteps)
+    ? guideSteps.map((step) => step.value).filter(Boolean).map(interpolate)
     : [];
-  const snippet = stepValues.length > 0
-    ? stepValues.join("\n\n")
-    : selected?.envVars?.baseUrl
-      ? `export ${selected.envVars.baseUrl}="${baseUrl}"`
-      : `export ANTHROPIC_BASE_URL="${baseUrl}"`;
+  const snippet = !origin
+    ? ""
+    : stepValues.length > 0
+      ? stepValues.join("\n\n")
+      : selected?.envVars?.baseUrl
+        ? `export ${selected.envVars.baseUrl}="${baseUrl}"`
+        : `export ANTHROPIC_BASE_URL="${baseUrl}"`;
 
   const handleCopy = async () => {
     if (typeof navigator === "undefined" || !navigator.clipboard) return;
@@ -227,11 +245,12 @@ export default function SetupWizardCard({ tools = [] }) {
             suppressHydrationWarning
             className="min-h-[48px] flex-1 overflow-x-auto rounded border border-[var(--color-border)] bg-[var(--color-code-bg)] px-3 py-3 font-mono text-xs text-[var(--color-text)] flex items-center"
           >
-            <code>{snippet}</code>
+            <code>{snippet || "Resolving gateway URL…"}</code>
           </pre>
           <button
             type="button"
             onClick={handleCopy}
+            disabled={!snippet}
             className="inline-flex min-h-[48px] min-w-[96px] shrink-0 items-center justify-center gap-2 rounded border border-[var(--button-border)] bg-[var(--button-secondary-bg)] px-4 py-2 text-sm font-medium text-[var(--button-secondary-fg)] transition-colors hover:bg-[var(--button-secondary-bg-hover)] focus:border-[var(--color-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
             aria-label="Copy environment variable snippet"
           >
