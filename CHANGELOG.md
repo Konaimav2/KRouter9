@@ -1,3 +1,13 @@
+# v3.3.14 (2026-11-03) — Test lint cleanup
+
+## Tests
+- Rename the render-test module shim from `module` to `mod` so the Next ESLint rule
+  `@next/next/no-assign-module-variable` passes. No application code change from 3.3.13
+- `tests/unit/apikey-select-render.test.js` 2/2 and ESLint 0
+
+## Notes
+- Patch bump only because v3.3.13 is already published; tags are never moved
+
 # v3.3.13 (2026-11-03) — Fix the key selector render crash from 3.3.12
 
 ## CLI Tools (FR-2)
