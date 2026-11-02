@@ -11,7 +11,7 @@ import {
 } from "../endpoint/endpointConstants";
 import {
   HEADROOM_VERSION,
-  buildHeadroomDockerfile,
+  HEADROOM_IMAGE,
   buildHeadroomRunCommand,
   headroomSampleMessages,
 } from "@/shared/constants/headroom";
@@ -36,6 +36,7 @@ export default function TokenSaverClient() {
   const [headroomActionError, setHeadroomActionError] = useState("");
   const [verifyResult, setVerifyResult] = useState(null);
   const [savings, setSavings] = useState(null);
+  const [pxpipeSavings, setPxpipeSavings] = useState(null);
   const [headroomExtras, setHeadroomExtras] = useState({
     version: null,
     extras: { code: false, ml: false },
@@ -484,6 +485,57 @@ export default function TokenSaverClient() {
   }, []);
 
   useEffect(() => {
+    let alive = true;
+    fetch("/api/pxpipe/status", { headers: { "Cache-Control": "no-store" } })
+      .then((res) => {
+        if (!res.ok) throw new Error("PXPIPE status failed");
+        return res.json();
+      })
+      .then(async (data) => {
+        if (!alive) return;
+        let before = Number(data?.tokensBeforeEst ?? data?.windows?.all?.tokensBeforeEst);
+        let after = Number(data?.tokensAfterEst ?? data?.windows?.all?.tokensAfterEst);
+        let saved = Number(data?.tokensSavedEst ?? data?.windows?.all?.tokensSavedEst);
+        let pct = data?.savedPct ?? data?.windows?.all?.savedPct;
+
+        if (!Number.isFinite(before)) {
+          try {
+            const statsRes = await fetch("/api/pxpipe/stats");
+            if (statsRes.ok) {
+              const statsData = await statsRes.json();
+              const w = statsData?.windows?.all;
+              if (w && Number.isFinite(Number(w.tokensBeforeEst))) {
+                before = Number(w.tokensBeforeEst);
+                after = Number(w.tokensAfterEst);
+                saved = Number(w.tokensSavedEst);
+                pct = w.savedPct;
+              }
+            }
+          } catch {
+            // Keep status result
+          }
+        }
+
+        if (Number.isFinite(before) && before > 0) {
+          setPxpipeSavings({
+            before,
+            after: Number.isFinite(after) ? after : Math.max(0, before - saved),
+            saved: Number.isFinite(saved) ? saved : Math.max(0, before - after),
+            pct: pct != null ? Number(pct) : null,
+          });
+        } else {
+          setPxpipeSavings({ awaiting: true });
+        }
+      })
+      .catch(() => {
+        if (alive) setPxpipeSavings({ error: true });
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
     const loadSettings = async () => {
       try {
         const res = await fetch("/api/settings");
@@ -552,7 +604,7 @@ export default function TokenSaverClient() {
       label: "Install",
       state: !headroomLocalUrl ? (headroomStatus.running ? "Complete" : "Container setup") : headroomStatus.installed ? "Complete" : "Approval required",
       body: !headroomLocalUrl
-        ? "Run Headroom as a sidecar on the Docker host: build the pinned image, publish the port on loopback only, then test the service below."
+        ? "Run the published image as a sidecar on the Docker host: publish the port on loopback only, then test the service below. No server files to edit."
         : 'Package source: PyPI package headroom-ai with the proxy extra. Installation never runs on page load.',
       command: headroomLocalUrl ? 'pip install "headroom-ai[proxy]"' : null,
       recovery: headroomLocalUrl && !headroomStatus.installed ? "Run the reviewed command externally, then re-check." : null,
@@ -613,12 +665,93 @@ export default function TokenSaverClient() {
         </section>
 
         <aside aria-labelledby="savings-title" className="border border-border bg-surface p-4">
-          <h2 id="savings-title" className="font-semibold">Current savings evidence</h2>
-          <dl className="mt-4 grid grid-cols-2 gap-px bg-border">
-            <div className="bg-surface-2 p-3"><dt className="text-xs text-text-muted">Before</dt><dd className="mt-1 font-mono text-xl tabular-nums">{savings?.before != null ? `${formatTokens(savings.before)} tokens` : "— tokens"}</dd></div>
-            <div className="bg-surface-2 p-3"><dt className="text-xs text-text-muted">After</dt><dd className="mt-1 font-mono text-xl tabular-nums">{savings?.before != null ? `${formatTokens(Math.max(0, savings.before - savings.saved))} tokens` : "— tokens"}</dd></div>
-            <div className="col-span-2 bg-surface-2 p-3"><dt className="text-xs text-text-muted">Saved</dt><dd className="mt-1 font-mono text-xl tabular-nums">{savings?.before != null ? `${formatTokens(savings.saved)} tokens${savings.pct != null ? ` · ${savings.pct}% avg` : ""}` : savings?.error ? "Headroom service stats unavailable" : "Awaiting measured traffic"}</dd></div>
-          </dl>
+          <div className="border-b border-border pb-3">
+            <h2 id="savings-title" className="font-semibold">Current savings evidence</h2>
+            <p className="mt-1 text-xs text-text-muted">Per-stage token evidence and persisted status.</p>
+          </div>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full border-collapse text-left text-xs">
+              <thead>
+                <tr className="border-b border-border bg-surface-2 text-text-muted">
+                  <th className="p-2 font-medium">Stage</th>
+                  <th className="p-2 font-medium">State</th>
+                  <th className="p-2 font-medium">Evidence</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                <tr className="hover:bg-surface-2">
+                  <td className="p-2 font-medium">PXPIPE</td>
+                  <td className="p-2">
+                    <span className={pxpipeEnabled ? "font-semibold text-success" : "text-text-muted"}>
+                      {pxpipeEnabled ? "Enabled" : "Disabled"}
+                    </span>
+                  </td>
+                  <td className="p-2">
+                    {pxpipeSavings?.error ? (
+                      <span role="alert" className="font-mono text-danger">stats unavailable</span>
+                    ) : pxpipeSavings?.before != null ? (
+                      <span className="font-mono tabular-nums">
+                        {formatTokens(pxpipeSavings.before)} → {formatTokens(pxpipeSavings.after)} ({formatTokens(pxpipeSavings.saved)} saved{pxpipeSavings.pct != null ? ` · ${pxpipeSavings.pct}%` : ""})
+                      </span>
+                    ) : (
+                      <span className="text-text-muted">Awaiting measured traffic</span>
+                    )}
+                  </td>
+                </tr>
+                <tr className="hover:bg-surface-2">
+                  <td className="p-2 font-medium">
+                    <div>
+                      <span>Output compression</span>
+                      <span className="block text-[10px] text-text-muted">Headroom</span>
+                    </div>
+                  </td>
+                  <td className="p-2">
+                    <span className={headroomEnabled ? "font-semibold text-success" : "text-text-muted"}>
+                      {headroomEnabled ? "Enabled" : "Disabled"}
+                    </span>
+                  </td>
+                  <td className="p-2">
+                    <div className="space-y-0.5">
+                      {savings?.error ? (
+                        <span role="alert" className="font-mono text-danger">stats unavailable</span>
+                      ) : savings?.before != null ? (
+                        <span className="font-mono tabular-nums">
+                          {formatTokens(savings.before)} → {formatTokens(Math.max(0, savings.before - savings.saved))} ({formatTokens(savings.saved)} saved{savings.pct != null ? ` · ${savings.pct}% avg` : ""})
+                        </span>
+                      ) : (
+                        <span className="text-text-muted">Awaiting measured traffic</span>
+                      )}
+                      <span className="block text-[10px] text-text-muted">
+                        {"Headroom service totals, not this gateway's billing"}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+                <tr className="hover:bg-surface-2">
+                  <td className="p-2 font-medium">Caveman</td>
+                  <td className="p-2">
+                    <span className={cavemanEnabled ? "font-semibold text-success" : "text-text-muted"}>
+                      {cavemanEnabled ? "Enabled" : "Disabled"}
+                    </span>
+                  </td>
+                  <td className="p-2">
+                    <span className="italic text-text-muted">not measured per request</span>
+                  </td>
+                </tr>
+                <tr className="hover:bg-surface-2">
+                  <td className="p-2 font-medium">Ponytail</td>
+                  <td className="p-2">
+                    <span className={ponytailEnabled ? "font-semibold text-success" : "text-text-muted"}>
+                      {ponytailEnabled ? "Enabled" : "Disabled"}
+                    </span>
+                  </td>
+                  <td className="p-2">
+                    <span className="italic text-text-muted">not measured per request</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
           <p className="mt-3 text-xs text-text-muted">{savings?.before != null ? "Totals reported by the Headroom service, not this gateway's billing. Estimates are never presented as cost." : "Evidence appears after a request passes through an enabled saver; estimates are never presented as billing."}</p>
         </aside>
       </div>
@@ -636,18 +769,17 @@ export default function TokenSaverClient() {
                 <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{step.label}</h3><span className="text-xs font-semibold text-text-muted">{step.state}</span></div>
                 <p className="mt-1 text-sm text-text-muted">{step.body}</p>
                 {step.command && <div className="mt-3 flex flex-col gap-2 sm:flex-row"><pre className="min-w-0 flex-1 overflow-x-auto border border-border bg-[var(--color-code-bg)] p-3 font-mono text-xs">{step.command}</pre><Button size="sm" variant="secondary" onClick={() => copy(step.command)}>{copied ? "Copied" : "Copy command"}</Button></div>}
-                {step.id === "install" && !headroomLocalUrl && (
+                {step.id === "install" && !headroomLocalUrl && !headroomRunning && (
                   <div className="mt-3 space-y-2">
-                    <p className="text-xs text-text-muted">Container setup pinned to headroom-ai {HEADROOM_VERSION}. Publish the port on loopback only; the acknowledgement variable is what lets the proxy bind inside the container.</p>
-                    <div className="flex flex-col gap-2 sm:flex-row">
-                      <pre className="min-w-0 flex-1 overflow-x-auto border border-border bg-[var(--color-code-bg)] p-3 font-mono text-xs">{buildHeadroomDockerfile()}</pre>
-                      <Button size="sm" variant="secondary" onClick={() => copy(buildHeadroomDockerfile())}>{copied ? "Copied" : "Copy Dockerfile"}</Button>
-                    </div>
+                    <p className="text-xs text-text-muted">Published image, pinned to headroom {HEADROOM_VERSION}. Publish the port on loopback only; the acknowledgement variable is what lets the proxy bind inside the container. No Dockerfile to write.</p>
                     <div className="flex flex-col gap-2 sm:flex-row">
                       <pre className="min-w-0 flex-1 overflow-x-auto border border-border bg-[var(--color-code-bg)] p-3 font-mono text-xs">{buildHeadroomRunCommand()}</pre>
                       <Button size="sm" variant="secondary" onClick={() => copy(buildHeadroomRunCommand())}>{copied ? "Copied" : "Copy run command"}</Button>
                     </div>
                   </div>
+                )}
+                {step.id === "install" && !headroomLocalUrl && headroomRunning && (
+                  <p className="mt-2 text-xs text-success">Service running from {HEADROOM_IMAGE}. Nothing to configure by hand.</p>
                 )}
                 {step.id === "verify" && <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_9rem]"><Input value={headroomUrl} onChange={(event) => setHeadroomUrl(event.target.value)} onBlur={handleHeadroomUrlBlur} aria-label="Headroom proxy URL" /><Input value={String(headroomTimeoutMs)} onChange={(event) => setHeadroomTimeoutMs(event.target.value)} onBlur={handleHeadroomTimeoutBlur} aria-label="Headroom timeout in milliseconds" /></div>}
                 {step.id === "verify" && (
