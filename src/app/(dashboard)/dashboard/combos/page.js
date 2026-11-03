@@ -244,7 +244,7 @@ export default function CombosPage() {
               </div>
               <p className="font-semibold text-[var(--color-text)]">{title}</p>
               <p className="mt-1 text-sm text-[var(--color-text-muted)]">{copyText}</p>
-              <p className="mt-3 font-mono text-xs text-[var(--color-text-subtle)]">Cost: {cost}</p>
+              <p className="mt-3 font-mono text-xs text-[var(--color-text-muted)]">Cost: {cost}</p>
             </div>
           ))}
         </div>
@@ -463,7 +463,7 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
           <span className="flex size-8 shrink-0 items-center justify-center border border-[var(--color-route-bidirectional)] font-mono text-xs tabular-nums text-[var(--color-primary)]">{String(combo.models.length).padStart(2, "0")}</span>
           <span className="min-w-0"><code className="block truncate font-mono text-sm font-semibold">{combo.name}</code><span className="text-xs text-[var(--color-text-muted)]">{combo.models.length} member{combo.models.length === 1 ? "" : "s"}</span></span>
         </div>
-        <div className="hidden items-center gap-2 lg:flex" aria-label="Ordered route preview">{combo.models.slice(0, 4).map((model, index) => <span key={`${model}-${index}`} className="flex min-w-0 items-center gap-2"><span className="flex size-7 shrink-0 items-center justify-center border border-[var(--route-line)] font-mono text-[10px] text-[var(--color-primary)]">{String(index + 1).padStart(2, "0")}</span><code className="max-w-28 truncate font-mono text-[11px]">{model}</code>{index < Math.min(combo.models.length, 4) - 1 ? <Icon name="arrow_forward" size={14} className="text-[var(--color-text-subtle)]" /> : null}</span>)}</div>
+        <div className="hidden items-center gap-2 lg:flex" aria-label="Ordered route preview">{combo.models.slice(0, 4).map((model, index) => <span key={`${model}-${index}`} className="flex min-w-0 items-center gap-2"><span className="flex size-7 shrink-0 items-center justify-center border border-[var(--route-line)] font-mono text-[10px] text-[var(--color-primary)]">{String(index + 1).padStart(2, "0")}</span><code className="max-w-28 truncate font-mono text-[11px]">{model}</code>{index < Math.min(combo.models.length, 4) - 1 ? <Icon name="arrow_forward" size={14} className="text-[var(--color-text-muted)]" /> : null}</span>)}</div>
         <div className="flex items-center justify-end gap-1">
           <ActionButton icon={copied === `combo-${combo.id}` ? "check" : "copy"} label="Copy" onClick={() => onCopy(combo.name, `combo-${combo.id}`)} />
           <ActionButton icon={testing ? "progress_activity" : "play_arrow"} label={testing ? "Testing" : "Test"} onClick={testCombo} disabled={testing || combo.models.length === 0} spin={testing} />
