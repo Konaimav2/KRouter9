@@ -22,15 +22,22 @@ function RowSkeleton({ number }) {
 export default function CLIToolsPageClient({ machineId }) {
   const [loading, setLoading] = useState(true);
   const [toolStatuses, setToolStatuses] = useState({});
+  const [statusError, setStatusError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
         const res = await fetch(ALL_STATUSES_URL);
-        if (res.ok && mounted) setToolStatuses(await res.json());
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (mounted) {
+          setToolStatuses(data);
+          setStatusError("");
+        }
       } catch (error) {
-        console.log("Error fetching tool statuses:", error);
+        if (mounted) setStatusError(`Could not load CLI tool statuses: ${error.message}.`);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -38,7 +45,7 @@ export default function CLIToolsPageClient({ machineId }) {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [reloadKey]);
 
   const regularTools = Object.entries(CLI_TOOLS);
   const mitmTools = Object.entries(MITM_TOOLS);
@@ -53,6 +60,12 @@ export default function CLIToolsPageClient({ machineId }) {
 
   return (
     <div className="mx-auto flex w-full max-w-[72rem] flex-col gap-6 px-1 sm:px-0">
+      {statusError && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 border border-[var(--color-border)] bg-[var(--color-danger-wash)] px-4 py-3 text-sm text-[var(--color-danger)]">
+          <span>{statusError}</span>
+          <button type="button" onClick={() => { setLoading(true); setStatusError(""); setReloadKey((key) => key + 1); }} className="min-h-11 px-3 font-medium underline">Retry</button>
+        </div>
+      )}
       <section className="min-w-0 overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
         <header className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3">
           <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">01</span>
