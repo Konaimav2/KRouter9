@@ -309,6 +309,7 @@ export default function ConnectionsCard({ providerId, isOAuth }) {
   const [providerStrategy, setProviderStrategy] = useState(null);
   const [providerStickyLimit, setProviderStickyLimit] = useState("1");
   const [confirmState, setConfirmState] = useState(null);
+  const [saveError, setSaveError] = useState("");
 
   const fetch_ = useCallback(async () => {
     try {
@@ -334,7 +335,8 @@ export default function ConnectionsCard({ providerId, isOAuth }) {
   const saveStrategy = async (strategy, stickyLimit) => {
     try {
       const res = await fetch("/api/settings", { cache: "no-store" });
-      const data = res.ok ? await res.json() : {};
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
       const current = data.providerStrategies || {};
       const override = {};
       if (strategy) override.fallbackStrategy = strategy;
@@ -342,8 +344,13 @@ export default function ConnectionsCard({ providerId, isOAuth }) {
       const updated = { ...current };
       if (Object.keys(override).length === 0) delete updated[providerId];
       else updated[providerId] = override;
-      await fetch("/api/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ providerStrategies: updated }) });
-    } catch (e) { console.log("saveStrategy error:", e); }
+      const patchRes = await fetch("/api/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ providerStrategies: updated }) });
+      if (!patchRes.ok) throw new Error(`HTTP ${patchRes.status}`);
+      setSaveError("");
+    } catch (e) {
+      setSaveError(`Could not save the provider strategy: ${e.message}. Reloading the saved setting.`);
+      await fetch_();
+    }
   };
 
   const handleSwapPriority = async (i1, i2) => {
@@ -382,8 +389,12 @@ export default function ConnectionsCard({ providerId, isOAuth }) {
   const handleUpdateProxy = async (connId, proxyPoolId) => {
     try {
       const res = await fetch(`/api/providers/${connId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ proxyPoolId: proxyPoolId || null }) });
-      if (res.ok) setConnections((prev) => prev.map((c) => c.id === connId ? { ...c, providerSpecificData: { ...c.providerSpecificData, proxyPoolId: proxyPoolId || null } } : c));
-    } catch (e) { console.log("proxy error:", e); }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setConnections((prev) => prev.map((c) => c.id === connId ? { ...c, providerSpecificData: { ...c.providerSpecificData, proxyPoolId: proxyPoolId || null } } : c));
+      setSaveError("");
+    } catch (e) {
+      setSaveError(`Could not update the proxy binding: ${e.message}. The saved binding is unchanged.`);
+    }
   };
 
   const handleSaveApiKey = async (formData) => {
@@ -431,6 +442,12 @@ export default function ConnectionsCard({ providerId, isOAuth }) {
             )}
           </div>
         </div>
+
+        {saveError && (
+          <div role="alert" className="mb-3 rounded-lg border border-[var(--color-danger)] bg-[var(--color-danger-wash)] px-3 py-2 text-xs text-[var(--color-danger)]">
+            {saveError}
+          </div>
+        )}
 
         {connections.length === 0 ? (
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
