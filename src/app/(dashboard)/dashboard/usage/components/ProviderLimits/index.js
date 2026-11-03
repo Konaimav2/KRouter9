@@ -999,7 +999,7 @@ export default function ProviderLimits() {
             type="button"
             onClick={handleDisableDepleted}
             disabled={bulkToggling}
-            className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-red-500/30 px-2 text-xs text-red-500 transition-colors hover:bg-red-500/10 disabled:opacity-50"
+            className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-danger/30 px-2 text-xs text-danger transition-colors hover:bg-danger/10 disabled:opacity-50"
             title="Disable connections with depleted quota on the current page"
           >
             <Icon name="block" size={14} />
@@ -1011,7 +1011,7 @@ export default function ProviderLimits() {
             type="button"
             onClick={handleEnableAvailable}
             disabled={bulkToggling}
-            className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-emerald-500/30 px-2 text-xs text-emerald-500 transition-colors hover:bg-emerald-500/10 disabled:opacity-50"
+            className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-success/30 px-2 text-xs text-success transition-colors hover:bg-success/10 disabled:opacity-50"
             title="Enable connections that still have quota on the current page"
           >
             <Icon name="check_circle" size={14} />
@@ -1112,7 +1112,7 @@ export default function ProviderLimits() {
                         </p>
                       ) : null}
                       {getConnectionSecondaryLabel(conn) ? (
-                        <p className="text-[11px] text-text-muted/80 truncate">
+                        <p className="text-[11px] text-text-muted truncate">
                           {displayAccountText(getConnectionSecondaryLabel(conn))}
                         </p>
                       ) : null}
