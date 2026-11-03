@@ -87,6 +87,7 @@ export default function ProvidersPage() {
   // U9: bulk disable asks for confirmation before flipping N connections.
   const [pendingToggle, setPendingToggle] = useState(null);
   const [fetchError, setFetchError] = useState("");
+  const [toggleError, setToggleError] = useState("");
   const notify = useNotificationStore();
   const searchQuery = useHeaderSearchStore((s) => s.query);
   const registerSearch = useHeaderSearchStore((s) => s.register);
@@ -243,18 +244,31 @@ export default function ProvidersPage() {
     const authTypes = Array.isArray(authType) ? authType : [authType];
     const matches = (c) =>
       c.provider === providerId && authTypes.includes(c.authType);
+    const previous = connections
+      .filter(matches)
+      .map((c) => ({ id: c.id, isActive: c.isActive }));
     setConnections((prev) =>
       prev.map((c) => (matches(c) ? { ...c, isActive: newActive } : c)),
     );
     // Single bulk call instead of N parallel PUTs (3000 conns would storm).
     try {
-      await fetch("/api/providers/toggle", {
+      const res = await fetch("/api/providers/toggle", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ provider: providerId, authType: authTypes, isActive: newActive }),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setToggleError("");
     } catch (error) {
-      console.log("Error toggling provider connections:", error);
+      setConnections((prev) =>
+        prev.map((c) => {
+          const before = previous.find((entry) => entry.id === c.id);
+          return before ? { ...c, isActive: before.isActive } : c;
+        }),
+      );
+      setToggleError(
+        `Could not ${newActive ? "enable" : "disable"} ${providerId}: ${error.message}. The previous state was restored.`,
+      );
     }
   };
 
@@ -475,6 +489,7 @@ export default function ProvidersPage() {
       </header>
 
       {fetchError && <div className="flex flex-col gap-3 border-b border-[var(--color-border)] bg-[var(--color-danger-wash)] p-4 sm:flex-row sm:items-center sm:justify-between" role="alert"><span className="flex items-center gap-2 text-sm text-[var(--color-danger)]"><Icon name="error" />{fetchError}</span><Button size="sm" variant="secondary" icon="refresh" onClick={fetchProviders}>Retry</Button></div>}
+      {toggleError && <div className="flex flex-col gap-3 border-b border-[var(--color-border)] bg-[var(--color-danger-wash)] p-4 sm:flex-row sm:items-center sm:justify-between" role="alert"><span className="flex items-center gap-2 text-sm text-[var(--color-danger)]"><Icon name="error" />{toggleError}</span><Button size="sm" variant="secondary" icon="close" onClick={() => setToggleError("")}>Dismiss</Button></div>}
 
       <section className="border-b border-[var(--color-border-strong)]" aria-labelledby="pinned-route-lanes-title">
         <header className="flex flex-col gap-3 border-b border-[var(--color-border)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
