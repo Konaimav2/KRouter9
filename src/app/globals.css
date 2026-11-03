@@ -34,6 +34,7 @@
   --color-overlay:rgb(0 0 0/.72); --color-code-bg:var(--p-carbon-1000);
   --color-rail-text:var(--p-carbon-100); --color-rail-muted:var(--p-carbon-400);
   --color-rail-border:var(--p-carbon-700); --color-rail-active:var(--p-glacier-300);
+  --color-rail-danger:var(--p-rose-400);
 
   --color-brand-50:var(--p-glacier-50); --color-brand-100:var(--p-glacier-100);
   --color-brand-200:var(--p-glacier-200); --color-brand-300:var(--p-glacier-300);
@@ -221,7 +222,7 @@ button:disabled,[role="button"][aria-disabled="true"] { cursor:not-allowed; }
 .command-spine__utility { display:flex; flex-direction:column; gap:var(--space-1); border-top:var(--divider-stroke) solid var(--nav-rule); padding:var(--space-2) 0; }
 .command-utility { display:flex; min-height:52px; flex-direction:column; align-items:center; justify-content:center; gap:2px; color:var(--nav-fg); font-size:9px; line-height:1.15; text-align:center; }
 .command-utility:hover { background:rgb(255 255 255/.05); color:var(--nav-fg); }
-.command-utility--danger { color:var(--color-danger); }
+.command-utility--danger { color:var(--color-rail-danger); }
 .command-ready { padding:4px; color:var(--nav-muted); font:9px var(--font-data); text-align:center; }
 .task-tray-backdrop { position:fixed; z-index:var(--z-menu); inset:0 0 0 var(--layout-command-spine); background:rgb(0 0 0/.24); }
 .task-tray { position:fixed; z-index:var(--z-drawer); inset:0 auto 0 var(--layout-command-spine); width:var(--layout-task-tray); overflow-y:auto; border-right:var(--divider-stroke) solid var(--color-border-strong); background:var(--color-surface-raised); box-shadow:var(--shadow-tray); animation:task-tray-in var(--duration-base) var(--ease-enter); }

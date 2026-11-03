@@ -1085,7 +1085,7 @@ export default function ProviderLimits() {
           return (
             <div
               key={conn.id}
-              className={`relative min-w-0 border-b border-border bg-surface ${isInactive ? "opacity-60" : ""}`}
+              className={`relative min-w-0 border-b border-border bg-surface ${isInactive ? "bg-surface-strong/40" : ""}`}
             >
               <span className="absolute -left-[1.32rem] top-5 size-2.5 border-2 border-primary bg-surface" aria-hidden="true" />
               <div className="px-3 py-2 border-b border-black/10 dark:border-white/10">

@@ -225,7 +225,7 @@ export default function SetupWizardCard({ tools = [] }) {
           type="button"
           onClick={handleAutoDetect}
           disabled={scanning}
-          className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded border border-[var(--color-primary)] bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
+          className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded border border-[var(--color-primary)] bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-on-primary)] transition-opacity hover:opacity-90 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
         >
           <Icon
             name={scanning ? "progress_activity" : "radar"}
@@ -422,6 +422,8 @@ export default function SetupWizardCard({ tools = [] }) {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <pre
             suppressHydrationWarning
+            tabIndex={0}
+            aria-label="Command"
             className="flex min-h-[48px] flex-1 items-center overflow-x-auto rounded border border-[var(--color-border)] bg-[var(--color-code-bg)] px-3 py-3 font-mono text-xs text-[var(--color-text)]"
           >
             <code>{!origin ? "Resolving gateway URL…" : snippet || "No copy-paste snippet is declared for this client."}</code>
