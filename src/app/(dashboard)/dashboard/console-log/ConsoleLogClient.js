@@ -48,6 +48,7 @@ export default function ConsoleLogClient() {
   const [bufferedCount, setBufferedCount] = useState(0);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [clearError, setClearError] = useState("");
   const [copied, setCopied] = useState(false);
   const [atTail, setAtTail] = useState(true);
   const logRef = useRef(null);
@@ -65,10 +66,13 @@ export default function ConsoleLogClient() {
 
   const clearLogs = useCallback(async () => {
     try {
-      await fetch("/api/translator/console-logs", { method: "DELETE" });
+      const res = await fetch("/api/translator/console-logs", { method: "DELETE" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setConfirmClear(false);
+      setClearError("");
     } catch (err) {
-      console.error("Failed to clear console logs:", err);
+      setConfirmClear(false);
+      setClearError(`Could not clear the log: ${err.message}. Retained lines were not deleted.`);
     }
   }, []);
 
@@ -150,6 +154,7 @@ export default function ConsoleLogClient() {
           <button type="button" disabled={!logs.length} onClick={() => setConfirmClear(true)} className="flex min-h-9 items-center gap-2 rounded-[var(--radius-control)] border border-danger px-3 text-sm text-danger hover:bg-danger-wash disabled:text-disabled-text"><Trash2 size={15} />Clear</button>
         </div>
 
+        {clearError && <p role="alert" className="border-x border-border bg-danger-wash px-4 py-2 text-sm text-danger">{clearError}</p>}
         <div ref={logRef} tabIndex={0} onScroll={(event) => { const node = event.currentTarget; setAtTail(node.scrollHeight - node.scrollTop - node.clientHeight < 24); }} className="max-h-[calc(100dvh-19rem)] min-h-[20rem] flex-1 overflow-auto overscroll-contain bg-[var(--color-code-bg)] font-[var(--font-data)] text-xs">
           {visibleLogs.length ? visibleLogs.map((line, index) => <div key={`${index}-${line.slice(0, 24)}`}>{renderLine(line)}</div>) : <div className="grid min-h-[20rem] place-content-center px-4 text-center text-text-muted"><p className="font-semibold text-text-primary">{logs.length ? "No logs match these filters." : "No logs yet"}</p><p className="mt-1">{logs.length ? "Clear filters to see retained events." : "Events will appear when the gateway writes a log."}</p></div>}
         </div>
