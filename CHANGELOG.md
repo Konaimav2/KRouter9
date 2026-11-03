@@ -1,3 +1,37 @@
+# v3.3.22 (2026-11-03) — Failed-save honesty, failed-read errors, accessibility
+
+## Why
+Live QA on the 3.3.21 candidate found the provider detail page still ignored failed strategy
+and binding saves (it does not use `ConnectionsCard`), five pages rendered failed reads as
+empty states, three more save controls ignored non-2xx, and axe measured critical/serious
+accessibility defects on the provider surfaces.
+
+## Provider saves
+- `providers/[id]/page.js`: strategy GET/PATCH checked, `role="alert"`, persisted value reloaded
+  on failure; the connection proxy dropdown PUT checked with a connection-list reload on failure.
+- `ConnectionsCard` (media providers) keeps the 3.3.21 honesty fix.
+
+## Failed reads and writes
+- Endpoint: a failed GET `/api/keys` no longer auto-creates `Default Key`; inline alert + Retry.
+- Quota: a failed connections fetch shows an alert + Retry instead of `No Providers Connected`.
+- Basic chat: non-2xx provider load shows a distinct error + Retry, not the empty state.
+- Combos: empty state suppressed while the fetch error is shown; capacity-adapter and
+  combo-strategy PATCHes check status, alert, and keep/reload the previous value.
+- CLI tools: `all-statuses` failure shows an alert + Retry.
+- Token Saver: RTK PATCH checks status, alerts, and keeps the prior value.
+
+## Accessibility (FR-11)
+- Accessible names on connection reorder buttons and connection checkboxes.
+- Contrast: success badge (green-700), connection error text (red-600), risk notice (red-700).
+- 44px targets: quota pagination, quota edit/delete, CLI setup link. The 44x24 strategy switch
+  stays as-is (passes WCAG 2.5.8 24px AA; the plan's 44px list names pagination/quota/translator/
+  wizard controls).
+
+## Notes
+- `v3.3.21` (digest `sha256:8dbdf261…2a85`) was built and probed, then superseded before any
+  deployment; tags are never moved. `cli/` stays 1.0.0.
+- Evidence: `/tmp/opencode/kr9_qa/instabox-3321/` and `labs/wave-3.3.21/EVIDENCE.md`.
+
 # v3.3.21 (2026-11-03) — Bound egress refuses direct; save honesty
 
 ## Proxy egress (FR-3)
