@@ -1,3 +1,27 @@
+# v3.3.21 (2026-11-03) — Bound egress refuses direct; save honesty
+
+## Proxy egress (FR-3)
+- A bound free lane whose pool proxy fails now returns HTTP 503 naming the pool and the masked
+  proxy endpoint ("Refusing direct egress") instead of silently retrying the request directly.
+  Live repro on 3.3.20: a dead existing pool logged `[ProxyFetch] Proxy failed, falling back to
+  direct`, opened a real connection to opencode.ai:443, and returned the upstream 429
+- The strict flag and pool name now travel from `resolveConnectionProxyConfig` through `auth.js`
+  and `chatCore` to `proxyFetch`; a free-lane binding is always strict, regardless of the pool
+  checkbox. Non-strict pools keep the documented direct fallback
+- `tests/unit/proxy-strict-refusal.test.js` runs a local upstream plus a dead proxy: strict
+  rejects with `PROXY_STRICT_FAILED`/503 and no direct success, non-strict still falls back (2/2)
+
+## Provider strategy and binding saves (FR-10)
+- `ConnectionsCard` checks the GET and PATCH responses for strategy saves, shows a `role="alert"`,
+  and re-reads server state on failure; the proxy-binding PUT does the same instead of leaving
+  an optimistic value
+- The no-auth proxy binding card already reported failed saves and re-read persisted state; no
+  change needed there
+
+## Notes
+- `cli/` stays 1.0.0; tags are never moved
+- RED proof: `/tmp/opencode/kr9_qa/instabox-3321/fr10-strategy-red/probe.json`
+
 # v3.3.20 (2026-11-03) — Emails toggle and page-size target
 
 ## Dashboard (FR-11)
