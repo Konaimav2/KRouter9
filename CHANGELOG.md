@@ -1,3 +1,13 @@
+# v3.3.20 (2026-11-03) — Emails toggle and page-size target
+
+## Dashboard (FR-11)
+- The quota "Show account emails" control now measures 44x44 (was 36x32); the previous patch
+  hit an adjacent button with the same class string
+- The "Accounts per page" select is 44 px high
+
+## Notes
+- `cli/` stays 1.0.0; tags are never moved
+
 # v3.3.19 (2026-11-03) — 44px targets on the named controls (FR-11)
 
 ## Dashboard
