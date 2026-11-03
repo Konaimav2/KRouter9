@@ -37,6 +37,7 @@ export default function ModelRow({ model, fullModel, alias, copied, onCopy, test
             <button
               onClick={onTest}
               disabled={isTesting}
+              aria-label={`Test ${displayModel}`}
               className={`rounded p-0.5 text-text-muted transition-opacity hover:bg-sidebar hover:text-primary ${isTesting ? "opacity-100" : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100"}`}
             >
               <Icon name={isTesting ? "progress_activity" : "science"} size={14} className={isTesting ? "animate-spin" : ""} />
@@ -49,6 +50,7 @@ export default function ModelRow({ model, fullModel, alias, copied, onCopy, test
         <div className="relative shrink-0 group/btn">
           <button
             onClick={() => onCopy(displayModel, `model-${model.id}`)}
+            aria-label={`Copy ${displayModel}`}
             className="rounded p-0.5 text-text-muted hover:bg-sidebar hover:text-primary"
           >
             <Icon name={copied === `model-${model.id}` ? "check" : "content_copy"} size={14} />
@@ -60,6 +62,7 @@ export default function ModelRow({ model, fullModel, alias, copied, onCopy, test
         {isCustom ? (
           <button
             onClick={onDeleteAlias}
+            aria-label={`Remove ${displayModel}`}
             className="ml-auto rounded p-0.5 text-text-muted opacity-100 transition-opacity hover:bg-red-500/10 hover:text-red-500 sm:opacity-0 sm:group-hover:opacity-100"
             title="Remove custom model"
           >
@@ -68,6 +71,7 @@ export default function ModelRow({ model, fullModel, alias, copied, onCopy, test
         ) : onDisable ? (
           <button
             onClick={onDisable}
+            aria-label={`Disable ${displayModel}`}
             className="ml-auto rounded p-0.5 text-text-muted opacity-100 transition-opacity hover:bg-red-500/10 hover:text-red-500 sm:opacity-0 sm:group-hover:opacity-100"
             title="Disable this model"
           >
