@@ -716,7 +716,7 @@ export default function TokenSaverClient() {
               <span className="font-mono text-xs tabular-nums text-primary">{stage.index}</span>
               <div><h3 className="font-semibold">{stage.title}</h3><p className="mt-1 text-sm text-text-muted">{stage.detail}</p><p className={`mt-1 text-xs ${stage.enabled ? "text-success" : "text-text-muted"}`}>{stage.enabled ? "Enabled" : stage.disabled ? "Waiting for verification" : "Disabled"}</p></div>
               {stage.href ? <a href={stage.href} className="inline-flex min-h-11 items-center px-3 text-sm text-primary underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">Set up Headroom</a>
-                : <Toggle checked={stage.enabled} disabled={stage.disabled} onChange={() => stage.toggle(!stage.enabled)} />}
+                : <Toggle checked={stage.enabled} disabled={stage.disabled} ariaLabel={`${stage.title} enabled`} onChange={() => stage.toggle(!stage.enabled)} />}
             </div>
           ))}
         </section>
@@ -851,7 +851,7 @@ export default function TokenSaverClient() {
                 )}
                 {step.id === "verify" && headroomCanStart && !headroomRunning && <Button className="mt-3" size="sm" onClick={handleHeadroomStart} disabled={headroomActionLoading}>{headroomActionLoading ? "Starting…" : "Start service"}</Button>}
                 {step.id === "verify" && headroomManaged && headroomRunning && <Button className="mt-3" size="sm" variant="secondary" onClick={handleHeadroomStop} disabled={headroomActionLoading}>Stop service</Button>}
-                {step.id === "enable" && <div className="mt-3 flex items-center gap-3"><Toggle checked={headroomEnabled} disabled={!headroomRunning} onChange={() => handleHeadroomEnabled(!headroomEnabled)} /><span className="text-sm">Use Headroom for context compression</span></div>}
+                {step.id === "enable" && <div className="mt-3 flex items-center gap-3"><Toggle checked={headroomEnabled} disabled={!headroomRunning} ariaLabel="Use Headroom for context compression" onChange={() => handleHeadroomEnabled(!headroomEnabled)} /><span className="text-sm">Use Headroom for context compression</span></div>}
                 {step.recovery && <p className="mt-2 border-l-2 border-warning pl-3 text-xs text-warning">Recovery: {step.recovery}</p>}
               </div>
             </li>
@@ -871,7 +871,7 @@ export default function TokenSaverClient() {
                   {installed ? (
                     <>
                       <span>{active ? "Active" : "Inactive"}</span>
-                      <Toggle size="sm" checked={active} disabled={restartingProxy} onChange={() => toggleExtraActive(extra, !active)} />
+                      <Toggle size="sm" checked={active} disabled={restartingProxy} ariaLabel={`${extra.name || extra.id || "Extra proxy"} active`} onChange={() => toggleExtraActive(extra, !active)} />
                       <button type="button" onClick={() => handleRemoveExtra(extra)} disabled={removingExtra === extra} className="text-danger underline">{removingExtra === extra ? "Uninstalling…" : "Uninstall"}</button>
                     </>
                   ) : (
@@ -897,7 +897,7 @@ export default function TokenSaverClient() {
         </header>
         <div className="grid gap-4 p-4 lg:grid-cols-2">
           <div className="space-y-3">
-            <div className="flex items-center justify-between gap-3"><span className="text-sm font-medium">Use PXPIPE</span><Toggle checked={pxpipeEnabled} onChange={() => handlePxpipeEnabled(!pxpipeEnabled)} /></div>
+            <div className="flex items-center justify-between gap-3"><span className="text-sm font-medium">Use PXPIPE</span><Toggle checked={pxpipeEnabled} ariaLabel="Use PXPIPE" onChange={() => handlePxpipeEnabled(!pxpipeEnabled)} /></div>
             <label className="grid gap-1 text-sm font-medium">Minimum prompt size (chars)<Input value={String(pxpipeMinChars)} onChange={(event) => setPxpipeMinChars(event.target.value)} onBlur={handlePxpipeMinCharsBlur} aria-label="PXPIPE minimum prompt size in characters" /></label>
             <div className="flex flex-wrap gap-2">
               {!pxpipeStatus.installed ? <Button size="sm" onClick={() => pxpipeAction("install")} disabled={pxpipeActionLoading || pxpipeStatus.installing}>{pxpipeActionLoading || pxpipeStatus.installing ? "Installing…" : "Install"}</Button> : pxpipeStatus.running ? <><Button size="sm" variant="secondary" onClick={() => pxpipeAction("restart")} disabled={pxpipeActionLoading}>Restart</Button><Button size="sm" variant="secondary" onClick={() => pxpipeAction("stop")} disabled={pxpipeActionLoading}>Stop</Button></> : <Button size="sm" onClick={() => pxpipeAction("start")} disabled={pxpipeActionLoading}>{pxpipeActionLoading ? "Starting…" : "Start"}</Button>}
@@ -918,8 +918,8 @@ export default function TokenSaverClient() {
       <section aria-labelledby="output-title" className="border border-border bg-surface">
         <header className="border-b border-border bg-surface-2 px-4 py-3"><h2 id="output-title" className="font-semibold">Output compression</h2></header>
         <div className="grid gap-4 p-4 lg:grid-cols-2">
-          <div className="border-l-2 border-primary pl-3"><div className="flex items-center justify-between gap-3"><div><h3 className="font-semibold">Caveman</h3><p className="text-sm text-text-muted">Choose response terseness.</p></div><Toggle checked={cavemanEnabled} onChange={() => handleCavemanEnabled(!cavemanEnabled)} /></div>{cavemanEnabled && <div className="mt-3 flex flex-wrap gap-2">{visibleCavemanLevels.map((level) => <button key={level.id} type="button" onClick={() => handleCavemanLevel(level.id)} className={`border px-3 py-2 text-xs ${cavemanLevel === level.id ? "border-primary text-primary" : "border-border"}`}>{level.label}</button>)}</div>}</div>
-          <div className="border-l-2 border-primary pl-3"><div className="flex items-center justify-between gap-3"><div><h3 className="font-semibold">Ponytail</h3><p className="text-sm text-text-muted">Choose coding restraint.</p></div><Toggle checked={ponytailEnabled} onChange={() => handlePonytailEnabled(!ponytailEnabled)} /></div>{ponytailEnabled && <div className="mt-3 flex flex-wrap gap-2">{PONYTAIL_LEVELS.map((level) => <button key={level.id} type="button" onClick={() => handlePonytailLevel(level.id)} className={`border px-3 py-2 text-xs ${ponytailLevel === level.id ? "border-primary text-primary" : "border-border"}`}>{level.label}</button>)}</div>}</div>
+          <div className="border-l-2 border-primary pl-3"><div className="flex items-center justify-between gap-3"><div><h3 className="font-semibold">Caveman</h3><p className="text-sm text-text-muted">Choose response terseness.</p></div><Toggle checked={cavemanEnabled} ariaLabel="Enable Caveman" onChange={() => handleCavemanEnabled(!cavemanEnabled)} /></div>{cavemanEnabled && <div className="mt-3 flex flex-wrap gap-2">{visibleCavemanLevels.map((level) => <button key={level.id} type="button" onClick={() => handleCavemanLevel(level.id)} className={`border px-3 py-2 text-xs ${cavemanLevel === level.id ? "border-primary text-primary" : "border-border"}`}>{level.label}</button>)}</div>}</div>
+          <div className="border-l-2 border-primary pl-3"><div className="flex items-center justify-between gap-3"><div><h3 className="font-semibold">Ponytail</h3><p className="text-sm text-text-muted">Choose coding restraint.</p></div><Toggle checked={ponytailEnabled} ariaLabel="Enable Ponytail" onChange={() => handlePonytailEnabled(!ponytailEnabled)} /></div>{ponytailEnabled && <div className="mt-3 flex flex-wrap gap-2">{PONYTAIL_LEVELS.map((level) => <button key={level.id} type="button" onClick={() => handlePonytailLevel(level.id)} className={`border px-3 py-2 text-xs ${ponytailLevel === level.id ? "border-primary text-primary" : "border-border"}`}>{level.label}</button>)}</div>}</div>
         </div>
       </section>
 

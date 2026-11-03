@@ -1114,6 +1114,7 @@ export default function ProfilePage() {
                 </p>
               </div>
               <Toggle
+                ariaLabel="Require login"
                 checked={settings.requireLogin === true}
                 onChange={() => updateRequireLogin(!settings.requireLogin)}
                 disabled={loading}
@@ -1840,6 +1841,7 @@ export default function ProfilePage() {
                 </p>
               </div>
               <Toggle
+                ariaLabel="Use outbound proxy"
                 checked={settings.outboundProxyEnabled === true}
                 onChange={() =>
                   updateOutboundProxyEnabled(
@@ -1934,6 +1936,7 @@ export default function ProfilePage() {
                 </p>
               </div>
               <Toggle
+                ariaLabel="Enable observability"
                 checked={observabilityEnabled}
                 onChange={updateObservabilityEnabled}
                 disabled={loading}

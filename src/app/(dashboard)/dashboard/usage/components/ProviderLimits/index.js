@@ -1270,6 +1270,7 @@ export default function ProviderLimits() {
                     >
                       <Toggle
                         size="sm"
+                        ariaLabel={`${(conn.isActive ?? true) ? "Disable" : "Enable"} ${conn.name || conn.email || "connection"}`}
                         checked={conn.isActive ?? true}
                         disabled={rowBusy}
                         onChange={(nextActive) =>

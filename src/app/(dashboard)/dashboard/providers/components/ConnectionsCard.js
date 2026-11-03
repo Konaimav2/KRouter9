@@ -410,6 +410,7 @@ export default function ConnectionsCard({ providerId, isOAuth }) {
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-text-muted font-medium">Round Robin</span>
             <Toggle
+              ariaLabel="Round-robin provider strategy"
               checked={providerStrategy === "round-robin"}
               onChange={(enabled) => {
                 const strategy = enabled ? "round-robin" : null;

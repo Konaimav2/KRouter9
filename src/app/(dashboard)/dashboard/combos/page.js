@@ -600,7 +600,7 @@ function CapacityAdapterCap({ cap, entry, onChange, activeProviders, getCaps }) 
           <span className="min-w-0"><span className="block font-semibold">{cap.label} pool</span><span className="block text-xs text-[var(--color-text-muted)]">{models.length} model{models.length === 1 ? "" : "s"} · {cap.desc}. Switches when the requested route lacks this capability.</span></span>
         </button>
         <div className="flex flex-wrap items-center gap-3">
-          <label className="flex min-h-11 items-center gap-2 text-xs"><Toggle checked={enabled} onChange={(value) => patch({ enabled: value })} size="sm" /><span>{enabled ? "Enabled" : "Disabled"}</span></label>
+          <label className="flex min-h-11 items-center gap-2 text-xs"><Toggle checked={enabled} onChange={(value) => patch({ enabled: value })} ariaLabel="Combo enabled" size="sm" /><span>{enabled ? "Enabled" : "Disabled"}</span></label>
           <div className="grid grid-cols-2 overflow-hidden rounded-[var(--radius-sm)] border border-[var(--color-border)]">
             <button type="button" disabled={!enabled} onClick={() => patch({ roundRobin: false })} className={`min-h-9 px-3 text-xs ${!roundRobin ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]" : "text-[var(--color-text-muted)]"}`}>Fallback</button>
             <button type="button" disabled={!enabled} onClick={() => patch({ roundRobin: true })} className={`min-h-9 px-3 text-xs ${roundRobin ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]" : "text-[var(--color-text-muted)]"}`}>Round robin</button>

@@ -34,7 +34,7 @@ export default function KRouter9ToolCard() {
             <h3 className="text-sm font-semibold text-text-primary">{step.title}</h3>
             <p className="text-sm text-text-muted">{step.detail}</p>
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <pre className="min-w-0 flex-1 overflow-x-auto border border-border bg-[var(--color-code-bg)] p-3 text-xs"><code>{step.command}</code></pre>
+              <pre className="min-w-0 flex-1 overflow-x-auto border border-border bg-[var(--color-code-bg)] p-3 text-xs" tabIndex={0} aria-label="Command"><code>{step.command}</code></pre>
               <Button variant="secondary" className="min-h-11" aria-label={`Copy ${step.title.toLowerCase()} command`} onClick={() => copyCommand(step.command, step.title)}>{copiedStep === step.title ? "Copied" : "Copy"}</Button>
             </div>
           </li>

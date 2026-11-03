@@ -303,7 +303,7 @@ export default function ComboDetailPage() {
               <p className="text-sm font-medium">Round Robin</p>
               <p className="text-xs text-text-muted">Rotate providers across requests instead of strict fallback order.</p>
             </div>
-            <Toggle checked={roundRobin} onChange={handleToggleRoundRobin} />
+            <Toggle checked={roundRobin} onChange={handleToggleRoundRobin} ariaLabel="Round-robin media providers" />
           </div>
         </div>
       </Card>

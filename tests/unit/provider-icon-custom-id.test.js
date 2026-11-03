@@ -7,6 +7,10 @@ describe("provider icon resolution", () => {
     expect(getProviderIconSrc("anthropic")).toBe("/providers/anthropic.png");
   });
 
+  it("aliases free-lane ids to the packaged brand asset", () => {
+    expect(getProviderIconSrc("jina-reader-free")).toBe("/providers/jina-reader.png");
+  });
+
   it("never requests a logo for generated custom connection ids", () => {
     expect(
       getProviderIconSrc("openai-compatible-chat-34b1e334-10a6-400d-aab5-6f23f29fe4cc")
