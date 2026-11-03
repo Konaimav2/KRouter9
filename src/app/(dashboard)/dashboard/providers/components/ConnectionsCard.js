@@ -124,7 +124,7 @@ function ConnectionRow({ connection, proxyPools, isOAuth, isFirst, isLast, onMov
             {hasAnyProxy && <Badge variant={proxyBadgeVariant} size="sm">Proxy</Badge>}
             {isCooldown && connection.isActive !== false && <CooldownTimer until={modelLockUntil} />}
             {displayConnectionError(connection) && connection.isActive !== false && (
-              <span className="text-xs text-red-700 truncate max-w-[300px]" title={displayConnectionError(connection)}>{displayConnectionError(connection)}</span>
+              <span className="text-xs text-red-700 dark:text-red-400 truncate max-w-[300px]" title={displayConnectionError(connection)}>{displayConnectionError(connection)}</span>
             )}
             <span className="text-xs text-text-muted">#{connection.priority > 0 ? connection.priority : "—"}</span>
           </div>
@@ -163,7 +163,7 @@ function ConnectionRow({ connection, proxyPools, isOAuth, isFirst, isLast, onMov
             <Icon name="edit" size={18} />
             <span className="text-[10px] leading-tight">Edit</span>
           </button>
-          <button onClick={onDelete} className="flex flex-col items-center px-2 py-1 rounded hover:bg-red-500/10 text-red-700">
+          <button onClick={onDelete} className="flex flex-col items-center px-2 py-1 rounded hover:bg-red-500/10 text-red-700 dark:text-red-400">
             <Icon name="delete" size={18} />
             <span className="text-[10px] leading-tight">Delete</span>
           </button>

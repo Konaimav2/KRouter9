@@ -1,3 +1,12 @@
+# v3.3.25 (2026-11-04) — Final contrast pass (supersedes 3.3.24)
+
+- Badge error variant to red-700 for the light surface.
+- Connection error text and Delete get explicit dark:text-red-400 so the dark
+  theme does not inherit the darker red.
+
+Colour-only diff; behaviour evidence on 3.3.24 carries over, accessibility
+and viewport evidence re-run on this digest. Tags never move; `cli/` stays 1.0.0.
+
 # v3.3.24 (2026-11-04) — Model-row names, connection contrast (supersedes 3.3.23)
 
 - `ModelRow` icon-only Test/Copy/Remove/Disable buttons get accessible names
