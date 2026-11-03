@@ -1,3 +1,17 @@
+# v3.3.19 (2026-11-03) — 44px targets on the named controls (FR-11)
+
+## Dashboard
+- Quota row "Hide quota" controls: 24 -> 44 px
+- Quota row icons: show/hide account emails, auto-ping, refresh quota, Codex reset credit and
+  reset-credit expiry: 32-36 -> 44 px
+- Translator "Load" action and the six load-source icon buttons: 32/40 -> 44 px
+- Pagination was not present in the QA fixture (single page), so it is recorded as unmeasured,
+  not claimed
+
+## Notes
+- Measured with `getBoundingClientRect()` in the browser on 3.3.19, not inferred from classes
+- `cli/` stays 1.0.0; tags are never moved
+
 # v3.3.18 (2026-11-03) — Mutations fail honestly (FR-10)
 
 ## Dashboard
