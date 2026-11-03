@@ -1,3 +1,14 @@
+# v3.3.23 (2026-11-04) — Accessibility follow-up (supersedes 3.3.22)
+
+- Name the provider-page connection reorder buttons (the remaining axe `button-name`
+  critical was `ConnectionRow`, not the media-provider card).
+- Raise the success badge to green-800 and the connection error/delete text to red-700;
+  axe still measured those light-theme nodes below AA at the previous step.
+- Give the basic-chat load-error box `role="alert"` so the failed-read case exposes a
+  visible error to assistive tech and to the QA checker.
+
+3.3.22 was probed but superseded before deployment; tags are never moved. `cli/` stays 1.0.0.
+
 # v3.3.22 (2026-11-03) — Failed-save honesty, failed-read errors, accessibility
 
 ## Why

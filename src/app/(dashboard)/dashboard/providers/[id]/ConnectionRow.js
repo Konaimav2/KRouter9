@@ -133,6 +133,7 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, index =
           <button
             onClick={onMoveUp}
             disabled={isFirst}
+            aria-label={`Move ${connection.name || connection.email || connection.displayName || "connection"} up`}
             className={`p-0.5 rounded ${isFirst ? "text-text-muted/30 cursor-not-allowed" : "hover:bg-sidebar text-text-muted hover:text-primary"}`}
           >
             <Icon name="arrow_upward" size={15} />
@@ -140,6 +141,7 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, index =
           <button
             onClick={onMoveDown}
             disabled={isLast}
+            aria-label={`Move ${connection.name || connection.email || connection.displayName || "connection"} down`}
             className={`p-0.5 rounded ${isLast ? "text-text-muted/30 cursor-not-allowed" : "hover:bg-sidebar text-text-muted hover:text-primary"}`}
           >
             <Icon name="arrow_downward" size={15} />
