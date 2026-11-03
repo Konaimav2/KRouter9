@@ -1,3 +1,19 @@
+# v3.3.17 (2026-11-03) — Light-theme text contrast closeout
+
+## Dashboard (FR-11)
+- Combos and Playground secondary labels use the muted text token instead of the lighter
+  subtle token, which measured 3.09:1 on the light canvas
+- The quota bulk actions use semantic danger/success tokens, replacing red-500 (3.46:1) and
+  emerald-500 (2.25:1) on the light canvas
+- The quota connection secondary label drops the 80% opacity that measured 3.69:1
+- Console-log time and source columns use the rail-muted token, which is readable on the
+  intentionally dark log surface in both themes
+
+## Notes
+- `cli/` stays 1.0.0; tags are never moved
+- Surface audit after this patch: 15 routes x 2 viewports, 0 console errors, 0 overflow;
+  axe light/dark 0 serious/critical on all 15 routes
+
 # v3.3.16 (2026-11-03) — Theme-correct contrast on the remaining surfaces
 
 ## Dashboard (FR-11)
