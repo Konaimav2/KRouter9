@@ -1,3 +1,24 @@
+# v3.3.16 (2026-11-03) — Theme-correct contrast on the remaining surfaces
+
+## Dashboard (FR-11)
+- Quota status uses the semantic `success`/`warning`/`danger` tokens (both themes) instead of
+  fixed Tailwind greens/yellows/reds; the 10 px percentage text and meter fills now meet
+  contrast on the light and dark canvases
+- Inactive quota rows are tinted instead of dimmed at 60% opacity, so their text keeps its
+  contrast while the row still reads as inactive
+- The Shutdown utility uses a rail-safe danger token (`--color-rail-danger`); the light-theme
+  rose-700 was 2.95:1 on the dark rail
+- The "Auto-detect all applications" action uses `--color-on-primary` instead of hard-coded
+  white, fixing 1.74:1 white-on-glacier in dark mode
+- Usage topology fallback initials use the theme text token instead of `#6b7280` (3.78:1 on the
+  dark node)
+- The setup-wizard command block is keyboard-focusable and labelled
+
+## Notes
+- `cli/` stays 1.0.0; tags are never moved
+- Verified by the surface audit, not by the class names: 15 routes x light/dark axe, 0 critical /
+  0 serious except the items above before this patch
+
 # v3.3.15 (2026-11-03) — Full-surface accessibility and grammar pass
 
 ## Dashboard (FR-10, FR-11)
