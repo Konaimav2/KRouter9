@@ -1,3 +1,29 @@
+# v3.3.15 (2026-11-03) — Full-surface accessibility and grammar pass
+
+## Dashboard (FR-10, FR-11)
+- Quota status is text and colour only: the 🟢🟡🔴 glyphs in the progress bar, table and
+  helper are removed (FR-10 bans quota-status emoji)
+- Every switch exposes an accessible name. `Toggle` accepts `ariaLabel` and falls back to the
+  visible `label` or the icon-row `title`, so no `role="switch"` renders unnamed
+- `Input` associates its visible label with the control through `htmlFor`/`id` (`useId`),
+  fixing the four unlabelled observability number fields
+- `.command-utility` and the gateway version label use readable rail/text tokens instead of
+  the low-contrast muted tokens
+- The usage breakdown scroll container and the CLI command blocks are keyboard-focusable
+  (`tabIndex=0`, labelled region)
+- `jina-reader-free` maps to the packaged `jina-reader.png`, removing the Media 404
+- Usage zero-cost copy reads `no cost was measured`
+
+## Tests
+- `toggle-input-a11y-render.test.js` renders the real components: switch names from
+  ariaLabel/label/title/default and Input label-to-id association, including a caller id (6/6)
+- `quota-no-status-emoji.test.js` source guard for all three quota modules (3/3)
+- `provider-icon-custom-id.test.js` covers the Jina alias (4/4)
+- Full suite 3186 passed / 96 known fails / 6 known suite fails; comparator reports no regression
+
+## Notes
+- `cli/` stays 1.0.0; tags are never moved
+
 # v3.3.14 (2026-11-03) — Test lint cleanup
 
 ## Tests
