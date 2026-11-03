@@ -23,7 +23,7 @@ const KAME_PARTICLE_COUNT = 6;
 const SPARK_COUNT = 5;
 
 function getProviderConfig(providerId) {
-  return AI_PROVIDERS[providerId] || { color: "#6b7280", name: providerId };
+  return AI_PROVIDERS[providerId] || { color: "var(--color-text-muted)", name: providerId };
 }
 
 function getProviderImageUrl(providerId) {
@@ -306,7 +306,7 @@ function buildLayout(providers, activeSet, lastSet, errorSet) {
     const nodeId = `provider-${p.provider}`;
     const data = {
       label: (config.name !== p.provider ? config.name : null) || p.nodeName || p.name || p.provider,
-      color: config.color || "#6b7280",
+      color: config.color || "var(--color-text-muted)",
       imageUrl: getProviderImageUrl(p.provider),
       textIcon: config.textIcon || (p.provider || "?").slice(0, 2).toUpperCase(),
       active,
