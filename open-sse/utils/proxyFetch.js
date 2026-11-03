@@ -9,6 +9,23 @@ export const RELAY_MAX_BODY_BYTES = 4 * 1024 * 1024;
 const originalFetch = globalThis.fetch;
 const proxyDispatchers = new Map();
 
+function strictProxyFailure(proxyOptions, proxyUrl, cause) {
+  let safeProxy = "configured proxy";
+  try {
+    const parsed = new URL(proxyUrl);
+    safeProxy = `${parsed.protocol}//${parsed.hostname}${parsed.port ? `:${parsed.port}` : ""}`;
+  } catch {
+    // keep the generic label when the URL cannot be parsed
+  }
+  const pool = proxyOptions?.connectionProxyPoolName || proxyOptions?.connectionProxyPoolId || "bound pool";
+  const err = new Error(
+    `Egress is bound to proxy pool "${pool}" (${safeProxy}) but the proxy failed: ${cause?.message || String(cause)}. Refusing direct egress.`
+  );
+  err.code = "PROXY_STRICT_FAILED";
+  err.status = 503;
+  return err;
+}
+
 // ─── TLS fingerprinting via got-scraping (browser-like JA3) ───────────────
 // Disabled: not in use. Kept commented for future re-enable.
 // Restore the original block to re-enable per-host JA3 spoofing.
@@ -338,7 +355,7 @@ export async function proxyAwareFetch(url, options = {}, proxyOptions = null) {
         return await originalFetch(url, { ...options, dispatcher });
       } catch (proxyError) {
         if (proxyOptions?.strictProxy === true) {
-          throw new Error(`[ProxyFetch] Proxy required but failed (strictProxy=true): ${proxyError.message}`);
+          throw strictProxyFailure(proxyOptions, proxyUrl, proxyError);
         }
         console.warn(`[ProxyFetch] Proxy failed, falling back to direct bypass: ${proxyError.message}`);
       }
@@ -360,7 +377,7 @@ export async function proxyAwareFetch(url, options = {}, proxyOptions = null) {
     } catch (proxyError) {
       // If strictProxy is enabled, fail hard instead of falling back to direct
       if (proxyOptions?.strictProxy === true) {
-        throw new Error(`[ProxyFetch] Proxy required but failed (strictProxy=true): ${proxyError.message}`);
+        throw strictProxyFailure(proxyOptions, proxyUrl, proxyError);
       }
       console.warn(`[ProxyFetch] Proxy failed, falling back to direct: ${proxyError.message}`);
       return originalFetch(url, options);

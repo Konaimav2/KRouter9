@@ -375,6 +375,9 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
     connectionProxyEnabled: credentials?.providerSpecificData?.connectionProxyEnabled === true,
     connectionProxyUrl: credentials?.providerSpecificData?.connectionProxyUrl || "",
     connectionNoProxy: credentials?.providerSpecificData?.connectionNoProxy || "",
+    connectionProxyPoolId: credentials?.providerSpecificData?.connectionProxyPoolId || "",
+    connectionProxyPoolName: credentials?.providerSpecificData?.connectionProxyPoolName || "",
+    strictProxy: credentials?.providerSpecificData?.connectionStrictProxy === true,
     vercelRelayUrl: credentials?.providerSpecificData?.vercelRelayUrl || "",
   };
 
@@ -454,6 +457,9 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
         return createErrorResult(HTTP_STATUS.GATEWAY_TIMEOUT, "Upstream attempt exceeded the request budget. Safe to retry.");
       }
       return createErrorResult(499, "Request aborted");
+    }
+    if (error?.code === "PROXY_STRICT_FAILED") {
+      return createErrorResult(HTTP_STATUS.SERVICE_UNAVAILABLE, error.message);
     }
     // Pre-dispatch client faults (e.g. relay payload too large) surface as-is:
     // never reclassify as 502, never burn a retry or an account cooldown.
