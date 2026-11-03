@@ -401,7 +401,7 @@ export default function SetupWizardCard({ tools = [] }) {
         {selectedToolId && (tools.some((t) => t.id === selectedToolId) || selectedToolId === "vscode") ? (
           <a
             href={`#tool-${selectedToolId}`}
-            className="inline-flex min-h-[36px] w-fit items-center gap-1.5 text-xs font-medium text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
+            className="inline-flex min-h-11 w-fit items-center gap-1.5 text-xs font-medium text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
           >
             <span>Open {selected?.name} setup</span>
             <Icon name="arrow_downward" size={14} />

@@ -47,6 +47,7 @@ export default function APIPageClient({ machineId }) {
   const [tunnelUrl, setTunnelUrl] = useState("");
   const [tunnelPublicUrl, setTunnelPublicUrl] = useState("");
   const [tunnelLoading, setTunnelLoading] = useState(false);
+  const [keysLoadError, setKeysLoadError] = useState("");
   const [tunnelProgress, setTunnelProgress] = useState("");
   const [tunnelStatus, setTunnelStatus] = useState(null);
   const [showEnableTunnelModal, setShowEnableTunnelModal] = useState(false);
@@ -402,12 +403,20 @@ export default function APIPageClient({ machineId }) {
     try {
       const fetchKeys = async () => {
         const res = await fetch("/api/keys");
-        if (!res.ok) return [];
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         return data.keys || [];
       };
 
-      let existing = await fetchKeys();
+      setKeysLoadError("");
+      let existing;
+      try {
+        existing = await fetchKeys();
+      } catch (error) {
+        setKeysLoadError(`Could not load API keys: ${error.message}. No key was created.`);
+        setKeys([]);
+        return;
+      }
       // Auto-provision a default key for first-time users so the endpoint works out of the box.
       if (existing.length === 0) {
         try {
@@ -421,7 +430,8 @@ export default function APIPageClient({ machineId }) {
       }
       setKeys(existing);
     } catch (error) {
-      console.log("Error fetching data:", error);
+      setKeysLoadError(`Could not load API keys: ${error.message}. No key was created.`);
+      setKeys([]);
     } finally {
       setLoading(false);
     }
@@ -911,7 +921,7 @@ export default function APIPageClient({ machineId }) {
         </header>
         {revealError && <p className="border-b border-border px-4 py-2 text-sm text-danger" role="alert">{revealError}</p>}
         <div className="hidden grid-cols-[minmax(9rem,1fr)_minmax(12rem,1.5fr)_minmax(8rem,1fr)_8rem_7rem_7rem] border-b border-border bg-surface-2 px-4 py-2 text-xs font-semibold text-text-muted md:grid"><span>Name</span><span>Key</span><span>Policy</span><span>Limits</span><span>Created</span><span>Status / actions</span></div>
-        {!filteredKeys.length ? <div className="px-4 py-12 text-center"><KeyRound className="mx-auto size-7 text-text-muted"/><p className="mt-3 font-semibold">{keys.length ? "No keys match this search." : "No API keys yet"}</p><p className="mt-1 text-sm text-text-muted">{keys.length ? "Clear search or change the status filter." : "Create a named key before sending requests to /v1."}</p>{keys.length ? <button type="button" className="mt-3 text-sm text-primary hover:underline" onClick={() => { setKeyQuery(""); setKeyStatus("all"); }}>Clear search</button> : <Button className="mt-4" onClick={() => setShowAddModal(true)}>Create API key</Button>}</div> : filteredKeys.map((key) => <div key={key.id} className="grid min-w-0 gap-2 border-b border-border px-4 py-3 last:border-b-0 hover:bg-surface-hover md:grid-cols-[minmax(9rem,1fr)_minmax(12rem,1.5fr)_minmax(8rem,1fr)_8rem_7rem_7rem] md:items-center">
+        {keysLoadError ? <div role="alert" className="flex flex-wrap items-center justify-between gap-3 px-4 py-6 text-sm text-danger"><span>{keysLoadError}</span><button type="button" className="font-semibold underline" onClick={() => { setLoading(true); fetchData(); }}>Retry</button></div> : !filteredKeys.length ? <div className="px-4 py-12 text-center"><KeyRound className="mx-auto size-7 text-text-muted"/><p className="mt-3 font-semibold">{keys.length ? "No keys match this search." : "No API keys yet"}</p><p className="mt-1 text-sm text-text-muted">{keys.length ? "Clear search or change the status filter." : "Create a named key before sending requests to /v1."}</p>{keys.length ? <button type="button" className="mt-3 text-sm text-primary hover:underline" onClick={() => { setKeyQuery(""); setKeyStatus("all"); }}>Clear search</button> : <Button className="mt-4" onClick={() => setShowAddModal(true)}>Create API key</Button>}</div> : filteredKeys.map((key) => <div key={key.id} className="grid min-w-0 gap-2 border-b border-border px-4 py-3 last:border-b-0 hover:bg-surface-hover md:grid-cols-[minmax(9rem,1fr)_minmax(12rem,1.5fr)_minmax(8rem,1fr)_8rem_7rem_7rem] md:items-center">
           <div className="min-w-0"><p className="line-clamp-2 text-sm font-medium">{key.name}</p>{key.expiresAt && Date.parse(key.expiresAt) > expiryNow && Date.parse(key.expiresAt) - expiryNow < 24 * 60 * 60 * 1000 && <span className="text-xs text-warning">Expires within 24h</span>}</div>
           <div className="flex min-w-0 items-center gap-1"><code className="min-w-0 truncate font-[var(--font-data)] text-xs text-text-muted" title={displayMask(key)}>{revealedKeys[key.id] || displayMask(key)}</code><button type="button" onClick={() => revealKey(key.id)} className="grid size-9 shrink-0 place-content-center rounded-[var(--radius-control)] hover:bg-surface-active" aria-label={revealedKeys[key.id] ? `Hide ${key.name} key` : `Show ${key.name} key`}>{revealedKeys[key.id] ? <EyeOff size={14}/> : <Eye size={14}/>}</button><button type="button" onClick={() => copyKeyViaReveal(key.id)} className="grid size-9 shrink-0 place-content-center rounded-[var(--radius-control)] text-primary hover:bg-surface-active" aria-label={`Copy ${key.name} key`}>{copied === key.id ? <Check size={14}/> : <Copy size={14}/>}</button></div>
           <div className="text-xs text-text-muted">{key.modelPolicy === "whitelist" ? `${parsePolicyCount(key.allowedModels)} allowed` : key.modelPolicy === "blacklist" ? `${parsePolicyCount(key.blockedModels)} blocked` : "All models"}</div>

@@ -116,9 +116,11 @@ export default function TokenSaverClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rtkEnabled: value }),
       });
-      if (res.ok) setRtkEnabledState(value);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setRtkEnabledState(value);
+      setSettingsActionError("");
     } catch (error) {
-      console.log("Error updating rtkEnabled:", error);
+      setSettingsActionError(`Could not save the RTK setting: ${error.message}. The previous value is still active.`);
     }
   };
 

@@ -57,6 +57,7 @@ export default function CombosPage() {
   const { getCaps } = useModelCaps();
   const [confirmState, setConfirmState] = useState(null);
   const [fetchError, setFetchError] = useState("");
+  const [actionError, setActionError] = useState("");
   const { copied, copy } = useCopyToClipboard();
 
   useEffect(() => {
@@ -100,15 +101,19 @@ export default function CombosPage() {
   };
 
   const handleSetCapacityAdapter = async (next) => {
+    const previous = capacityAdapter;
     setCapacityAdapter(next);
     try {
-      await fetch("/api/settings", {
+      const res = await fetch("/api/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ capacityAdapter: next }),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setActionError("");
     } catch (error) {
-      console.log("Error updating capacity adapter:", error);
+      setCapacityAdapter(previous);
+      setActionError(`Could not save the capacity adapter: ${error.message}. The previous setting is still active.`);
     }
   };
 
@@ -203,15 +208,17 @@ export default function CombosPage() {
         updated[comboName] = next;
       }
 
-      await fetch("/api/settings", {
+      const res = await fetch("/api/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ comboStrategies: updated }),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       setComboStrategies(updated);
+      setActionError("");
     } catch (error) {
-      console.log("Error updating combo strategy:", error);
+      setActionError(`Could not save the combo strategy: ${error.message}. The previous strategy is still active.`);
     }
   };
 
@@ -262,7 +269,13 @@ export default function CombosPage() {
             <Button size="sm" variant="secondary" icon="refresh" onClick={fetchData}>Retry</Button>
           </div>
         )}
-        {combos.length === 0 ? (
+        {actionError && (
+          <div className="flex flex-col gap-3 border-b border-[var(--color-border)] bg-[var(--color-danger-wash)] p-4 sm:flex-row sm:items-center sm:justify-between" role="alert">
+            <span className="flex items-center gap-2 text-sm text-[var(--color-danger)]"><Icon name="error" />{actionError}</span>
+            <Button size="sm" variant="secondary" onClick={() => setActionError("")}>Dismiss</Button>
+          </div>
+        )}
+        {fetchError ? null : combos.length === 0 ? (
           <div className="p-8 text-center">
             <Icon name="route" size={28} className="mx-auto text-[var(--color-text-muted)]" />
             <p className="mt-3 font-semibold">No combos yet</p>

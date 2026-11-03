@@ -248,6 +248,13 @@ export default function BasicChatPageClient() {
           }
           return;
         }
+        if (!providersRes.ok) {
+          if (!cancelled) {
+            setProviderGroups([]);
+            setLoadError(`Could not load providers (HTTP ${providersRes.status}).`);
+          }
+          return;
+        }
         const providersData = await providersRes.json().catch(() => ({}));
         const connections = Array.isArray(providersData.connections)
           ? providersData.connections.filter((connection) => connection?.isActive !== false)
@@ -1065,7 +1072,7 @@ export default function BasicChatPageClient() {
           <div className="mx-4 mt-4 border border-[var(--color-danger)] bg-[var(--color-danger-wash)] px-4 py-3 text-[var(--color-danger)]">
             <div className="flex items-start gap-3">
               <Icon name="error" className="text-[20px]" />
-              <div><p className="text-sm leading-6">{loadError}</p>{loadError.includes("expired") ? <Link href="/login" className="mt-2 inline-flex min-h-11 items-center font-medium underline">Log in again</Link> : <Link href="/dashboard/providers" className="mt-2 inline-flex min-h-11 items-center font-medium underline">Open providers</Link>}</div>
+              <div><p className="text-sm leading-6">{loadError}</p>{loadError.includes("expired") ? <Link href="/login" className="mt-2 inline-flex min-h-11 items-center font-medium underline">Log in again</Link> : loadError.startsWith("No providers") ? <Link href="/dashboard/providers" className="mt-2 inline-flex min-h-11 items-center font-medium underline">Open providers</Link> : <button type="button" onClick={() => window.location.reload()} className="mt-2 inline-flex min-h-11 items-center font-medium underline">Retry</button>}</div>
             </div>
           </div>
         ) : null}
