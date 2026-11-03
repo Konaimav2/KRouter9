@@ -167,7 +167,7 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, index =
             )}
             {isCooldown && connection.isActive !== false && <CooldownTimer until={modelLockUntil} />}
             {displayError && connection.isActive !== false && (
-              <span className="max-w-full truncate text-xs text-red-500 sm:max-w-[300px]" title={displayError}>
+              <span className="max-w-full truncate text-xs text-red-700 sm:max-w-[300px]" title={displayError}>
                 {displayError}
               </span>
             )}
@@ -249,7 +249,7 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, index =
             <Icon name="edit" size={18} />
             <span className="text-[10px] leading-tight">Edit</span>
           </button>
-          <button onClick={onDelete} className="flex flex-col items-center rounded px-2 py-1 text-red-500 hover:bg-red-500/10">
+          <button onClick={onDelete} className="flex flex-col items-center rounded px-2 py-1 text-red-700 hover:bg-red-500/10">
             <Icon name="delete" size={18} />
             <span className="text-[10px] leading-tight">Delete</span>
           </button>

@@ -1,3 +1,11 @@
+# v3.3.24 (2026-11-04) — Model-row names, connection contrast (supersedes 3.3.23)
+
+- `ModelRow` icon-only Test/Copy/Remove/Disable buttons get accessible names
+  (the remaining axe `button-name` critical on the provider page).
+- `ConnectionRow` error text and Delete label move to red-700 for AA on the light surface.
+
+3.3.23 was probed but superseded before deployment; tags never move. `cli/` stays 1.0.0.
+
 # v3.3.23 (2026-11-04) — Accessibility follow-up (supersedes 3.3.22)
 
 - Name the provider-page connection reorder buttons (the remaining axe `button-name`
