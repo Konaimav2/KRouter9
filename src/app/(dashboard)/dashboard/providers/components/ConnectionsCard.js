@@ -107,10 +107,10 @@ function ConnectionRow({ connection, proxyPools, isOAuth, isFirst, isLast, onMov
     <div className={`group flex flex-col gap-3 p-2 rounded-lg sm:flex-row sm:items-center sm:justify-between hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors ${connection.isActive === false ? "opacity-60" : ""}`}>
       <div className="flex w-full min-w-0 flex-1 items-start gap-3 sm:items-center">
         <div className="flex flex-col">
-          <button onClick={onMoveUp} disabled={isFirst} className={`p-0.5 rounded ${isFirst ? "text-text-muted/30 cursor-not-allowed" : "hover:bg-sidebar text-text-muted hover:text-primary"}`}>
+          <button onClick={onMoveUp} disabled={isFirst} aria-label={`Move ${displayName} up`} className={`p-0.5 rounded ${isFirst ? "text-text-muted/30 cursor-not-allowed" : "hover:bg-sidebar text-text-muted hover:text-primary"}`}>
             <Icon name="arrow_upward" size={14} />
           </button>
-          <button onClick={onMoveDown} disabled={isLast} className={`p-0.5 rounded ${isLast ? "text-text-muted/30 cursor-not-allowed" : "hover:bg-sidebar text-text-muted hover:text-primary"}`}>
+          <button onClick={onMoveDown} disabled={isLast} aria-label={`Move ${displayName} down`} className={`p-0.5 rounded ${isLast ? "text-text-muted/30 cursor-not-allowed" : "hover:bg-sidebar text-text-muted hover:text-primary"}`}>
             <Icon name="arrow_downward" size={14} />
           </button>
         </div>
@@ -124,7 +124,7 @@ function ConnectionRow({ connection, proxyPools, isOAuth, isFirst, isLast, onMov
             {hasAnyProxy && <Badge variant={proxyBadgeVariant} size="sm">Proxy</Badge>}
             {isCooldown && connection.isActive !== false && <CooldownTimer until={modelLockUntil} />}
             {displayConnectionError(connection) && connection.isActive !== false && (
-              <span className="text-xs text-red-500 truncate max-w-[300px]" title={displayConnectionError(connection)}>{displayConnectionError(connection)}</span>
+              <span className="text-xs text-red-600 truncate max-w-[300px]" title={displayConnectionError(connection)}>{displayConnectionError(connection)}</span>
             )}
             <span className="text-xs text-text-muted">#{connection.priority > 0 ? connection.priority : "—"}</span>
           </div>
@@ -163,7 +163,7 @@ function ConnectionRow({ connection, proxyPools, isOAuth, isFirst, isLast, onMov
             <Icon name="edit" size={18} />
             <span className="text-[10px] leading-tight">Edit</span>
           </button>
-          <button onClick={onDelete} className="flex flex-col items-center px-2 py-1 rounded hover:bg-red-500/10 text-red-500">
+          <button onClick={onDelete} className="flex flex-col items-center px-2 py-1 rounded hover:bg-red-500/10 text-red-600">
             <Icon name="delete" size={18} />
             <span className="text-[10px] leading-tight">Delete</span>
           </button>

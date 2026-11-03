@@ -79,6 +79,7 @@ export default function ProviderDetailPage() {
   const [bulkUpdatingProxy, setBulkUpdatingProxy] = useState(false);
   const [providerStrategy, setProviderStrategy] = useState(null);
   const [providerStickyLimit, setProviderStickyLimit] = useState("");
+  const [strategySaveError, setStrategySaveError] = useState("");
   const [thinkingMode, setThinkingMode] = useState("auto");
   const [autoPing, setAutoPing] = useState({ enabled: false, connections: {} });
   const [suggestedModels, setSuggestedModels] = useState([]);
@@ -404,7 +405,8 @@ export default function ProviderDetailPage() {
   const saveProviderStrategy = async (strategy, stickyLimit) => {
     try {
       const settingsRes = await fetch("/api/settings", { cache: "no-store" });
-      const settingsData = settingsRes.ok ? await settingsRes.json() : {};
+      if (!settingsRes.ok) throw new Error(`HTTP ${settingsRes.status}`);
+      const settingsData = await settingsRes.json();
       const current = settingsData.providerStrategies || {};
 
       // Build override: null strategy means remove override, use global
@@ -421,13 +423,24 @@ export default function ProviderDetailPage() {
         updated[providerId] = override;
       }
 
-      await fetch("/api/settings", {
+      const patchRes = await fetch("/api/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ providerStrategies: updated }),
       });
+      if (!patchRes.ok) throw new Error(`HTTP ${patchRes.status}`);
+      setStrategySaveError("");
     } catch (error) {
-      console.log("Error saving provider strategy:", error);
+      setStrategySaveError(`Could not save the provider strategy: ${error.message}. Reloading the saved setting.`);
+      try {
+        const res = await fetch("/api/settings", { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          const override = (data.providerStrategies || {})[providerId] || {};
+          setProviderStrategy(override.fallbackStrategy || null);
+          setProviderStickyLimit(override.stickyRoundRobinLimit != null ? String(override.stickyRoundRobinLimit) : "1");
+        }
+      } catch {}
     }
   };
 
@@ -1037,6 +1050,7 @@ export default function ProviderDetailPage() {
                 type="checkbox"
                 checked={isSelected(conn.id)}
                 onChange={() => toggleSelectConnection(conn.id)}
+                aria-label={`Select ${conn.name || conn.email || conn.displayName || "connection"}`}
                 className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
               />
             </div>
@@ -1063,15 +1077,16 @@ export default function ProviderDetailPage() {
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({ proxyPoolId: proxyPoolId || null }),
                     });
-                    if (res.ok) {
-                      setConnections(prev => prev.map(c =>
-                        c.id === conn.id
-                          ? { ...c, providerSpecificData: { ...c.providerSpecificData, proxyPoolId: proxyPoolId || null } }
-                          : c
-                      ));
-                    }
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    setConnections(prev => prev.map(c =>
+                      c.id === conn.id
+                        ? { ...c, providerSpecificData: { ...c.providerSpecificData, proxyPoolId: proxyPoolId || null } }
+                        : c
+                    ));
+                    setStrategySaveError("");
                   } catch (error) {
-                    console.log("Error updating proxy:", error);
+                    setStrategySaveError(`Could not update the proxy binding: ${error.message}. Reloading the saved binding.`);
+                    await fetchConnections();
                   }
                 }}
                 onEdit={() => {
@@ -1458,7 +1473,7 @@ export default function ProviderDetailPage() {
       {providerInfo.deprecated && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
           <Icon name="warning" size={16} className="mt-0.5 shrink-0 text-yellow-500" />
-          <p className="text-xs text-red-600 dark:text-yellow-400 leading-relaxed">{providerInfo.deprecationNotice}</p>
+          <p className="text-xs text-red-700 dark:text-yellow-400 leading-relaxed">{providerInfo.deprecationNotice}</p>
         </div>
       )}
 
@@ -1619,6 +1634,12 @@ export default function ProviderDetailPage() {
               </div>
             </div>
           </div>
+
+          {strategySaveError && (
+            <div role="alert" className="rounded-lg border border-[var(--color-danger)] bg-[var(--color-danger-wash)] px-3 py-2 text-xs text-[var(--color-danger)]">
+              {strategySaveError}
+            </div>
+          )}
 
           {connections.length === 0 ? (
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
