@@ -957,6 +957,7 @@ export default function ProxyPoolsPage() {
               <p className="text-xs text-text-muted">Inactive pools are ignored by runtime resolution.</p>
             </div>
             <Toggle
+              ariaLabel="Pool active"
               checked={formData.isActive === true}
               onChange={() => setFormData((prev) => ({ ...prev, isActive: !prev.isActive }))}
               disabled={saving}
@@ -969,6 +970,7 @@ export default function ProxyPoolsPage() {
               <p className="text-xs text-text-muted">Fail request if proxy is unreachable instead of falling back to direct.</p>
             </div>
             <Toggle
+              ariaLabel="Strict proxy"
               checked={formData.strictProxy === true}
               onChange={() => setFormData((prev) => ({ ...prev, strictProxy: !prev.strictProxy }))}
               disabled={saving}

@@ -1599,6 +1599,7 @@ export default function ProviderDetailPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs text-text-muted font-medium">Round Robin</span>
                 <Toggle
+                  ariaLabel="Round-robin provider strategy"
                   checked={providerStrategy === "round-robin"}
                   onChange={handleRoundRobinToggle}
                 />

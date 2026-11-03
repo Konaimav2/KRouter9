@@ -95,7 +95,7 @@ function RecentRequests({ requests = [] }) {
       {!requests.length ? (
         <div className="grid h-[260px] place-items-center px-6 text-center text-sm text-[var(--text-muted)]">No data yet — send a request through <code>/v1</code>.</div>
       ) : (
-        <div className="max-h-[430px] overflow-auto custom-scrollbar">
+        <div className="max-h-[430px] overflow-auto custom-scrollbar" tabIndex={0} role="region" aria-label="Usage breakdown table">
           <table className="w-full min-w-[430px] border-collapse text-xs">
             <thead className="sticky top-0 z-10 bg-[var(--table-header-bg)] text-[var(--text-muted)]"><tr><th className="px-3 py-2 text-left">Status</th><th className="px-3 py-2 text-left">Model / provider</th><th className="px-3 py-2 text-left">Key</th><th className="px-3 py-2 text-left">Error</th><th className="px-3 py-2 text-right">In / out</th><th className="px-3 py-2 text-right">Time</th></tr></thead>
             <tbody>{requests.map((request, index) => {
@@ -280,7 +280,7 @@ export default function UsageDashboard({ period, mode, scopeQuery }) {
                 </span>
                 <span>
                   {breakdownMetric.requests > 0
-                    ? `${fmt(breakdownMetric.requests)} requests were recorded, but no ${mode === "costs" ? "cost" : "tokens"} were measured.`
+                    ? `${fmt(breakdownMetric.requests)} requests were recorded, but no ${mode === "costs" ? "cost was" : "tokens were"} measured.`
                     : "Widen the period or clear the scope filter."}
                 </span>
               </div>

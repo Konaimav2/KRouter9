@@ -49,7 +49,6 @@ function getColorClasses(remainingPercentage) {
       text: "text-green-600 dark:text-green-400",
       bg: "bg-green-500",
       bgLight: "bg-green-500/10",
-      emoji: "🟢",
     };
   }
 
@@ -58,7 +57,6 @@ function getColorClasses(remainingPercentage) {
       text: "text-yellow-600 dark:text-yellow-400",
       bg: "bg-yellow-500",
       bgLight: "bg-yellow-500/10",
-      emoji: "🟡",
     };
   }
 
@@ -66,7 +64,6 @@ function getColorClasses(remainingPercentage) {
     text: "text-red-600 dark:text-red-400",
     bg: "bg-red-500",
     bgLight: "bg-red-500/10",
-    emoji: "🔴",
   };
 }
 
@@ -168,7 +165,6 @@ export default function QuotaTable({
             >
               {/* Name */}
               <div className="flex w-36 min-w-0 items-center gap-1.5">
-                <span className="text-[10px] shrink-0">{colors.emoji}</span>
                 <span className={`${nameText} font-medium text-text-primary truncate`}>
                   {quota.name}
                 </span>

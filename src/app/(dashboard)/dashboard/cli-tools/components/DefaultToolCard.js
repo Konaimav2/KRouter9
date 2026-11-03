@@ -193,7 +193,7 @@ export default function DefaultToolCard({ toolId, tool, isExpanded, onToggle, ba
                 {copiedField === "codeblock" ? "Copied!" : "Copy"}
               </button>
             </div>
-            <pre className="p-4 bg-bg-secondary rounded-lg border border-border overflow-x-auto">
+            <pre className="p-4 bg-bg-secondary rounded-lg border border-border overflow-x-auto" tabIndex={0} aria-label="Command">
               <code className="text-sm font-mono whitespace-pre">{replaceVars(tool.codeBlock.code)}</code>
             </pre>
           </div>
