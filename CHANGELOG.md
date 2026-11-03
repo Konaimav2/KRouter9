@@ -1,3 +1,17 @@
+# v3.3.18 (2026-11-03) — Mutations fail honestly (FR-10)
+
+## Dashboard
+- Provider toggles check the response status. A failed bulk toggle restores the previous
+  connection states and shows a `role="alert"` with the provider and the HTTP failure instead
+  of leaving the optimistic switch on
+- Console-log clear checks the response status. A failed clear keeps the retained lines, closes
+  the confirm dialog, and shows a `role="alert"` saying the lines were not deleted
+
+## Notes
+- Found by the FR-10 mutation matrix, not by source reading: both handlers previously ignored
+  `res.ok`, so an HTTP 500 looked like a successful save
+- `cli/` stays 1.0.0; tags are never moved
+
 # v3.3.17 (2026-11-03) — Light-theme text contrast closeout
 
 ## Dashboard (FR-11)
