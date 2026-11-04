@@ -529,8 +529,18 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
     if (!credentials || credentials.allRateLimited) {
       if (credentials?.allRateLimited) {
         const errorMsg = lastError || credentials.lastError || "Unavailable";
-        const status = HTTP_STATUS.SERVICE_UNAVAILABLE;
-        log.warn("CHAT", `[${provider}/${model}] ${errorMsg} (${credentials.retryAfterHuman})`);
+        // Preserve the last definitive upstream gateway status (502/503/504): a pool
+        // exhausted on gateway timeouts is still reporting gateway timeouts, so
+        // collapsing it to a generic 503 misreports the failure (live 2026-11-05:
+        // a 504 pool answered 503). 429 rate-limit pools keep the classic 503 +
+        // reset-after behavior, as do no-status and non-gateway failures.
+        // lastStatus is this request's last attempt; lastErrorCode is the status
+        // persisted on the earliest-cooling account (zero-attempt pool exhaustion).
+        const poolErrorCode = Number(credentials.lastErrorCode) || 0;
+        const status = [502, 503, 504].includes(lastStatus) ? lastStatus
+          : [502, 503, 504].includes(poolErrorCode) ? poolErrorCode
+          : HTTP_STATUS.SERVICE_UNAVAILABLE;
+        log.warn("CHAT", `[${provider}/${model}] ${errorMsg} (${credentials.retryAfterHuman})`, { status });
         saveRequestError({ provider, model, status, endpoint: clientRawRequest?.endpoint });
         return unavailableResponse(status, `[${provider}/${model}] ${errorMsg}`, credentials.retryAfter, credentials.retryAfterHuman);
       }
