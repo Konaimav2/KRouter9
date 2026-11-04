@@ -1,3 +1,13 @@
+# v3.3.26 (2026-11-04) — Quota pagination target fix (supersedes 3.3.25)
+
+- Quota page Previous/Next pagination buttons no longer flex-shrink below 44px at
+  390px width (`shrink-0` on the pager controls). Measured 42x44 before; the plan
+  requires >=44x44.
+
+Evidence-only wave also reopens the E3 network-namespace capture, full C3
+strategy/binding retry traces, E8 raw persisted arrays, and the G/T gate
+artifacts. Tags never move; `cli/` stays 1.0.0.
+
 # v3.3.25 (2026-11-04) — Final contrast pass (supersedes 3.3.24)
 
 - Badge error variant to red-700 for the light surface.
