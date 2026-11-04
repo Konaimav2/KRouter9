@@ -1,3 +1,19 @@
+# v3.3.27 (2026-11-05) — Stream termination + durable error ledger
+
+- Premature upstream EOF (content arrived but no `finish_reason` / `[DONE]`) now
+  writes a structured `stream_termination` record and emits a client-format
+  failure terminal (OpenAI error + `[DONE]`, Claude `event: error`, Responses
+  `response.failed` + `[DONE]`) instead of a silent truncation.
+- Client disconnect/cancel and upstream network/error endings are logged with
+  chunk/byte/duration stats. The append-only `errors.jsonl` ledger lives outside
+  session dirs and survives request-log pruning.
+- Upstream non-2xx and non-SSE HTML responses log status/body (HTTP 403, 504,
+  5xx) to the request log and the durable ledger before returning.
+- OpenAI passthrough no longer emits a duplicate `[DONE]` on normal completion.
+- Production log retention can be raised with `REQUEST_LOG_RETENTION_HOURS=48`
+  and `REQUEST_LOG_MAX_BYTES=4294967296`; `/app/logs` is a persistent mount so
+  container swaps do not discard request traces. `cli/` stays 1.0.0.
+
 # v3.3.26 (2026-11-04) — Quota pagination target fix (supersedes 3.3.25)
 
 - Quota page Previous/Next pagination buttons no longer flex-shrink below 44px at

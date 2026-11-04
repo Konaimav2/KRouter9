@@ -4,6 +4,39 @@ const isNode = typeof process !== "undefined" && process.versions?.node && typeo
 // Check if logging is enabled via environment variable (default: false)
 const LOGGING_ENABLED = typeof process !== "undefined" && process.env?.ENABLE_REQUEST_LOGS === 'true';
 
+// ---------------------------------------------------------------------------
+// Append-only error ledger (errors.jsonl) — survives pruneLogSessions.
+// Written for every logError and logStreamTermination call.
+// Located at <LOGS_DIR>/errors.jsonl, outside any session subdirectory.
+//
+// Production tuning:
+//   REQUEST_LOG_RETENTION_HOURS=48   — keep session dirs longer (default 24h)
+//   REQUEST_LOG_MAX_BYTES=4294967296 — allow up to 4 GB of session data
+// The ledger itself is never pruned by this module.
+// ---------------------------------------------------------------------------
+// The ledger chain serializes appends so concurrent errors/terminations cannot
+// interleave mid-line; a failure in one write must never block the next.
+let ledgerChain = Promise.resolve();
+function appendLedger(record) {
+  if (!isNode) return;
+  const task = async () => {
+    const fsMod = await import("fs");
+    const pathMod = await import("path");
+    const logsDir = process.env.REQUEST_LOG_DIR || pathMod.join(process.cwd(), "logs");
+    if (!fsMod.existsSync(logsDir)) {
+      fsMod.mkdirSync(logsDir, { recursive: true });
+    }
+    const ledger = pathMod.join(logsDir, "errors.jsonl");
+    await fsMod.promises.appendFile(ledger, JSON.stringify(record) + "\n");
+  };
+  ledgerChain = ledgerChain.then(() => task()).catch(() => { /* keep the chain alive */ });
+}
+
+// Test helper: wait until every queued ledger append has hit disk.
+export async function _flushLedger() {
+  await ledgerChain;
+}
+
 let fs = null;
 let path = null;
 let LOGS_DIR = null;
@@ -226,7 +259,8 @@ function createNoOpLogger() {
     appendOpenAIChunk() {},
     logConvertedResponse() {},
     appendConvertedChunk() {},
-    logError() {}
+    logError() {},
+    logStreamTermination() {}
   };
 }
 
@@ -327,13 +361,58 @@ export async function createRequestLogger(sourceFormat, targetFormat, model) {
     },
     
     // 6. Log error
-    logError(error, requestBody = null) {
+    logError(error, requestBody = null, extra = {}) {
       writeJsonFile(sessionPath, "6_error.json", {
         timestamp: new Date().toISOString(),
         error: error?.message || String(error),
         stack: error?.stack,
         requestBody
       });
+      // Also write to the durable ledger so this record survives pruneLogSessions.
+      appendLedger({
+        timestamp: new Date().toISOString(),
+        sessionDir: sessionPath || null,
+        reason: extra.reason || "logError",
+        provider: extra.provider || null,
+        model: extra.model || null,
+        sourceFormat: extra.sourceFormat || null,
+        targetFormat: extra.targetFormat || null,
+        statusCode: extra.statusCode || null,
+        bytes: null,
+        chunks: null,
+        durationMs: null,
+        lastChunk: null,
+        error: error?.message || String(error),
+        stack: (error?.stack || "").slice(0, 800),
+        url: extra.url || null,
+      });
+    },
+
+    // Log a stream that ended without a proper terminal (upstream_eof_without_terminal,
+    // client_disconnected, client_cancelled, upstream_network_close, upstream_error).
+    // Only abnormal terminations; normal completions must NOT call this.
+    logStreamTermination(info = {}) {
+      const record = {
+        timestamp: new Date().toISOString(),
+        sessionDir: sessionPath || null,
+        reason: info.reason || "unknown",
+        provider: info.provider || null,
+        model: info.model || null,
+        sourceFormat: info.sourceFormat || null,
+        targetFormat: info.targetFormat || null,
+        bytes: info.bytes ?? null,
+        chunks: info.chunks ?? null,
+        durationMs: info.durationMs ?? null,
+        lastChunk: typeof info.lastChunk === "string" ? info.lastChunk.slice(0, 200) : null,
+        error: info.error || null,
+        stack: (info.stack || "").slice(0, 800),
+      };
+      // Write session-local record (best-effort — sessionPath may be null if session creation failed)
+      if (sessionPath) {
+        writeJsonFile(sessionPath, "6_stream_termination.json", record);
+      }
+      // Always write the durable ledger
+      appendLedger({ ...record, ledgerType: "streamTermination" });
     }
   };
 }

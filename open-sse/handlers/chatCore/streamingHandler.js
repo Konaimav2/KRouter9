@@ -31,16 +31,29 @@ function buildTransformStream({ provider, sourceFormat, targetFormat, userAgent,
   const isResponsesProvider = PROVIDERS[provider]?.format === FORMATS.OPENAI_RESPONSES;
   const needsCodexTranslation = isResponsesProvider && targetFormat === FORMATS.OPENAI_RESPONSES && !isDroidCLI;
 
+  // Premature-EOF terminal: upstream closed cleanly mid-stream (content but no
+  // finish_reason / [DONE] / terminal event). Same client-format failure
+  // builders as the abort path, with a distinct message so ops can tell the
+  // two failure modes apart in the ledger.
+  const prematureMessage = `[${provider}/${model}] stream ended without a terminal event`;
+  const onPrematureEof = sourceFormat === FORMATS.OPENAI_RESPONSES
+    ? buildAbortedResponsesTerminalBytes
+    : sourceFormat === FORMATS.OPENAI
+      ? () => buildAbortedOpenAITerminalBytes(prematureMessage)
+      : sourceFormat === FORMATS.CLAUDE
+        ? () => buildAbortedClaudeTerminalBytes(prematureMessage)
+        : null;
+
   if (needsCodexTranslation) {
     const codexTarget = CODEX_SOURCE_TO_TARGET[sourceFormat] || FORMATS.OPENAI;
-    return createSSETransformStreamWithLogger(FORMATS.OPENAI_RESPONSES, codexTarget, provider, reqLogger, toolNameMap, model, connectionId, body, onStreamComplete, apiKey, customToolNames, credentials, log, reqTag);
+    return createSSETransformStreamWithLogger(FORMATS.OPENAI_RESPONSES, codexTarget, provider, reqLogger, toolNameMap, model, connectionId, body, onStreamComplete, apiKey, customToolNames, credentials, log, reqTag, onPrematureEof);
   }
 
   if (needsTranslation(targetFormat, sourceFormat)) {
-    return createSSETransformStreamWithLogger(targetFormat, sourceFormat, provider, reqLogger, toolNameMap, model, connectionId, body, onStreamComplete, apiKey, customToolNames, credentials, log, reqTag);
+    return createSSETransformStreamWithLogger(targetFormat, sourceFormat, provider, reqLogger, toolNameMap, model, connectionId, body, onStreamComplete, apiKey, customToolNames, credentials, log, reqTag, onPrematureEof);
   }
 
-  return createPassthroughStreamWithLogger(provider, reqLogger, model, connectionId, body, onStreamComplete, apiKey, log, reqTag);
+  return createPassthroughStreamWithLogger(provider, reqLogger, model, connectionId, body, onStreamComplete, apiKey, log, reqTag, onPrematureEof, sourceFormat, targetFormat);
 }
 
 /**
@@ -105,6 +118,19 @@ export async function handleStreamingResponse({ providerResponse, provider, mode
     if (log?.errorLine) log.errorLine(reqTag, "✗", `BLOCKED ${status} · ${provider}/${model} · non-SSE (${upstreamContentType})\n    ${shortMsg}`);
     else console.warn(`[STREAM] ${provider} | ${model} | blocked pipe: ${shortMsg} [${status}]`);
     streamController?.handleError?.(new Error(`upstream non-SSE: ${status}`));
+    // Log to reqLogger so the upstream status/body survives and writes the durable ledger.
+    if (reqLogger) {
+      const resHeaders = providerResponse.headers ? Object.fromEntries(providerResponse.headers.entries()) : {};
+      reqLogger.logProviderResponse?.(status, providerResponse.statusText || String(status), resHeaders, shortMsg);
+      reqLogger.logError?.(new Error(`HTTP ${status}: ${shortMsg}`), null, {
+        reason: `non_sse_upstream_${status}`,
+        provider,
+        model,
+        sourceFormat: sourceFormat || null,
+        targetFormat: targetFormat || null,
+        statusCode: status,
+      });
+    }
     return {
       success: false,
       response: new Response(JSON.stringify({ error: { message: `[${status}]: ${shortMsg}` } }), {
@@ -234,7 +260,11 @@ export async function handleStreamingResponse({ providerResponse, provider, mode
     }
   }
 
-  const transformedBody = pipeWithDisconnect(bodyStream, transformStream, streamController, onAbortTerminal, stallTimeoutMs);
+  // Termination ledger meta: abnormal stream endings (client leave, upstream
+  // network close/error) are recorded with chunk/byte/duration stats so they
+  // survive pruneLogSessions.
+  const streamMeta = { provider, model, sourceFormat: sourceFormat || null, targetFormat: targetFormat || null, reqLogger: reqLogger || null };
+  const transformedBody = pipeWithDisconnect(bodyStream, transformStream, streamController, onAbortTerminal, stallTimeoutMs, streamMeta);
 
   saveRequestDetail(buildRequestDetail({
     provider, model, connectionId, clientIp,
