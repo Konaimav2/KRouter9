@@ -100,7 +100,7 @@ export function createStreamController({ onDisconnect, onError, log, provider, m
  * for long periods while raw bytes still flow (e.g. Kiro EventStream
  * binary frames buffering, Claude reasoning streams).
  */
-export function createDisconnectAwareStream(transformStream, streamController, onAbortTerminal = null) {
+export function createDisconnectAwareStream(transformStream, streamController, onAbortTerminal = null, onUpstreamEnd = null) {
   const reader = transformStream.readable.getReader();
   const writer = transformStream.writable.getWriter();
   let terminalEmitted = false;
@@ -156,6 +156,15 @@ export function createDisconnectAwareStream(transformStream, streamController, o
           code === "EPIPE" ||
           code === "UND_ERR_SOCKET";
 
+        // Durable termination ledger: record abnormal upstream endings (network
+        // reset / stall abort / hard error) with stream stats. Skipped when the
+        // client already left — the disconnect path recorded it.
+        if (onUpstreamEnd && wasConnected) {
+          try {
+            onUpstreamEnd(error, { wasConnected, isNetworkClose });
+          } catch { /* ledger must never break the stream */ }
+        }
+
         // Graceful close on network/abort, or when a structured terminal is available
         // (Responses passthrough prefers response.failed + [DONE] over a raw transport error)
         try {
@@ -193,7 +202,7 @@ export function createDisconnectAwareStream(transformStream, streamController, o
  * @param {TransformStream} transformStream - Transform stream for SSE
  * @param {object} streamController - Stream controller from createStreamController
  */
-export function pipeWithDisconnect(providerResponse, transformStream, streamController, onAbortTerminal = null, stallTimeoutMs = STREAM_STALL_TIMEOUT_MS) {
+export function pipeWithDisconnect(providerResponse, transformStream, streamController, onAbortTerminal = null, stallTimeoutMs = STREAM_STALL_TIMEOUT_MS, streamMeta = null) {
   let stallTimer = null;
   let chunkCount = 0;
   let totalBytes = 0;
@@ -222,6 +231,50 @@ export function pipeWithDisconnect(providerResponse, transformStream, streamCont
       streamController.abort?.();
     }, stallTimeoutMs);
   };
+
+  // Durable termination ledger (survives pruneLogSessions). Normal completion
+  // (handleComplete) must never be recorded here — only ends without a terminal.
+  const metaReqLogger = streamMeta?.reqLogger || null;
+  const logTermination = (reason, error = null) => {
+    try {
+      metaReqLogger?.logStreamTermination?.({
+        reason,
+        provider: streamMeta?.provider || null,
+        model: streamMeta?.model || null,
+        sourceFormat: streamMeta?.sourceFormat || null,
+        targetFormat: streamMeta?.targetFormat || null,
+        bytes: totalBytes,
+        chunks: chunkCount,
+        durationMs: Date.now() - t0,
+        lastChunk: null,
+        error: error?.message || null,
+        stack: (error?.stack || "").slice(0, 800),
+      });
+    } catch { /* ledger must never break the stream */ }
+  };
+  const handleUpstreamEnd = (error, meta) => {
+    if (!meta?.wasConnected) return;
+    logTermination(meta.isNetworkClose ? "upstream_network_close" : "upstream_error", error);
+  };
+
+  // Intercept the RAW streamController's handleDisconnect so client-side
+  // terminations are recorded no matter which layer emits them: chatCore calls
+  // the raw controller on client-signal abort / deadline, while the downstream
+  // reader-cancel path flows through the wrapper below. Both land here.
+  // Gated on isConnected() so it fires exactly once and never for a stream
+  // that already completed (handleComplete) or errored first.
+  if (typeof streamController.handleDisconnect === "function") {
+    const origHandleDisconnect = streamController.handleDisconnect.bind(streamController);
+    streamController.handleDisconnect = (r) => {
+      const wasConnected = streamController.isConnected?.() ?? true;
+      const out = origHandleDisconnect(r);
+      if (wasConnected) {
+        clearStall();
+        logTermination(r === "cancelled" ? "client_cancelled" : "client_disconnected");
+      }
+      return out;
+    };
+  }
 
   // Wrap controller so every termination path clears the stall timer.
   // Without this, abort/cancel/downstream-error paths leave the timer armed
@@ -272,7 +325,8 @@ export function pipeWithDisconnect(providerResponse, transformStream, streamCont
   return createDisconnectAwareStream(
     { readable: transformedBody, writable: { getWriter: () => ({ abort: () => Promise.resolve() }) } },
     wrappedController,
-    onAbortTerminal
+    onAbortTerminal,
+    handleUpstreamEnd
   );
 }
 

@@ -50,7 +50,11 @@ export function createSSEStream(options = {}) {
     body = null,
     onStreamComplete = null,
     apiKey = null,
-    credentials = null
+    credentials = null,
+    // Called when flush() detects upstream_eof_without_terminal: fn(controller) → Uint8Array|null.
+    // The returned bytes (client-format error terminal) are enqueued before [DONE].
+    // Must NOT be called on normal completions.
+    onPrematureEof = null
   } = options;
 
   // Wave 0 stall instrumentation: throttled tool-use/thinking boundary log.
@@ -119,15 +123,30 @@ export function createSSEStream(options = {}) {
   let sseLineCount = 0;
   let sseEmittedCount = 0;
   const eventTypeCounts = {};
+  // Tail of the last non-empty upstream text chunk, for premature-termination
+  // records (bounded: never more than 200 chars).
+  let lastChunkTail = "";
 
   // Track Responses API event framing for same-format passthrough (codex)
   let currentOpenAIResponsesEvent = null;
   let openAIResponsesTerminalSeen = false;
   let openAIResponsesDoneSent = false;
   let streamDoneSent = false;  // track duplicate [DONE] across transform + flush
+  // Passthrough mode: true once the raw upstream stream shows a terminal
+  // ([DONE] / non-null finish_reason / Ollama done / Responses terminal event
+  // / Claude message_stop). Content without this = premature EOF.
+  let passthroughTerminalSeen = false;
+  let passthroughChunkCount = 0;
+  // Raw upstream chars seen in passthrough mode (content-agnostic: OpenAI
+  // content, Claude text deltas, Ollama NDJSON, keepalives all count).
+  let passthroughContentChars = 0;
   // OpenAI chat completions and the Responses API both require the SSE sentinel; Claude,
   // Gemini and Ollama streams do not (Gemini even rejects it).
   const needsDoneSentinel = targetFormat === FORMATS.OPENAI || targetFormat === FORMATS.OPENAI_RESPONSES;
+  // Track whether a proper finish_reason / stop token arrived from the provider.
+  // Used to detect upstream_eof_without_terminal: content bytes received but no
+  // finish chunk and no [DONE] — the three DeepSeek log traces are exactly this.
+  let providerTerminalSeen = false;
   let finalized = false;
   // Client-visible failure seen inside the stream (a Responses `error` /
   // `response.failed` event, or a translator that set state.error). The stream
@@ -169,6 +188,7 @@ export function createSSEStream(options = {}) {
     transform(chunk, controller) {
       if (!ttftAt) ttftAt = Date.now();
       const text = decoder.decode(chunk, { stream: true });
+      if (text.trim()) lastChunkTail = text.length > 200 ? text.slice(-200) : text;
       buffer += text;
       reqLogger?.appendProviderChunk?.(text);
 
@@ -192,13 +212,34 @@ export function createSSEStream(options = {}) {
 
         // Passthrough mode: normalize and forward
         if (mode === STREAM_MODE.PASSTHROUGH) {
+          passthroughContentChars += text.length;
           let output;
           let injectedUsage = false;
           let responsesTerminal = false;
+          // Terminal detection runs regardless of the usage injection below: a
+          // [DONE] sentinel or Claude message_stop event line is the upstream
+          // terminal for premature-EOF detection. When the client actually
+          // receives the forwarded [DONE] sentinel, mark it sent so flush()
+          // does not synthesize a second one (exactly one [DONE] per stream).
+          if (trimmed.startsWith("data:") && trimmed.slice(5).trim() === "[DONE]") {
+            passthroughTerminalSeen = true;
+            streamDoneSent = true;
+          } else if (trimmed.startsWith("event:") && trimmed.slice(6).trim() === "message_stop") {
+            passthroughTerminalSeen = true;
+          }
 
           if (trimmed.startsWith("data:") && trimmed.slice(5).trim() !== "[DONE]") {
             try {
               const parsed = JSON.parse(trimmed.slice(5).trim());
+
+              // Passthrough terminal tracking: a non-null finish_reason, an
+              // Ollama final chunk, a Responses terminal event, or a Claude
+              // message_stop item means the upstream reached its terminal.
+              if (parsed.choices?.[0]?.finish_reason || parsed.done === true
+                || parsed.type === "message_stop"
+                || isOpenAIResponsesTerminalEvent(currentOpenAIResponsesEvent, parsed)) {
+                passthroughTerminalSeen = true;
+              }
 
               const idFixed = fixInvalidId(parsed);
 
@@ -296,6 +337,7 @@ export function createSSEStream(options = {}) {
 
           reqLogger?.appendConvertedChunk?.(output);
           controller.enqueue(sharedEncoder.encode(output));
+          passthroughChunkCount++;
           // Responses clients (codex CLI) close on response.completed instead of [DONE]
           if (responsesTerminal) finalizeStream();
           continue;
@@ -336,6 +378,7 @@ export function createSSEStream(options = {}) {
             controller.enqueue(sharedEncoder.encode(doneOutput));
           }
           streamDoneSent = true;
+          providerTerminalSeen = true;
           if (keepsOpenAIResponsesFormat) openAIResponsesDoneSent = true;
           continue;
         }
@@ -437,6 +480,9 @@ export function createSSEStream(options = {}) {
               item.usage = filterUsageForFormat(buffered, sourceFormat);
             }
 
+            // A finish chunk from the translator signals a proper terminal was received.
+            if (isFinishChunk) providerTerminalSeen = true;
+
             const output = formatSSE(item, sourceFormat);
             reqLogger?.appendConvertedChunk?.(output);
             controller.enqueue(sharedEncoder.encode(output));
@@ -464,12 +510,47 @@ export function createSSEStream(options = {}) {
             controller.enqueue(sharedEncoder.encode(output));
           }
 
+          // Gemini-family clients (Antigravity, Vertex, Gemini) reject the
+          // data: [DONE] sentinel with 400 syntax errors.
+          const isGeminiFamily = provider === "antigravity" || provider === "gemini" || provider === "vertex";
+
+          // Detect upstream_eof_without_terminal in passthrough mode: content
+          // was forwarded but the raw stream never showed a terminal ([DONE],
+          // non-null finish_reason, Ollama done, Responses terminal event or
+          // Claude message_stop). This is the exact shape of the three
+          // DeepSeek production traces — mid-reasoning chunks, clean EOF, no
+          // terminal.
+          if (passthroughContentChars > 0 && !passthroughTerminalSeen) {
+            reqLogger?.logStreamTermination?.({
+              reason: "upstream_eof_without_terminal",
+              provider,
+              model,
+              sourceFormat,
+              targetFormat,
+              bytes: totalContentLength,
+              chunks: passthroughChunkCount,
+              durationMs: Date.now() - streamT0,
+              lastChunk: lastChunkTail || null,
+              error: "stream ended without terminal (passthrough)",
+              stack: "",
+            });
+            if (!isGeminiFamily && onPrematureEof) {
+              try {
+                const terminalBytes = onPrematureEof();
+                if (terminalBytes) {
+                  reqLogger?.appendConvertedChunk?.(new TextDecoder().decode(terminalBytes));
+                  controller.enqueue(terminalBytes);
+                  // Builder includes the [DONE] where the format needs it.
+                  streamDoneSent = true;
+                }
+              } catch { /* best-effort terminal */ }
+            }
+          }
+
           // IMPORTANT: In passthrough mode we still must terminate the SSE stream.
           // Some clients (e.g. OpenClaw) expect the OpenAI-style sentinel:
           //   data: [DONE]\n\n
           // Without it they can hang until timeout and trigger failover.
-          // Gemini-family clients (Antigravity, Vertex, Gemini) reject this sentinel with 400 syntax errors.
-          const isGeminiFamily = provider === "antigravity" || provider === "gemini" || provider === "vertex";
           if (!streamDoneSent && !isGeminiFamily) {
             const doneOutput = "data: [DONE]\n\n";
             reqLogger?.appendConvertedChunk?.(doneOutput);
@@ -528,14 +609,61 @@ export function createSSEStream(options = {}) {
         if (flushed?.length > 0) {
           for (const item of flushed) {
             if (item === null || item === undefined) continue;
+            // Terminal emitted from the translator's flush tail also counts as
+            // a proper terminal (prevents a false premature-EOF detection).
+            if (item.type === "message_delta" || item.choices?.[0]?.finish_reason) {
+              providerTerminalSeen = true;
+            }
             const output = formatSSE(item, sourceFormat);
             reqLogger?.appendConvertedChunk?.(output);
             controller.enqueue(sharedEncoder.encode(output));
           }
         }
 
-        // Synthesize response.failed if a Responses passthrough stream never reached a terminal event
+        // Detect upstream_eof_without_terminal: content arrived but the provider
+        // never sent a finish_reason / [DONE] / terminal event. This is what all
+        // three DeepSeek log traces show — mid-reasoning chunks, then clean EOF,
+        // no terminal, client sees a silently truncated stream.
+        // Must run BEFORE the synthesized closings below: the client-format
+        // failure terminal has to precede the [DONE] sentinel.
         const keepsOpenAIResponsesFormat = targetFormat === FORMATS.OPENAI_RESPONSES && sourceFormat === FORMATS.OPENAI_RESPONSES;
+        const prematureEof = totalContentLength > 0 && !providerTerminalSeen && !openAIResponsesTerminalSeen;
+        if (prematureEof) {
+          // Log to the durable ledger so this survives pruneLogSessions.
+          reqLogger?.logStreamTermination?.({
+            reason: "upstream_eof_without_terminal",
+            provider,
+            model,
+            sourceFormat,
+            targetFormat,
+            bytes: totalContentLength,
+            chunks: sseEmittedCount,
+            durationMs: Date.now() - streamT0,
+            lastChunk: lastChunkTail || null,
+            error: "stream ended without finish_reason or [DONE]",
+            stack: "",
+          });
+          let prematureTerminalEmitted = false;
+          if (onPrematureEof) {
+            try {
+              const terminalBytes = onPrematureEof();
+              if (terminalBytes) {
+                reqLogger?.appendConvertedChunk?.(new TextDecoder().decode(terminalBytes));
+                controller.enqueue(terminalBytes);
+                prematureTerminalEmitted = true;
+              }
+            } catch { /* best-effort terminal */ }
+          }
+          // The builder is a complete client terminal (failure event + [DONE]
+          // where the format carries the sentinel) — suppress the synthesized
+          // closings below so nothing is emitted twice.
+          if (prematureTerminalEmitted) {
+            if (keepsOpenAIResponsesFormat) openAIResponsesTerminalSeen = true;
+            if (needsDoneSentinel) streamDoneSent = true;
+          }
+        }
+
+        // Synthesize response.failed if a Responses passthrough stream never reached a terminal event
         if (keepsOpenAIResponsesFormat && !openAIResponsesTerminalSeen) {
           const failedOutput = formatIncompleteOpenAIResponsesStreamFailure();
           reqLogger?.appendConvertedChunk?.(failedOutput);
@@ -563,7 +691,7 @@ export function createSSEStream(options = {}) {
   });
 }
 
-export function createSSETransformStreamWithLogger(targetFormat, sourceFormat, provider = null, reqLogger = null, toolNameMap = null, model = null, connectionId = null, body = null, onStreamComplete = null, apiKey = null, customToolNames = null, credentials = null, log = null, reqTag = "") {
+export function createSSETransformStreamWithLogger(targetFormat, sourceFormat, provider = null, reqLogger = null, toolNameMap = null, model = null, connectionId = null, body = null, onStreamComplete = null, apiKey = null, customToolNames = null, credentials = null, log = null, reqTag = "", onPrematureEof = null) {
   return createSSEStream({
     mode: STREAM_MODE.TRANSLATE,
     targetFormat,
@@ -579,11 +707,12 @@ export function createSSETransformStreamWithLogger(targetFormat, sourceFormat, p
     apiKey,
     credentials,
     log,
-    reqTag
+    reqTag,
+    onPrematureEof
   });
 }
 
-export function createPassthroughStreamWithLogger(provider = null, reqLogger = null, model = null, connectionId = null, body = null, onStreamComplete = null, apiKey = null, log = null, reqTag = "") {
+export function createPassthroughStreamWithLogger(provider = null, reqLogger = null, model = null, connectionId = null, body = null, onStreamComplete = null, apiKey = null, log = null, reqTag = "", onPrematureEof = null, sourceFormat = null, targetFormat = null) {
   return createSSEStream({
     mode: STREAM_MODE.PASSTHROUGH,
     provider,
@@ -594,6 +723,9 @@ export function createPassthroughStreamWithLogger(provider = null, reqLogger = n
     onStreamComplete,
     apiKey,
     log,
-    reqTag
+    reqTag,
+    onPrematureEof,
+    sourceFormat,
+    targetFormat
   });
 }

@@ -549,7 +549,20 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
       const urlStr = providerUrl ? `\n    URL: ${providerUrl}` : "";
       log.errorLine(reqTag, "✗", `ERROR ${statusCode} · ${provider}/${model} · ${Date.now() - requestStartTime}ms${urlStr}\n    ${errMsg}`);
     }
-    reqLogger.logError(new Error(message));
+    // Log the upstream status/headers so 403/504/5xx errors survive as explicit records.
+    const resHeadersObj = providerResponse.headers
+      ? Object.fromEntries(providerResponse.headers.entries())
+      : {};
+    reqLogger.logProviderResponse(statusCode, providerResponse.statusText || String(statusCode), resHeadersObj, message.slice(0, 500));
+    reqLogger.logError(new Error(`HTTP ${statusCode}: ${message}`), null, {
+      reason: `HTTP_${statusCode}`,
+      provider,
+      model,
+      sourceFormat: sourceFormat || null,
+      targetFormat: targetFormat || null,
+      statusCode,
+      url: providerUrl || null,
+    });
     return createErrorResult(statusCode, errMsg, resetsAtMs, diagnostics);
   }
 
