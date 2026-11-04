@@ -1,3 +1,13 @@
+# v3.3.28 (2026-11-05) — preserve upstream gateway status on exhausted fallback
+
+- When an account pool is exhausted on 502/503/504, the client now receives that
+  upstream status instead of a generic 503. Exhausted 429 pools keep the existing
+  503 + reset-after behavior; non-gateway/no-status failures stay 503.
+- A 504 HTML upstream now surfaces as HTTP 504 with a clean JSON error body while
+  the request log and durable ledger record `HTTP 504` + the upstream body.
+- Tests: 504/502/503 preservation, zero-attempt persisted status, and the
+  unchanged 429/401 contracts. `cli/` stays 1.0.0.
+
 # v3.3.27 (2026-11-05) — Stream termination + durable error ledger
 
 - Premature upstream EOF (content arrived but no `finish_reason` / `[DONE]`) now
