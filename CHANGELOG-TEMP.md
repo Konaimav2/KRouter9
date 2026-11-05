@@ -27,5 +27,16 @@ app keeps the last released `/api/version` until the final revision.
   design-mcp header scan clean; `impeccable detect []`; the pre-existing
   `loadSavedMappings` lint error/warning in MitmToolCard is unchanged from
   v3.3.28. `/dashboard/mitm` still needs the full axe/ten-viewport matrix.
-- Hotfix image: _pending_
-- papi digest: _pending_
+- Hotfix image: `ghcr.io/konaimav2/krouter9:sha-303c984`, digest
+  `sha256:03ce267c63d8fa4799e69283e89cd19afc4f80b75a49f236ae1f33f53b33c9c6`.
+- papi: hotfix digest above, `/api/version` remains **3.3.28** (no version
+  revision), started `2026-11-05T05:09:43Z`, health 200; retention 48 h / 4 GB;
+  `cloudflared-9router` and headroom StartedAt unchanged.
+- QA on the exact hotfix image (InstaBox): the “DNS off” badge renders with
+  `rgb(180,83,9)` on the 12% warning wash; the disclosure button toggles
+  `aria-expanded` false→true→false with the panel visible at 1440/390 in light
+  and dark; hScroll 0. axe: **0 critical, 1 serious `color-contrast`** on
+  pre-existing MITM page text, not the badge: warning heading 4.34:1
+  (`text-[var(--color-warning)]` on the warning wash), “Cert Trusted”
+  `text-green-600` 2.9:1, and “Stop Server” `text-red-500` 2.98:1. Those three
+  are queued as the next one-by-one fix; the badge/keyboard P1s pass.
