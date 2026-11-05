@@ -1,7 +1,7 @@
 "use client";
 
 import Icon from "@/shared/components/Icon";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useId } from "react";
 import { Card, Button, Badge, Input, ModelSelectModal } from "@/shared/components";
 import { TOOL_HOSTS } from "@/shared/constants/mitmToolHosts";
 import Image from "next/image";
@@ -36,6 +36,7 @@ export default function MitmToolCard({
   const [modelMappings, setModelMappings] = useState({});
   const [modalOpen, setModalOpen] = useState(false);
   const [currentEditingAlias, setCurrentEditingAlias] = useState(null);
+  const panelId = useId();
 
   const mitmHosts = TOOL_HOSTS[tool.id] ?? [];
   const canRunWithoutPassword = isWin || hasCachedPassword || needsSudoPassword === false;
@@ -132,12 +133,18 @@ export default function MitmToolCard({
   return (
     <>
       <Card padding="xs" className="overflow-hidden">
-        <div className="flex items-start justify-between gap-3 hover:cursor-pointer sm:items-center" onClick={onToggle}>
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="size-8 flex items-center justify-center shrink-0">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={isExpanded}
+          aria-controls={panelId}
+          className="flex w-full items-start justify-between gap-3 p-0 text-left hover:cursor-pointer sm:items-center"
+        >
+          <span className="flex min-w-0 items-center gap-3">
+            <span className="size-8 flex items-center justify-center shrink-0">
               <Image
                 src={tool.image}
-                alt={tool.name}
+                alt=""
                 width={32}
                 height={32}
                 className="size-8 object-contain rounded-lg"
@@ -146,10 +153,10 @@ export default function MitmToolCard({
               loading="lazy"
               decoding="async"
               />
-            </div>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="font-medium text-sm">{tool.name}</h3>
+            </span>
+            <span className="min-w-0">
+              <span className="flex flex-wrap items-center gap-2">
+                <span className="font-medium text-sm">{tool.name}</span>
                 {!serverRunning ? (
                   <Badge variant="default" size="sm">Server off</Badge>
                 ) : dnsActive ? (
@@ -157,15 +164,15 @@ export default function MitmToolCard({
                 ) : (
                   <Badge variant="warning" size="sm">DNS off</Badge>
                 )}
-              </div>
-              <p className="text-xs text-text-muted sm:truncate">Intercept {tool.name} requests via MITM proxy</p>
-            </div>
-          </div>
-          <Icon name="expand_more" className={`text-text-muted text-[20px] transition-transform ${isExpanded ? "rotate-180" : ""}`} />
-        </div>
+              </span>
+              <span className="block text-xs text-text-muted sm:truncate">Intercept {tool.name} requests via MITM proxy</span>
+            </span>
+          </span>
+          <Icon name="expand_more" aria-hidden="true" className={`text-text-muted text-[20px] transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+        </button>
 
         {isExpanded && (
-          <div className="mt-4 pt-4 border-t border-border flex flex-col gap-4">
+          <div id={panelId} className="mt-4 pt-4 border-t border-border flex flex-col gap-4">
             {/* Hosts */}
             {mitmHosts.length > 0 && (
               <div className="mt-2 rounded-md border border-border bg-surface/50 px-2 py-1.5">
