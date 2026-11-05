@@ -6,10 +6,10 @@ import { cn } from "@/shared/utils/cn";
 const variants = {
   default: "bg-surface-2 text-text-muted",
   primary: "bg-brand-500/10 text-brand-600 dark:text-brand-300",
-  success: "bg-green-500/10 text-green-800 dark:text-green-400",
-  warning: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400",
-  error: "bg-red-500/10 text-red-700 dark:text-red-400",
-  info: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  success: "bg-[var(--color-success-wash)] text-[var(--color-success)]",
+  warning: "bg-[var(--color-warning-wash)] text-[var(--color-warning)]",
+  error: "bg-[var(--color-danger-wash)] text-[var(--color-danger)]",
+  info: "bg-[var(--color-info-wash)] text-[var(--color-info)]",
 };
 
 const sizes = {
@@ -39,10 +39,10 @@ export default function Badge({
         <span
           className={cn(
             "size-1.5 rounded-full",
-            variant === "success" && "bg-green-500",
-            variant === "warning" && "bg-yellow-500",
-            variant === "error" && "bg-red-500",
-            variant === "info" && "bg-blue-500",
+            variant === "success" && "bg-[var(--color-success)]",
+            variant === "warning" && "bg-[var(--color-warning)]",
+            variant === "error" && "bg-[var(--color-danger)]",
+            variant === "info" && "bg-[var(--color-info)]",
             variant === "primary" && "bg-brand-500",
             variant === "default" && "bg-gray-500"
           )}
