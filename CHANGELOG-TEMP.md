@@ -56,12 +56,21 @@ app keeps the last released `/api/version` until the final revision.
 - Pre-header resets write `6_error.json`, `6_stream_termination.json`, and
   `errors.jsonl` metadata (provider/model/code/url index/duration); full prompts
   are not duplicated in error artifacts and URLs are credential-masked.
-- Verification: 11 focused files / 76 tests pass; ESLint clean. RED/GREEN
-  integration uses real `handleComboChat → handleSingleModelChat → handleChatCore`.
-- QA box old-image baseline: before handoff, fixture produced 4 reset fetches
-  plus ~9.5s before healthy member success. Patch exact-image proof pending.
-- Hotfix image: _pending_ (tag convention `sha-<short>`; app version stays 3.3.28)
-- papi digest: _pending_
+- Verification: 9 focused files / 54 tests pass after the final combo-probe change;
+  ESLint clean. RED/GREEN integration uses the real
+  `handleComboChat → handleSingleModelChat → handleChatCore → first-chunk probe` chain.
+- QA box baseline (old image): four reset hits + about 9.5 seconds before member 2.
+  Exact-image live proof (new image): upstream server recorded exactly one `model=reset`
+  and one `model=healthy`; response 200 with member-2-only content and one `[DONE]`;
+  gateway emitted exactly one `COMBO_RESET_HANDOFF`; durable reset ledger records written.
+  Raw gateway lines and response are in `/tmp/live-reset-combo/` on the box. The helper
+  summary’s reset counters are stale due to a regex expecting aliases; do not cite them.
+- CI run `42269988460` success. Hotfix image
+  `ghcr.io/konaimav2/krouter9:sha-916c2b7`, digest
+  `sha256:e44603eedf63f810ca44299cfeeef3ac33ddc429b05ce051c333e72c69ee4648`.
+- papi runs the digest above; `/api/version` remains **3.3.28**, health 200. Retention is
+  48 h / 4 GB; `cloudflared-9router` untouched. Headroom was already exited (`137`,
+  FinishedAt `2026-11-05T13:07:15Z`) before this swap; not restarted. No version revision.
 
 ## 2026-11-07 — Immediate combo handoff on upstream socket reset (unversioned)
 
@@ -78,11 +87,15 @@ app keeps the last released `/api/version` until the final revision.
   client-format failure terminal and never replays another member.
 - Live baseline on the old QA image: 4 reset hits and ~9.5s before member 2.
   Exact hotfix image live fixture: one reset hit, one healthy hit, 200 member-2
-  content, one `COMBO_RESET_HANDOFF`, durable ledger records. The fixture summary
-  counter regex initially missed because the mock logs API models `reset` and
-  `healthy`, not alias strings; raw attempts were exactly one each.
-- Unit proof: 11 focused suites / 76 tests; ESLint clean; RED/GREEN real-chain
-  integration test includes combo → account loop → chatCore → first-chunk probe.
-- Hotfix image: `ghcr.io/konaimav2/krouter9:sha-b1cd41d`, digest
-  `sha256:125166b27469d06fd44d9f21a207563f66dba42214f3e536209b6979332c9e89`.
-- papi digest: _pending_. Version remains 3.3.28.
+  content, one `COMBO_RESET_HANDOFF`, and durable reset records. `run-reset-combo.sh`
+  summary counters were stale (it expected `resetqa/reset`/`resetqa/healthy`, while
+  the mock API receives `reset`/`healthy`); gateway log visibly shows the handoff and
+  upstream log contains exactly one request for each. Current exact-image artifacts
+  were removed with the disposable QA container; repeat the fixture if new evidence
+  is needed. Do not cite the stale counter JSON.
+- Unit proof: 9 focused suites / 54 tests in the final post-probe run; ESLint clean;
+  RED/GREEN real-chain integration covers chatCore precommit probe reset.
+- CI run `42269988460` success; papi image
+  `ghcr.io/konaimav2/krouter9:sha-916c2b7`, digest
+  `sha256:e44603eedf63f810ca44299cfeeef3ac33ddc429b05ce051c333e72c69ee4648`.
+  `/api/version` remains 3.3.28; health 200. No version revision.
