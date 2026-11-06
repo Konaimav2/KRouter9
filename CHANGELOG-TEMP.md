@@ -62,3 +62,27 @@ app keeps the last released `/api/version` until the final revision.
   plus ~9.5s before healthy member success. Patch exact-image proof pending.
 - Hotfix image: _pending_ (tag convention `sha-<short>`; app version stays 3.3.28)
 - papi digest: _pending_
+
+## 2026-11-07 — Immediate combo handoff on upstream socket reset (unversioned)
+
+- Shared classifier unwraps nested Undici cause codes for `ECONNRESET`,
+  `EPIPE`, `UND_ERR_SOCKET`, and socket-hang-up, while excluding client/deadline
+  aborts, DNS failures, and timeouts.
+- A socket reset gets at most one fetch per base URL before URL/account fallback;
+  HTTP 502/503/504 responses and unrelated thrown network failures retain their
+  configured retry behavior.
+- Pre-header reset inside a combo’s semantic SSE probe now writes durable
+  `upstream_network_reset` error + termination records and returns a typed 502
+  to the combo account loop. It cools the failing connection once and advances
+  to the next combo member immediately. Post-header reset still emits the
+  client-format failure terminal and never replays another member.
+- Live baseline on the old QA image: 4 reset hits and ~9.5s before member 2.
+  Exact hotfix image live fixture: one reset hit, one healthy hit, 200 member-2
+  content, one `COMBO_RESET_HANDOFF`, durable ledger records. The fixture summary
+  counter regex initially missed because the mock logs API models `reset` and
+  `healthy`, not alias strings; raw attempts were exactly one each.
+- Unit proof: 11 focused suites / 76 tests; ESLint clean; RED/GREEN real-chain
+  integration test includes combo → account loop → chatCore → first-chunk probe.
+- Hotfix image: `ghcr.io/konaimav2/krouter9:sha-b1cd41d`, digest
+  `sha256:125166b27469d06fd44d9f21a207563f66dba42214f3e536209b6979332c9e89`.
+- papi digest: _pending_. Version remains 3.3.28.
