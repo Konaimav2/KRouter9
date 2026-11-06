@@ -59,10 +59,10 @@ describe("BaseExecutor.execute — baseUrls fallback", () => {
 });
 
 describe("BaseExecutor.execute — network error retry/fallback", () => {
-  it("maps network exception to 502 retry config", async () => {
+  it("still maps NON-RESET network exceptions to 502 retry config (ENOTFOUND keeps old behavior)", async () => {
     const ex = makeExec({ baseUrl: "https://x/api", retry: { 502: { attempts: 1, delayMs: 0 } } });
     fetchMock
-      .mockImplementationOnce(async () => { throw new Error("ECONNRESET"); })
+      .mockImplementationOnce(async () => { throw new Error("getaddrinfo ENOTFOUND example.com"); })
       .mockResolvedValueOnce(res(200));
     const out = await ex.execute({ model: "m", body: {}, stream: false, credentials: creds });
     expect(out.response.status).toBe(200);

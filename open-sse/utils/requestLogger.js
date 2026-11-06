@@ -380,11 +380,13 @@ export async function createRequestLogger(sourceFormat, targetFormat, model) {
         statusCode: extra.statusCode || null,
         bytes: null,
         chunks: null,
-        durationMs: null,
+        durationMs: extra.durationMs ?? null,
         lastChunk: null,
         error: error?.message || String(error),
         stack: (error?.stack || "").slice(0, 800),
         url: extra.url || null,
+        code: extra.code || null,
+        urlIndex: extra.urlIndex ?? null,
       });
     },
 
@@ -406,6 +408,8 @@ export async function createRequestLogger(sourceFormat, targetFormat, model) {
         lastChunk: typeof info.lastChunk === "string" ? info.lastChunk.slice(0, 200) : null,
         error: info.error || null,
         stack: (info.stack || "").slice(0, 800),
+        code: info.code || null,
+        urlIndex: info.urlIndex ?? null,
       };
       // Write session-local record (best-effort — sessionPath may be null if session creation failed)
       if (sessionPath) {

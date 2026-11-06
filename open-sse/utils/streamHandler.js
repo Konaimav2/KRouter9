@@ -1,6 +1,7 @@
 // Stream handler with disconnect detection - shared for all providers
 import { STREAM_STALL_TIMEOUT_MS } from "../config/runtimeConfig.js";
 import { dbg, isDebugEnabled } from "./debugLog.js";
+import { getUpstreamResetCode } from "./networkError.js";
 
 // Get HH:MM:SS timestamp
 function getTimeString() {
@@ -141,20 +142,19 @@ export function createDisconnectAwareStream(transformStream, streamController, o
         reader.cancel().catch(() => {});
         writer.abort().catch(() => {});
 
-        // Treat network resets / socket hang up / abort as graceful close
+        // Treat network resets / socket hang up / abort as graceful close.
+        // The reset classification itself lives in utils/networkError.js (shared
+        // with BaseExecutor and chatCore). The local abort/timeout checks stay
+        // here: a client cancel is a "graceful close" on this path, while it is
+        // never a reset on the executor path.
         const msg = error?.message || "";
         const code = error?.code || error?.cause?.code || "";
         const isNetworkClose =
           error.name === "AbortError" ||
           msg.includes("aborted") ||
-          msg.includes("socket hang up") ||
-          msg.includes("ECONNRESET") ||
+          getUpstreamResetCode(error) !== null ||
           msg.includes("ETIMEDOUT") ||
-          msg.includes("EPIPE") ||
-          code === "ECONNRESET" ||
-          code === "ETIMEDOUT" ||
-          code === "EPIPE" ||
-          code === "UND_ERR_SOCKET";
+          code === "ETIMEDOUT";
 
         // Durable termination ledger: record abnormal upstream endings (network
         // reset / stall abort / hard error) with stream stats. Skipped when the

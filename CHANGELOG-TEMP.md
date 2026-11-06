@@ -40,3 +40,25 @@ app keeps the last released `/api/version` until the final revision.
   (`text-[var(--color-warning)]` on the warning wash), “Cert Trusted”
   `text-green-600` 2.9:1, and “Stop Server” `text-red-500` 2.98:1. Those three
   are queued as the next one-by-one fix; the badge/keyboard P1s pass.
+
+## 2026-11-07 — Fast combo handoff and upstream reset ledger (unversioned)
+
+- Classify nested Undici `UND_ERR_SOCKET` / `ECONNRESET`, `EPIPE`, and socket-hang-up
+  failures while excluding AbortError/deadline abort, DNS errors, and timeouts.
+- BaseExecutor now sends at most one request per base URL for a classified socket
+  reset, then advances to another base URL or throws promptly; normal HTTP
+  502/503/504 and unrelated network retry policies remain unchanged.
+- A pre-header reset in a combo now cools the failing connection once and hands
+  the 502 to the combo immediately, rather than rotating through every account
+  for the same dead member. Standalone account rotation remains unchanged.
+- Reset after HTTP/SSE commit never replays a second combo member; the existing
+  client-format failure terminal is sent and the reset is recorded.
+- Pre-header resets write `6_error.json`, `6_stream_termination.json`, and
+  `errors.jsonl` metadata (provider/model/code/url index/duration); full prompts
+  are not duplicated in error artifacts and URLs are credential-masked.
+- Verification: 11 focused files / 76 tests pass; ESLint clean. RED/GREEN
+  integration uses real `handleComboChat → handleSingleModelChat → handleChatCore`.
+- QA box old-image baseline: before handoff, fixture produced 4 reset fetches
+  plus ~9.5s before healthy member success. Patch exact-image proof pending.
+- Hotfix image: _pending_ (tag convention `sha-<short>`; app version stays 3.3.28)
+- papi digest: _pending_

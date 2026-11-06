@@ -5,6 +5,7 @@ import { dbg } from "../utils/debugLog.js";
 import { ANTHROPIC_API_VERSION, OPENAI_COMPAT_BASE, ANTHROPIC_COMPAT_BASE } from "../providers/shared.js";
 import { resolveOpenAICompatibleApiType } from "../services/provider.js";
 import { applyCustomHeaders } from "../utils/customHeaders.js";
+import { getUpstreamResetCode, maskUrlSecrets } from "../utils/networkError.js";
 
 /**
  * BaseExecutor - Base class for provider executors
@@ -192,7 +193,30 @@ export class BaseExecutor {
         // or reclassified: surface immediately.
         if (error?.status === HTTP_STATUS.PAYLOAD_TOO_LARGE || error?.code === "RELAY_PAYLOAD_TOO_LARGE") throw error;
 
-        // Map network/fetch exceptions to 502 retry config
+        // Upstream socket reset (ECONNRESET/EPIPE/UND_ERR_SOCKET/socket hang up)
+        // that is not a client/deadline abort: re-POSTing the same endpoint cannot
+        // fix a dead socket — the old 502 mapping retried it 3x at delayMs
+        // intervals (production: 3x3s per account x 4 River accounts per request).
+        // At most ONE request per base URL: advance to the next fallback URL, or
+        // throw fast on a single URL so the account/combo layer can move on.
+        const resetCode = getUpstreamResetCode(error);
+        if (resetCode) {
+          error.url = maskUrlSecrets(url);
+          error.urlIndex = urlIndex;
+          error.networkResetCode = resetCode;
+          log?.warn?.("NETWORK_RESET", `${this.provider.toUpperCase()} upstream socket reset — no same-URL retry`, {
+            provider: this.provider,
+            model,
+            urlIndex,
+            attempt: (retryAttemptsByUrl[urlIndex] || 0) + 1,
+            code: resetCode,
+            url: maskUrlSecrets(url),
+          });
+          if (urlIndex + 1 >= fallbackCount) throw error;
+          continue;
+        }
+
+        // Any other network/fetch exception keeps the 502 retry mapping
         if (await tryRetry(urlIndex, HTTP_STATUS.BAD_GATEWAY, `network "${error.message}"`)) { urlIndex--; continue; }
 
         if (urlIndex + 1 < fallbackCount) {

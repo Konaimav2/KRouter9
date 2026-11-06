@@ -33,6 +33,7 @@ await import("../translator/registerAll.js");
 const { handleStreamingResponse } = await import("../../open-sse/handlers/chatCore/streamingHandler.js");
 const { createStreamController } = await import("../../open-sse/utils/streamHandler.js");
 const { handleComboChat, resetComboRotation } = await import("../../open-sse/services/combo.js");
+const { createErrorResult } = await import("../../open-sse/utils/error.js");
 
 const provider = Object.keys(PROVIDERS).find((id) => PROVIDERS[id].format === FORMATS.OPENAI);
 const models = [`${provider}/s2-first`, `${provider}/s2-second`];
@@ -84,7 +85,7 @@ function openaiChunk(delta, finishReason = null) {
   })}\n\n`;
 }
 
-function options(fixture, model, comboName) {
+function options(fixture, model, comboName, reqLogger = null) {
   const streamController = createStreamController({ provider, model, log });
   resources.push({ dispose() { streamController.abort(); } });
   return {
@@ -99,12 +100,13 @@ function options(fixture, model, comboName) {
     streamController,
     onStreamComplete: vi.fn(),
     streamDetailId: `${model}-detail`,
+    reqLogger,
     comboName,
     log,
   };
 }
 
-async function combo(first, comboName) {
+async function combo(first, comboName, reqLogger = null) {
   resetComboRotation(comboName);
   const attempts = [];
   const memberResults = [];
@@ -122,7 +124,7 @@ async function combo(first, comboName) {
         openaiChunk({}, OPENAI_FINISH.STOP),
         "data: [DONE]\n\n",
       ]);
-      const result = await handleStreamingResponse(options(fixture, member, comboName));
+      const result = await handleStreamingResponse(options(fixture, member, comboName, reqLogger));
       memberResults.push(result);
       return result.response;
     },
@@ -267,5 +269,81 @@ describe("actual combo handler semantic commit", () => {
     const output = payloads(await drain(reader, prefix));
     expect(result.attempts).toEqual([models[0]]);
     expect(output.map((item) => item.choices?.[0]?.delta?.content || "").join("")).toBe("s2 visible once");
+  });
+
+  it("post-semantic socket reset: client gets a failure terminal, member is NOT replayed, durable termination logged", async () => {
+    // A real socket reset (not an abort) after semantic bytes are committed must:
+    //   - close the stream with a client-format failure terminal (no replay),
+    //   - NOT advance to the next combo member (headers already committed),
+    //   - record the durable termination once as a network close.
+    const reqLogger = Object.fromEntries(
+      ["logStreamTermination", "logError", "logProviderResponse", "appendProviderChunk", "logTargetRequest", "logClientRawRequest", "logRawRequest", "logOpenAIRequest", "logConvertedResponse", "appendOpenAIChunk", "appendConvertedChunk"]
+        .map((n) => [n, vi.fn()]),
+    );
+    const reset = new TypeError("fetch failed");
+    reset.cause = Object.assign(new Error("read ECONNRESET"), { code: "UND_ERR_SOCKET" });
+    const first = source([openaiChunk({ content: "s2 visible once" })], true);
+    const result = await combo(first, "s2-postcommit-socket-reset", reqLogger);
+    const reader = readerFor(result.response);
+    const initial = await deadline(reader.read(), "first semantic client frame");
+    expect(initial.done).toBe(false);
+    const prefix = new TextDecoder().decode(initial.value);
+    expect(payloads(prefix).some((item) => item.choices?.[0]?.delta?.content === "s2 visible once")).toBe(true);
+
+    first.fail(reset);
+    const output = payloads(await drain(reader, prefix));
+
+    // No replay of member 2 (headers/semantic bytes were already committed).
+    expect(result.attempts).toEqual([models[0]]);
+    // `output` spans prefix + post-failure drain (the whole client stream): the
+    // committed semantic text must appear exactly once — a replayed member or
+    // re-flushed transform buffer would duplicate it.
+    expect(output.map((item) => item.choices?.[0]?.delta?.content || "").join("")).toBe("s2 visible once");
+    // A client-format failure terminal reached the client.
+    expect(output.some((item) => item.error && item.error.message)).toBe(true);
+    // Durable termination recorded exactly once, as a network close.
+    expect(reqLogger.logStreamTermination).toHaveBeenCalledTimes(1);
+    const info = reqLogger.logStreamTermination.mock.calls[0][0];
+    expect(info.reason).toBe("upstream_network_close");
+    expect(info.provider).toBe(provider);
+    expect(info.model).toBe(models[0]);
+    expect(info.chunks).toBeGreaterThan(0);
+    expect(info.error).toBeTruthy();
+  });
+
+  it("pre-header reset (502 from account loop) falls through to the next member", async () => {
+    // When member 0 dies before any header (an upstream ECONNRESET that the
+    // account loop surfaced as a 502 error result), the combo has committed
+    // nothing yet and MUST advance to member 1, not pin the client to the
+    // dead upstream.
+    resetComboRotation("s2-preheader-reset");
+    const attempts = [];
+    const response = await deadline(handleComboChat({
+      body: { stream: true, messages: [] },
+      models,
+      comboName: "s2-preheader-reset",
+      comboStrategy: "fallback",
+      autoSwitch: false,
+      log,
+      async handleSingleModel(_body, member) {
+        attempts.push(member);
+        if (member === models[0]) {
+          // Shape of what the chat account-rotation loop returns after an
+          // upstream ECONNRESET: a 502 error result, no bytes committed.
+          return createErrorResult(502, "[ECONNRESET]: upstream socket reset before headers").response;
+        }
+        const fixture = source([
+          openaiChunk({ content: "s2 preheader fallback" }),
+          openaiChunk({}, OPENAI_FINISH.STOP),
+          "data: [DONE]\n\n",
+        ]);
+        const memberResult = await handleStreamingResponse(options(fixture, member, "s2-preheader-reset"));
+        return memberResult.response;
+      },
+    }), "combo preheader reset result");
+
+    expect(attempts).toEqual(models);
+    const output = payloads(await drain(readerFor(response)));
+    expect(output.map((item) => item.choices?.[0]?.delta?.content || "").join("")).toBe("s2 preheader fallback");
   });
 });
