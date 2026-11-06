@@ -340,7 +340,7 @@ export async function handleChat(request, clientRawRequest = null, options = {})
 /**
  * Handle single model chat request
  */
-async function handleSingleModelChat(body, modelStr, clientRawRequest = null, request = null, apiKey = null, comboName = null, clientIp = null) {
+export async function handleSingleModelChat(body, modelStr, clientRawRequest = null, request = null, apiKey = null, comboName = null, clientIp = null) {
   const modelInfo = await getModelInfo(modelStr);
 
   // KRouter9 guardrails (fail-open, settings-gated, default OFF)
@@ -638,6 +638,32 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
           }
         } catch {}
       }
+      return result.response;
+    }
+
+    // Upstream pre-header socket reset in a combo: sibling accounts on the
+    // same model cannot fix an endpoint that is dead at socket level —
+    // rotating through all of them only burns client budget and latency.
+    // Cool the failing connection down once (so a repeated client request
+    // does not immediately pick it again), record the breaker failure once,
+    // and hand the 502 to the combo layer so it advances to the next member
+    // immediately. Standalone single-model requests keep the rotation below;
+    // abort/DNS/non-reset failures never carry this marker, so they are
+    // unaffected.
+    if (result.failureType === "upstream_network_reset" && comboName) {
+      await markAccountUnavailable(credentials.connectionId, result.status, result.error, provider, model, result.resetsAtMs);
+      circuitBreaker.recordFailure(`${provider}/${model}`, result.error);
+      const maskedConnectionId = String(credentials.connectionId || "").slice(0, 8);
+      log.warn(
+        "COMBO_RESET_HANDOFF",
+        `⇄ ACCT:${maskedConnectionId} upstream reset (${result.networkResetCode}) on ${provider}/${model} → combo "${comboName}" hands off to next member`,
+        { combo: comboName, model: `${provider}/${model}`, code: result.networkResetCode, connectionId: maskedConnectionId, action: "next-member" }
+      );
+      saveRequestError({
+        provider, model, status: result.status,
+        connectionId: credentials.connectionId,
+        endpoint: clientRawRequest?.endpoint,
+      });
       return result.response;
     }
 

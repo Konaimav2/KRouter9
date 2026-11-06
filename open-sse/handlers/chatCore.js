@@ -6,6 +6,7 @@ import { normalizeClaudePassthrough, anchorClaudeCache } from "../translator/for
 import { createStreamController } from "../utils/streamHandler.js";
 import { refreshWithRetry } from "../services/tokenRefresh.js";
 import { createRequestLogger } from "../utils/requestLogger.js";
+import { getUpstreamResetCode, maskUrlSecrets } from "../utils/networkError.js";
 import { getModelTargetFormat, getModelSupportedFormats, getModelStrip, getModelUpstreamId, getModelType, PROVIDER_ID_TO_ALIAS } from "../config/providerModels.js";
 import { PROVIDERS } from "../config/providers.js";
 import { createErrorResult, parseUpstreamError, formatProviderError } from "../utils/error.js";
@@ -466,6 +467,46 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
     if (error?.status === HTTP_STATUS.PAYLOAD_TOO_LARGE || error?.code === "RELAY_PAYLOAD_TOO_LARGE") {
       return createErrorResult(HTTP_STATUS.PAYLOAD_TOO_LARGE, error.message || "Request body too large for relay egress");
     }
+    // Upstream socket reset before headers (ECONNRESET/EPIPE/UND_ERR_SOCKET/socket
+    // hang up): the executor used to throw before logTargetRequest ran, leaving the
+    // request dir without a 6_error.json and nothing in errors.jsonl. Persist both
+    // now. The 502 result below is unchanged, so the account loop and combo layer
+    // fall back to the next target exactly as before.
+    const upstreamResetCode = getUpstreamResetCode(error);
+    if (upstreamResetCode) {
+      const resetDurationMs = Date.now() - requestStartTime;
+      const resetUrlIndex = typeof error.urlIndex === "number" ? error.urlIndex : null;
+      try {
+        // The full body is already stored in 1_req_client/2_req_source/4_req_target.
+        // Do not duplicate large prompt/tool histories into the error artifact.
+        reqLogger.logError(error, null, {
+          reason: "upstream_network_reset",
+          provider,
+          model,
+          sourceFormat: sourceFormat || null,
+          targetFormat: targetFormat || null,
+          statusCode: HTTP_STATUS.BAD_GATEWAY,
+          code: upstreamResetCode,
+          urlIndex: resetUrlIndex,
+          durationMs: resetDurationMs,
+          url: error.url ? maskUrlSecrets(error.url) : null,
+        });
+        reqLogger.logStreamTermination({
+          reason: "upstream_network_reset",
+          provider,
+          model,
+          sourceFormat: sourceFormat || null,
+          targetFormat: targetFormat || null,
+          bytes: 0,
+          chunks: 0,
+          durationMs: resetDurationMs,
+          code: upstreamResetCode,
+          urlIndex: resetUrlIndex,
+          error: error.message || String(error),
+          stack: error.stack || "",
+        });
+      } catch { /* the durable ledger must never break request handling */ }
+    }
     // Relay/edge timeouts (Vercel FUNCTION_INVOCATION_TIMEOUT, gateway timeouts,
     // ETIMEDOUT) surface as 504 with a retry-safe message. The thrown error can
     // embed the relay URL — never forward it to the client.
@@ -477,7 +518,18 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
     if (log?.errorLine) {
       log.errorLine(reqTag, "✗", `ERROR 502 · ${provider}/${model} · ${Date.now() - requestStartTime}ms\n    ${errMsg}${error.stack ? `\n    ${error.stack}` : ""}`);
     }
-    return createErrorResult(HTTP_STATUS.BAD_GATEWAY, errMsg);
+    const errorResult = createErrorResult(HTTP_STATUS.BAD_GATEWAY, errMsg);
+    // Classified pre-header upstream reset: keep the 502 + body exactly as
+    // before, but tag the result so the combo account loop (chat.js) can hand
+    // off to the next combo member instead of rotating every account on an
+    // endpoint that is dead at socket level. Aborts (499/504 above), DNS
+    // errors and non-reset 5xx never carry the marker, so they keep the
+    // existing rotation semantics.
+    if (upstreamResetCode) {
+      errorResult.failureType = "upstream_network_reset";
+      errorResult.networkResetCode = upstreamResetCode;
+    }
+    return errorResult;
   }
 
   // Handle 401/403 - try token refresh (skip for noAuth providers)

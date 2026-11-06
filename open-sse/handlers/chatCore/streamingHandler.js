@@ -10,6 +10,7 @@ import { saveRequestDetail } from "@/lib/usageDb.js";
 import { SSE_HEADERS_CORS as SSE_HEADERS } from "../../utils/sseConstants.js";
 import { createStreamDecoder } from "../../utils/streamTextDecoder.js";
 import { extractReasoningText } from "../../translator/concerns/reasoning.js";
+import { getUpstreamResetCode, maskUrlSecrets } from "../../utils/networkError.js";
 import { CLAUDE_BLOCK, RESPONSES_ITEM } from "../../translator/schema/index.js";
 
 // Codex returns Responses API SSE → which client format to translate INTO, by request sourceFormat.
@@ -248,9 +249,63 @@ export async function handleStreamingResponse({ providerResponse, provider, mode
     } catch (err) {
       abandon();
       streamController?.handleError?.(err);
+      // Upstream socket reset after 200 + headers but before any usable
+      // semantic event: the executor's pre-header catch never sees this
+      // (fetch "succeeded"), so live request dirs kept only
+      // 1_req_client/2_req_source/4_req_target — no 6_error/6_stream_termination,
+      // no durable ledger line — and the account loop rotated through every
+      // account on an endpoint dead at socket level. Classify with the shared
+      // reset classifier, write the same durable records as the chatCore
+      // pre-header catch, and tag the failure so the combo account loop hands
+      // off to the next member immediately. Non-reset precommit failures
+      // (malformed events, timeouts, no usable event) are unchanged: same
+      // status, no marker.
+      const upstreamResetCode = getUpstreamResetCode(err);
+      let marker = null;
+      if (upstreamResetCode) {
+        marker = { failureType: "upstream_network_reset", networkResetCode: upstreamResetCode };
+        const resetDurationMs = Date.now() - requestStartTime;
+        const resetUrlIndex = typeof err.urlIndex === "number" ? err.urlIndex : null;
+        try {
+          // The full body is already stored in 1_req_client/2_req_source/4_req_target.
+          // Do not duplicate large prompt/tool histories into the error artifact.
+          reqLogger?.logError?.(err, null, {
+            reason: "upstream_network_reset",
+            provider,
+            model,
+            sourceFormat: sourceFormat || null,
+            targetFormat: targetFormat || null,
+            statusCode: err.status || 502,
+            code: upstreamResetCode,
+            urlIndex: resetUrlIndex,
+            durationMs: resetDurationMs,
+            url: err.url ? maskUrlSecrets(err.url) : null,
+          });
+          reqLogger?.logStreamTermination?.({
+            reason: "upstream_network_reset",
+            provider,
+            model,
+            sourceFormat: sourceFormat || null,
+            targetFormat: targetFormat || null,
+            bytes: byteCount,
+            chunks: chunks.length,
+            durationMs: resetDurationMs,
+            code: upstreamResetCode,
+            urlIndex: resetUrlIndex,
+            error: err.message || String(err),
+            stack: err.stack || "",
+          });
+        } catch { /* the durable ledger must never break request handling */ }
+      }
+      const failureMessage = `[${provider}/${model}] upstream stream failed before semantic output: ${err.message}`;
       return {
         success: false,
-        response: new Response(JSON.stringify({ error: { message: `[${provider}/${model}] upstream stream failed before semantic output: ${err.message}` } }), {
+        // Same shape as createErrorResult so the account loop's
+        // markAccountUnavailable(breaker) receives the real status + error text.
+        status: err.status || 502,
+        error: failureMessage,
+        ...marker,
+        response: new Response(JSON.stringify({ error: { message: failureMessage } }), {
           status: err.status || 502,
           headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
         }),
