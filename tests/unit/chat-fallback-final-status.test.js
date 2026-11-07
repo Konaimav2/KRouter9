@@ -203,6 +203,71 @@ async function runExhaustion({ lastErrorCode, lastError, upstreamStatus }) {
 }
 
 describe("account-rotation pool exhaustion — final status preservation", () => {
+  it("reaches a healthy account after the former eight-attempt cap", async () => {
+    const accounts = Array.from({ length: 12 }, (_, i) => ({
+      id: `conn-large-pool-${String(i + 1).padStart(2, "0")}`,
+      connectionId: `conn-large-pool-${String(i + 1).padStart(2, "0")}`,
+      connectionName: `pool-${i + 1}`,
+    }));
+    const attempted = [];
+    getProviderCredentials.mockImplementation(async (_provider, excluded) => {
+      const skip = excluded instanceof Set ? excluded : new Set(excluded || []);
+      return accounts.find((account) => !skip.has(account.id)) || {
+        allRateLimited: true,
+        retryAfter: new Date(Date.now() + 5000).toISOString(),
+        retryAfterHuman: "reset after 5s",
+        lastError: "upstream unavailable",
+        lastErrorCode: 503,
+      };
+    });
+    handleChatCore.mockImplementation(async ({ connectionId }) => {
+      attempted.push(connectionId);
+      if (attempted.length < 10) {
+        return { success: false, status: 503, error: "temporary upstream unavailable" };
+      }
+      return { success: true, response: new Response("healthy account", { status: 200 }) };
+    });
+
+    const response = await handleChat(makeRequest());
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("healthy account");
+    expect(attempted).toHaveLength(10);
+    expect(new Set(attempted).size).toBe(10);
+    expect(markAccountUnavailable).toHaveBeenCalledTimes(9);
+  });
+
+  it("still stops when the time deadline is exhausted", async () => {
+    const accounts = Array.from({ length: 20 }, (_, i) => ({
+      id: `conn-deadline-${String(i + 1).padStart(2, "0")}`,
+      connectionId: `conn-deadline-${String(i + 1).padStart(2, "0")}`,
+      connectionName: `deadline-${i + 1}`,
+    }));
+    let now = 0;
+    const realNow = Date.now;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    getProviderCredentials.mockImplementation(async (_provider, excluded) => {
+      const skip = excluded instanceof Set ? excluded : new Set(excluded || []);
+      return accounts.find((account) => !skip.has(account.id)) || {
+        allRateLimited: true,
+        retryAfter: new Date(realNow() + 5000).toISOString(),
+        retryAfterHuman: "reset after 5s",
+        lastError: "upstream unavailable",
+        lastErrorCode: 503,
+      };
+    });
+    handleChatCore.mockImplementation(async () => {
+      now += 10000;
+      return { success: false, status: 503, error: "temporary upstream unavailable" };
+    });
+
+    const response = await handleChat(makeRequest());
+
+    expect(response.status).toBe(503);
+    expect(handleChatCore).toHaveBeenCalledTimes(8);
+    expect(markAccountUnavailable).toHaveBeenCalledTimes(8);
+  });
+
   it("504 exhausted through the fallback pool returns 504 and the message names 504", async () => {
     const { response, message } = await runExhaustion({
       lastErrorCode: 504,
