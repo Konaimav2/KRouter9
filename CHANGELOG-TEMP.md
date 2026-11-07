@@ -118,5 +118,33 @@ app keeps the last released `/api/version` until the final revision.
   100 seeded accounts, accounts 1–9 return 503, account 10 succeeds; 37 HTTP
   attempts across exactly the first 10 distinct accounts; response 200 with
   `eligible-account-10-reached`, one `[DONE]`. Fixture removed and 0 resetqa refs remain.
-- Hotfix CI run `42337092560` success; papi receives the image on 2026-11-07
-  (version remains 3.3.28). Separate per-account HTTP retry pacing is unchanged.
+- Hotfix CI run `42337092560` success. Deployed to papi on 2026-11-07 as
+  `ghcr.io/konaimav2/krouter9:sha-75454fb`, digest
+  `sha256:8cec95b5b0c97a40664d1dcec90a8e93250bf9e9ccd8e51272a5532cbfc8412c`;
+  `/api/version` remains 3.3.28, health 200. `cloudflared-9router` unchanged.
+  Headroom was already exited 137 before the swap and was left untouched.
+  Separate per-account HTTP retry pacing is unchanged.
+
+## 2026-11-07 — Allow rotation through large eligible pools (unversioned)
+
+- Removed the fixed `ACCOUNT_ROTATION_MAX_ATTEMPTS=8` cap from chat account
+  rotation. `ACCOUNT_ROTATION_DEADLINE_MS` remains the overall bound and still
+  produces a retry-safe 504 when time is exhausted. Per-account HTTP retries,
+  429 cooldowns, and Codex entitlement filters are unchanged.
+- RED/GREEN: old 8-attempt code returned 503 before account 10; fixed code
+  reaches healthy account 10 after 503s on accounts 1–9. A separate advancing-
+  clock test proves the 75-second deadline still stops rotation.
+- Production snapshot: TokenHarbor 147 active; 39 historical model errors,
+  mostly upstream 429s and 499s from deadline/client aborts. Codex has 8 active
+  accounts (6 free / 2 plus); all had explicit upstream 400 unsupported-model
+  errors for `gpt-6.1-luna`, so entitlement filtering was not changed.
+- Exact-image QA: 100 disposable connections; 37 HTTP requests across accounts
+  1–10 (normal per-account retry behavior preserved), account 10 success,
+  HTTP 200, expected body, exactly one `[DONE]`. Fixture cleanup left zero test
+  provider/connection/combo records.
+- CI `42337092560` success. Hotfix deployed as
+  `ghcr.io/konaimav2/krouter9:sha-75454fb`, digest
+  `sha256:8cec95b5b0c97a40664d1dcec90a8e93250bf9e9ccd8e51272a5532cbfc8412c`.
+  papi `/api/version` remains 3.3.28, health 200; cloudflared untouched.
+- Follow-up: per-account HTTP retry pacing still costs about 6 seconds per 503
+  account. That was not changed by this cap fix.
