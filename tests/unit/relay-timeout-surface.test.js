@@ -143,13 +143,12 @@ describe("ERROR_RULES timeout short-cooldown", () => {
 // window (Cloudflare 524 at 120s) so the combo layer can fall back. Before this, a
 // provider with hundreds of rate-limited connections could rotate for minutes.
 describe("account rotation budget", () => {
-  it("keeps the rotation budget inside the edge proxy window", async () => {
-    const { ACCOUNT_ROTATION_DEADLINE_MS, ACCOUNT_ROTATION_MAX_ATTEMPTS } = await import(
+  it("keeps the time-based rotation budget inside the edge proxy window", async () => {
+    const { ACCOUNT_ROTATION_DEADLINE_MS } = await import(
       "../../open-sse/config/runtimeConfig.js"
     );
     expect(ACCOUNT_ROTATION_DEADLINE_MS).toBeLessThan(120000);
     expect(ACCOUNT_ROTATION_DEADLINE_MS).toBeGreaterThan(0);
-    expect(ACCOUNT_ROTATION_MAX_ATTEMPTS).toBeGreaterThan(0);
   });
 
   it("maps a deadline abort to a retry-safe 504, never a client-abort 499", async () => {
