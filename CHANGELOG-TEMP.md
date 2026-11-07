@@ -99,3 +99,24 @@ app keeps the last released `/api/version` until the final revision.
   `ghcr.io/konaimav2/krouter9:sha-916c2b7`, digest
   `sha256:e44603eedf63f810ca44299cfeeef3ac33ddc429b05ce051c333e72c69ee4648`.
   `/api/version` remains 3.3.28; health 200. No version revision.
+
+## 2026-11-07 — Do not truncate large account rotations at eight attempts (unversioned)
+
+- Removed the fixed `ACCOUNT_ROTATION_MAX_ATTEMPTS=8` stop from the chat account
+  rotation loop. `ACCOUNT_ROTATION_DEADLINE_MS` (75 seconds) remains the bounded
+  request budget and still aborts an in-flight attempt / returns a retry-safe 504.
+- RED/GREEN: a 12-account-shaped pool with 503s on accounts 1–9 and account 10
+  healthy failed under the old cap (503) and succeeds after the change; separate
+  test confirms the time deadline still stops rotation. No Codex plan eligibility
+  rules were changed.
+- Production snapshot: TokenHarbor 147 active (142 `testStatus=active`, 5
+  unavailable); 39 historical errors include upstream 429s and 499 client/deadline
+  aborts. Codex 8 active (6 free, 2 plus); all 8 received explicit 400
+  `gpt-6.1-luna` unsupported, so Codex entitlement remains unchanged.
+- Exact-image QA (`sha-75454fb`, image digest
+  `sha256:8cec95b5b0c97a40664d1dcec90a8e93250bf9e9ccd8e51272a5532cbfc8412c`):
+  100 seeded accounts, accounts 1–9 return 503, account 10 succeeds; 37 HTTP
+  attempts across exactly the first 10 distinct accounts; response 200 with
+  `eligible-account-10-reached`, one `[DONE]`. Fixture removed and 0 resetqa refs remain.
+- Hotfix CI run `42337092560` success; papi receives the image on 2026-11-07
+  (version remains 3.3.28). Separate per-account HTTP retry pacing is unchanged.
