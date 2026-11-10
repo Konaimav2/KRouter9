@@ -33,19 +33,18 @@
 - **S6** Next.js 16.3.4 → 16.4.3
 
 ## Routing and usage
-- **FR-3** free-lane proxy binding is strict: direct egress is refused while bound or rotating,
+- Free-lane proxy binding is strict: direct egress is refused while bound or rotating,
   and the failure names the pool and the tried accounts
-- **FR-6** usage zero-gates the selected metric and replaces an all-zero table with an
+- Usage zero-gates the selected metric and replaces an all-zero table with an
   explanatory state
-- **FR-7** combo members can be renamed inline, in place, without creating a new combo
-- **FR-8/8b** dead OpenCode free ids are removed from both registries, a guard blocks them at
+- Combo members can be renamed inline, in place, without creating a new combo
+- Dead OpenCode free ids are removed from both registries, a guard blocks them at
   request time, `nemotron-3-ultra-free` is restored after live proof, and a new status endpoint
   classifies 429 live / 410 retired / 400 unavailable with a 14-day TTL. Dashboard card added
 
 ## Notes
 - `cli/` stays at 1.0.0
-- FR-5 (Console Log Headroom panel) is deferred to 3.3.1
-- Builds for this release run in CI, not on the local 4 GB host
+- The Console Log Headroom panel is deferred to a later release
 
 # v3.2.6 (2026-10-27) — Gemini requests no longer end on a model turn
 
@@ -63,9 +62,9 @@
 
 ## Codex account selection
 - One account can be entitled to a plan and still be unable to serve a specific model.
-  Production showed the plus account `9a3ded0d...` failing **10 of 10** requests for
-  `gpt-6.1-sol` with `model_not_found` ("not supported when using Codex with a ChatGPT
-  account"), while the other plus account served **29 of 29**
+  One plus account could fail every `gpt-6.1-sol` request with `model_not_found` ("not
+  supported when using Codex with a ChatGPT account") while another plus account served
+  them all
 - The model-scoped lock existed but used the 5-minute cooldown, so after every cooldown the
   next request paid the same rejected round trip. Entitlement errors are permanent for the
   account: the lock TTL is now chosen from the error and is **24 hours** for
@@ -99,14 +98,13 @@
   sentinel)
 - Proof: `tests/unit/codex-stream-done.test.js` (3 cases) plus the adjacent stream suites
 
-## Verified on the live gateway
-- `gpt-6.1-sol` combo: non-streaming 200 (`sol-ok`, 2.39s); streaming 200 with the full text
-- `cx/gpt-5.6-luna` and `gpt-5.6-terra` reproduced the missing sentinel; `deepseek-v4.1-flash`
-  exposed the duplicate-sentinel path
+## Reproduced with
+- `cx/gpt-5.6-luna` and `gpt-5.6-terra` (missing sentinel); `deepseek-v4.1-flash`
+  (duplicate sentinel)
 
 # v3.2.3 (2026-10-26) — Hotfix: combo self-member picker, provider error text, codex tests
 
-## Combo member picker (P7 residual)
+## Combo member picker
 - A combo could be offered as a member of **itself**. The add-model picker runs with
   `includeCombos`, so the combo under edit appeared in its own list; its value resolves
   back to the same combo, which made clicking it either add a cyclic member (dropped
@@ -165,7 +163,7 @@
 - Account rotation is bounded per request (`ACCOUNT_ROTATION_DEADLINE_MS` 75s,
   `ACCOUNT_ROTATION_MAX_ATTEMPTS` 8, both env-overridable) and the in-flight attempt is
   aborted at the deadline and surfaced as a retry-safe `504`. Previously a provider with
-  hundreds of connections — TokenHarbor carries 147 on papi — could rotate past the
+  hundreds of connections could rotate past the
   edge proxy's response window, so Cloudflare answered `524` and the combo never got an
   error to fall back on
 
@@ -232,7 +230,7 @@
   provider clustering; usage sort survives repeated clicks (URL-persisted)
 
 ## Fixes
-- Provider detail 500 (F16 deleted state, dangling refs) — restored, slug-certified
+- Provider detail 500 (deleted state, dangling refs) — restored, slug-certified
 - Console source column overflow; quota reset-axis stray marker
 
 # v3.1.0 (2026-10-04) — Ledger completion: leftover surfaces, blue accent, usage depth
@@ -305,7 +303,7 @@
 - Providers: agentrouter/bai-api/tokenharbor wiring, key-aware suggested models, connection test fallback, icons
 - Combos: expandable chips, max-member context limits, configurable fallback delay
 - UI: newapi-derived blue tokens, Public Sans, docs quickstart/copy buttons
-- W14 own response cache (exact-match, identity-bound, default OFF)
+- Own response cache (exact-match, identity-bound, default OFF)
 - /v1/models: no blanket bulk-import; codex conservative catalogs
 
 # v1.1.1 (2026-09-28) — combo routing order, opencode free-tier cloak, 4xx fall-through, disabled-toggle, 3 providers
@@ -354,7 +352,6 @@
   `/docs` API reference
 - **AgentRouter UA verified**: echo-probe proves the configured UA leaves the
   gateway byte-identical — no code change needed
-- **Repo docs**: root `AGENTS.md`, `DESIGN.md`, `TARGET.md`
 
 ## Tests
 - New suites for UA migration, account stickiness, Responses incomplete shape, and
