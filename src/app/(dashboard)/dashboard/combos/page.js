@@ -51,6 +51,7 @@ export default function CombosPage() {
   const [combos, setCombos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [openComboId, setOpenComboId] = useState(null);
   const [activeProviders, setActiveProviders] = useState([]);
   const [comboStrategies, setComboStrategies] = useState({});
   const [capacityAdapter, setCapacityAdapter] = useState(EMPTY_CAPACITY_ADAPTER);
@@ -297,6 +298,8 @@ export default function CombosPage() {
                 onRename={(newName, models) => handleRename(combo.id, combo.name, newName, models)}
                 strategy={comboStrategies[combo.name] || {}}
                 onSetStrategy={(patch) => handleSetComboStrategy(combo.name, patch)}
+                expanded={openComboId === combo.id}
+                onToggleExpanded={(nextOpen) => setOpenComboId(nextOpen ? combo.id : null)}
               />
             ))}
           </div>
@@ -327,13 +330,13 @@ const STRATEGY_OPTIONS = [
   { value: "fusion", label: "Fusion — panel + judge", shortLabel: "Fusion" },
 ];
 
-function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDelete, onChangeModels, onRename, strategy = {}, onSetStrategy }) {
+function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDelete, onChangeModels, onRename, strategy = {}, onSetStrategy, expanded = false, onToggleExpanded = () => {} }) {
   const [showJudgeSelect, setShowJudgeSelect] = useState(false);
   const [showAddModel, setShowAddModel] = useState(false);
-  const [expanded, setExpanded] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const commandRef = useRef(null);
   const dragSourceRef = useRef(-1);
+  const modelInputRef = useRef(null);
   const [dropPosition, setDropPosition] = useState(null);
 
   useEffect(() => {
@@ -373,7 +376,23 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
   const isFusion = current === "fusion";
   const trimmedName = draftName.trim();
   const nameChanged = trimmedName !== combo.name;
-  const dirty = nameChanged || draftModels.length !== combo.models.length || draftModels.some((model, index) => model !== combo.models[index]);
+  // While a member field is open every index-shifting action (move, remove, drag, a second
+  // edit, the Add model button and the picker's select/deselect) is locked, so editingIndex
+  // always points at the slot being edited. Conversely, no member edit can start or commit
+  // while the add-model picker is open, so the picker never mutates the list under an edit.
+  const routeLocked = editingIndex >= 0;
+  const editBlocked = routeLocked || showAddModel;
+  // Single source for the list Save route would persist; used by both `dirty` and saveMembers.
+  const memberEditOpen = routeLocked && editingIndex < draftModels.length;
+  const pendingValue = memberEditOpen ? editingValue.trim() : "";
+  const pendingModels = memberEditOpen && pendingValue
+    ? draftModels.map((model, index) => (index === editingIndex ? pendingValue : model))
+    : draftModels;
+  const dirty = nameChanged || pendingModels.length !== combo.models.length || pendingModels.some((model, index) => model !== combo.models[index]);
+
+  useEffect(() => {
+    if (editingIndex >= 0) modelInputRef.current?.focus();
+  }, [editingIndex]);
 
   const validateDraftName = (value) => {
     if (!value.trim()) {
@@ -396,6 +415,7 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
   };
 
   const moveModel = (index, delta) => {
+    if (routeLocked) return;
     const target = index + delta;
     if (target < 0 || target >= draftModels.length) return;
     const next = [...draftModels];
@@ -404,7 +424,13 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
     setDraftModels(next);
   };
 
+  const removeModel = (index) => {
+    if (routeLocked) return;
+    setDraftModels(draftModels.filter((_, itemIndex) => itemIndex !== index));
+  };
+
   const startEdit = (index) => {
+    if (editBlocked) return;
     setEditingIndex(index);
     setEditingValue(draftModels[index]);
     setEditError("");
@@ -417,6 +443,7 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
   };
 
   const commitEdit = (index) => {
+    if (showAddModel) return;
     const next = editingValue.trim();
     if (!next) {
       setEditError("Model ID cannot be empty.");
@@ -434,19 +461,43 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
   };
 
   const saveMembers = async () => {
-    if (!dirty || saving) return;
+    if (saving) return;
+    if (memberEditOpen && !pendingValue) {
+      setEditError("Model ID cannot be empty.");
+      return;
+    }
+    const modelsToSave = pendingModels;
+    if (!dirty) return;
     setSaveError("");
     if (nameChanged && !validateDraftName(draftName)) return;
     setSaving(true);
-    const result = nameChanged
-      ? await onRename(trimmedName, draftModels)
-      : await onChangeModels(draftModels);
-    setSaving(false);
-    if (result && result.ok === false) {
-      setSaveError(result.error || "Failed to update combo");
-      return;
+    try {
+      const result = nameChanged
+        ? await onRename(trimmedName, modelsToSave)
+        : await onChangeModels(modelsToSave);
+      if (result && result.ok === false) {
+        setSaveError(result.error || "Failed to update combo");
+        return;
+      }
+      setDraftModels(modelsToSave);
+      cancelEdit();
+      setNameError("");
+      setAnnouncement(`${nameChanged ? trimmedName : combo.name} saved with ${modelsToSave.length} ordered members`);
+      onToggleExpanded(false);
+    } catch {
+      setSaveError("Network error. Check the gateway and retry.");
+    } finally {
+      setSaving(false);
     }
-    setAnnouncement(`${nameChanged ? trimmedName : combo.name} saved with ${draftModels.length} ordered members`);
+  };
+
+  const cancelRoute = () => {
+    setDraftModels(combo.models);
+    setDraftName(combo.name);
+    cancelEdit();
+    setNameError("");
+    setSaveError("");
+    onToggleExpanded(false);
   };
 
   const testCombo = async () => {
@@ -482,7 +533,7 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
           <ActionButton icon={testing ? "progress_activity" : "play_arrow"} label={testing ? "Testing" : "Test"} onClick={testCombo} disabled={testing || combo.models.length === 0} spin={testing} />
           <div ref={commandRef} className="relative">
             <ActionButton icon="more_horiz" label="Manage" onClick={() => setCommandOpen((value) => !value)} />
-            {commandOpen ? <div role="menu" className="opacity-100 starting:opacity-0 transition-opacity duration-[var(--duration-base)] ease-[var(--ease-enter)] motion-reduce:transition-none [&:has(:focus-visible)]:transition-none absolute right-0 top-full z-[var(--z-menu)] mt-1 w-48 border border-[var(--color-border-strong)] bg-[var(--color-surface-raised)] py-1 shadow-[var(--shadow-tray)]"><button type="button" role="menuitem" onClick={() => { setExpanded(true); setCommandOpen(false); }} className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm hover:bg-[var(--color-surface-hover)]"><Icon name="tune" size={16} />Manage route</button><button type="button" role="menuitem" onClick={() => { setCommandOpen(false); onDelete(); }} className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger-wash)]"><Icon name="delete" size={16} />Delete combo</button></div> : null}
+            {commandOpen ? <div role="menu" className="opacity-100 starting:opacity-0 transition-opacity duration-[var(--duration-base)] ease-[var(--ease-enter)] motion-reduce:transition-none [&:has(:focus-visible)]:transition-none absolute right-0 top-full z-[var(--z-menu)] mt-1 w-48 border border-[var(--color-border-strong)] bg-[var(--color-surface-raised)] py-1 shadow-[var(--shadow-tray)]"><button type="button" role="menuitem" onClick={() => { onToggleExpanded(!expanded); setCommandOpen(false); }} className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm hover:bg-[var(--color-surface-hover)]"><Icon name="tune" size={16} />Manage route</button><button type="button" role="menuitem" onClick={() => { setCommandOpen(false); onDelete(); }} className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger-wash)]"><Icon name="delete" size={16} />Delete combo</button></div> : null}
           </div>
         </div>
       </div>
@@ -513,14 +564,15 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
             {draftModels.map((model, index) => (
               <div
                 key={`${model}-${index}`}
-                draggable={editingIndex !== index}
+                draggable={!routeLocked}
                 onDragStart={(event) => {
+                  if (routeLocked) { event.preventDefault(); return; }
                   dragSourceRef.current = index;
                   event.dataTransfer.effectAllowed = "move";
                   event.dataTransfer.setData("text/plain", String(index));
                 }}
                 onDragOver={(event) => {
-                  if (dragSourceRef.current < 0) return;
+                  if (routeLocked || dragSourceRef.current < 0) return;
                   event.preventDefault();
                   event.dataTransfer.dropEffect = "move";
                   const rect = event.currentTarget.getBoundingClientRect();
@@ -532,6 +584,7 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
                 onDragEnd={() => { dragSourceRef.current = -1; setDropPosition(null); }}
                 onDrop={(event) => {
                   event.preventDefault();
+                  if (routeLocked) { dragSourceRef.current = -1; setDropPosition(null); return; }
                   const source = dragSourceRef.current;
                   const rect = event.currentTarget.getBoundingClientRect();
                   const slot = index + (event.clientY >= rect.top + rect.height / 2 ? 1 : 0);
@@ -542,22 +595,22 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
                   setDraftModels(arrayMove(draftModels, source, target));
                   setAnnouncement(`${draftModels[source]} moved from position ${source + 1} to ${target + 1}`);
                 }}
-                className={`relative grid min-h-14 grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 border bg-[var(--color-surface)] px-3 py-2 ${editingIndex === index ? "border-[var(--color-primary)]" : "cursor-grab border-[var(--color-border)] active:cursor-grabbing"}`}
+                className={`relative grid min-h-14 grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 border sm:grid-cols-[2.5rem_minmax(0,1fr)_auto] sm:gap-3 bg-[var(--color-surface)] px-3 py-2 ${editingIndex === index ? "border-[var(--color-primary)]" : "cursor-grab border-[var(--color-border)] active:cursor-grabbing"}`}
               >
                 {dropPosition === index || (index === draftModels.length - 1 && dropPosition === draftModels.length) ? <span data-testid="combo-drop-indicator" aria-hidden="true" className={`pointer-events-none absolute inset-x-0 z-10 h-0.5 bg-[var(--color-primary)] ${dropPosition === index ? "top-0" : "bottom-0"}`} /> : null}
-                <div className="flex h-full flex-col items-center justify-center border-r border-[var(--route-line)] pr-3 font-mono text-xs tabular-nums text-[var(--color-primary)]">{String(index + 1).padStart(2, "0")}</div>
-                <div className="min-w-0">{editingIndex === index ? (<div className="flex flex-col gap-1"><div className="flex items-center gap-1"><input autoFocus value={editingValue} onChange={(event) => { setEditingValue(event.target.value); setEditError(""); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); commitEdit(index); } else if (event.key === "Escape") { event.preventDefault(); cancelEdit(); } }} aria-label={`Model ID at position ${index + 1}`} aria-invalid={editError ? "true" : undefined} className="min-h-9 w-full min-w-0 border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-2 font-mono text-xs" /><IconButton icon="check" label={`Save model ID at position ${index + 1}`} onClick={() => commitEdit(index)} /><IconButton icon="close" label={`Cancel editing position ${index + 1}`} onClick={cancelEdit} /></div>{editError && <p role="alert" className="text-[11px] text-[var(--color-danger)]">{editError}</p>}</div>) : (<code className="block break-all font-mono text-xs text-[var(--color-text)]">{model}</code>)}<div className="mt-1 flex flex-wrap items-center gap-2"><span className="inline-flex items-center gap-1 text-[11px] text-[var(--color-text-muted)]"><span className="size-2 rounded-full border border-[var(--color-text-subtle)]" />Not tested</span><CapacityBadges caps={getCaps?.(model)} /></div></div>
-                <div className="flex items-center gap-1">
-                  <IconButton icon="edit" label={`Rename ${model}`} onClick={() => startEdit(index)} disabled={editingIndex === index} />
-                  <IconButton icon="arrow_upward" label={`Move ${model} up`} onClick={() => moveModel(index, -1)} disabled={index === 0} />
-                  <IconButton icon="arrow_downward" label={`Move ${model} down`} onClick={() => moveModel(index, 1)} disabled={index === draftModels.length - 1} />
-                  <IconButton icon="close" label={`Remove ${model}`} onClick={() => setDraftModels(draftModels.filter((_, itemIndex) => itemIndex !== index))} danger />
+                <div className="row-span-2 flex h-full flex-col items-center justify-center border-r border-[var(--route-line)] pr-3 font-mono text-xs tabular-nums text-[var(--color-primary)] sm:row-span-1">{String(index + 1).padStart(2, "0")}</div>
+                <div className="min-w-0">{editingIndex === index ? (<div className="flex flex-col gap-1"><div className="flex flex-wrap items-center gap-1 sm:flex-nowrap"><input ref={modelInputRef} autoFocus value={editingValue} onChange={(event) => { setEditingValue(event.target.value); setEditError(""); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); commitEdit(index); } else if (event.key === "Escape") { event.preventDefault(); cancelEdit(); } }} aria-label={`Model ID at position ${index + 1}`} aria-invalid={editError ? "true" : undefined} className="min-h-9 min-w-0 basis-full border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-2 font-mono text-xs sm:basis-0 sm:flex-1" /><IconButton icon="check" label={`Save model ID at position ${index + 1}`} onClick={() => commitEdit(index)} /><IconButton icon="close" label={`Cancel editing position ${index + 1}`} onClick={cancelEdit} /></div>{editError && <p role="alert" className="text-[11px] text-[var(--color-danger)]">{editError}</p>}</div>) : (<button type="button" onClick={() => startEdit(index)} disabled={editBlocked} aria-label={`Edit model ID ${model}`} className="block w-full cursor-text break-all text-left font-mono text-xs text-[var(--color-text)] hover:text-[var(--color-primary)] disabled:cursor-not-allowed disabled:hover:text-[var(--color-text)]">{model}</button>)}<div className="mt-1 flex flex-wrap items-center gap-2"><span className="inline-flex items-center gap-1 text-[11px] text-[var(--color-text-muted)]"><span className="size-2 rounded-full border border-[var(--color-text-subtle)]" />Not tested</span><CapacityBadges caps={getCaps?.(model)} /></div></div>
+                <div className="col-start-2 flex flex-wrap items-center gap-1 sm:col-start-auto">
+                  <IconButton icon="edit" label={`Rename ${model}`} onClick={() => startEdit(index)} disabled={editBlocked} />
+                  <IconButton icon="arrow_upward" label={`Move ${model} up`} onClick={() => moveModel(index, -1)} disabled={routeLocked || index === 0} />
+                  <IconButton icon="arrow_downward" label={`Move ${model} down`} onClick={() => moveModel(index, 1)} disabled={routeLocked || index === draftModels.length - 1} />
+                  <IconButton icon="close" label={`Remove ${model}`} onClick={() => removeModel(index)} disabled={routeLocked} danger />
                 </div>
               </div>
             ))}
-            <button type="button" onClick={() => setShowAddModel(true)} className="flex min-h-12 w-full items-center justify-center gap-2 border border-dashed border-[var(--color-primary-border)] font-medium text-[var(--color-primary)] hover:bg-[var(--color-primary-wash)]"><Icon name="add" size={17} />Add model</button>
+            <button type="button" onClick={() => { if (!routeLocked) setShowAddModel(true); }} disabled={routeLocked} className="flex min-h-12 w-full items-center justify-center gap-2 border border-dashed border-[var(--color-primary-border)] font-medium text-[var(--color-primary)] hover:bg-[var(--color-primary-wash)] disabled:cursor-not-allowed disabled:opacity-40"><Icon name="add" size={17} />Add model</button>
             {saveError && <p role="alert" className="text-xs text-[var(--color-danger)]">{saveError}</p>}
-            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] pt-3 sm:flex-row sm:items-center sm:justify-between"><p className="text-xs text-[var(--color-text-muted)]">{dirty ? "Unsaved order changes" : "Route order saved"}</p><div className="flex gap-2"><Button size="sm" variant="secondary" onClick={() => { setDraftModels(combo.models); setDraftName(combo.name); setNameError(""); setSaveError(""); setExpanded(false); }} disabled={saving}>Cancel</Button><Button size="sm" onClick={saveMembers} loading={saving} disabled={!dirty || !!nameError || saving}>Save route</Button></div></div>
+            <div className="flex flex-col gap-2 border-t border-[var(--color-border)] pt-3 sm:flex-row sm:items-center sm:justify-between"><p className="text-xs text-[var(--color-text-muted)]">{dirty ? "Unsaved order changes" : "Route order saved"}</p><div className="flex gap-2"><Button size="sm" variant="secondary" onClick={cancelRoute} disabled={saving}>Cancel</Button><Button size="sm" onClick={saveMembers} loading={saving} disabled={!dirty || !!nameError || saving}>Save route</Button></div></div>
           </div>
         </div>
       )}
@@ -571,7 +624,7 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
       <span className="sr-only" aria-live="polite">{announcement}</span>
 
       {showJudgeSelect && <ModelSelectModal isOpen={showJudgeSelect} onClose={() => setShowJudgeSelect(false)} onSelect={(model) => { onSetStrategy({ judgeModel: model?.value || "" }); setShowJudgeSelect(false); }} activeProviders={activeProviders} title="Select judge model" addedModelValues={judge ? [judge] : []} closeOnSelect />}
-      {showAddModel && <ModelSelectModal isOpen={showAddModel} onClose={() => setShowAddModel(false)} onSelect={(model) => { if (model?.value && !draftModels.includes(model.value)) setDraftModels([...draftModels, model.value]); }} onDeselect={(model) => setDraftModels(draftModels.filter((value) => value !== model?.value))} activeProviders={activeProviders} title={`Add model to ${combo.name}`} addedModelValues={draftModels} includeCombos excludeComboNames={[combo.name]} closeOnSelect={false} />}
+      {showAddModel && <ModelSelectModal isOpen={showAddModel} onClose={() => setShowAddModel(false)} onSelect={(model) => { if (routeLocked) return; if (model?.value && !draftModels.includes(model.value)) setDraftModels([...draftModels, model.value]); }} onDeselect={(model) => { if (routeLocked) return; setDraftModels(draftModels.filter((value) => value !== model?.value)); }} activeProviders={activeProviders} title={`Add model to ${combo.name}`} addedModelValues={draftModels} includeCombos excludeComboNames={[combo.name]} closeOnSelect={false} />}
     </article>
   );
 }
@@ -581,7 +634,7 @@ function ActionButton({ icon, label, onClick, danger = false, disabled = false, 
 }
 
 function IconButton({ icon, label, onClick, disabled = false, danger = false }) {
-  return <button type="button" aria-label={label} title={label} onClick={onClick} disabled={disabled} className={`flex size-11 items-center justify-center rounded-[var(--radius-sm)] disabled:cursor-not-allowed disabled:opacity-25 ${danger ? "text-[var(--color-danger)] hover:bg-[var(--color-danger-wash)]" : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)]"}`}><Icon name={icon} size={17} /></button>;
+  return <button type="button" aria-label={label} title={label} onClick={onClick} disabled={disabled} className={`flex size-11 shrink-0 items-center justify-center rounded-[var(--radius-sm)] disabled:cursor-not-allowed disabled:opacity-25 ${danger ? "text-[var(--color-danger)] hover:bg-[var(--color-danger-wash)]" : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)]"}`}><Icon name={icon} size={17} /></button>;
 }
 
 function CapacityAdapterSection({ capacityAdapter, onChange, activeProviders, getCaps }) {

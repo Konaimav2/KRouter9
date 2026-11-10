@@ -148,3 +148,26 @@ app keeps the last released `/api/version` until the final revision.
   papi `/api/version` remains 3.3.28, health 200; cloudflared untouched.
 - Follow-up: per-account HTTP retry pacing still costs about 6 seconds per 503
   account. That was not changed by this cap fix.
+
+## 2026-11-10 — Combo Manage route: single panel, inline member edit, save closes (unversioned)
+
+- `src/app/(dashboard)/dashboard/combos/page.js`: only one Manage route panel is open at a
+  time (page-level `openComboId`). A displayed member ID is a button that opens its inline
+  editor (edit icon kept). Save route applies an open member field and closes the panel only on
+  success; a failed or rejected save keeps it open with an inline alert; Cancel discards and
+  closes. While a member field is open, Move/Remove/drag/second edit/Add model are locked, and
+  edits are refused while the add-model picker is open (a stale edit index corrupted the saved
+  route in testing). Phone widths: action icons wrap under the ID, the edit input gets its own
+  line, and icon buttons stay 44x44 (`IconButton` is `shrink-0`). No API, persistence or
+  strategy change.
+- Tests: `tests/unit/wave-d-ui.test.js` gains RED-first coverage (controlled panel, direct edit,
+  save-while-editing, success close, failure retention, cancel, mobile classes, the three
+  stale-index repros, picker lock). Focused set (wave-d-ui, combo-rename,
+  combo-resolution-order, combo-fallback-order) 43/43; eslint 0; oxlint only 4 old warnings.
+- Browser QA (InstaBox, `next dev --webpack`, seeded multi-member fixture): 13/13 assertions and
+  11/11 viewports pass, evidence `/root/temp/instabox/qa/evidence/combos-manage-route-20261107-r5/`.
+  Judge (fable) PASS in round 3 after two send-backs.
+- Baseline: full suite has no failure attributable to this change; the 47 failing files are the
+  same set at clean HEAD (one order-dependent flaky `cursor-models` case aside). Known backlog:
+  hidden dirty draft survives a panel switch, a slow save can close another combo's panel,
+  edits during an in-flight save are dropped, footer Save/Cancel buttons are 32px tall.
