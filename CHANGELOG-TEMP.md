@@ -6,6 +6,21 @@ version and this file is removed.
 
 ---
 
+## Unreleased — dashboard accessibility and reliability pass (2026-11-11)
+
+- API keys stay masked everywhere in the dashboard (CLI tool cards, media examples, MITM) and are
+  fetched only when you click Copy, Apply, Run or Start. Old saved key presets in the browser are
+  converted to masked labels on load.
+- Pages that fail to load now say so, with a Retry button, instead of showing an empty list.
+- The gateway address shown in setup snippets follows the address you opened the dashboard on,
+  not a fixed port.
+- Pricing moved under Settings; the sidebar, breadcrumbs, 404 page and "Add provider" flow were
+  fixed so every page is reachable.
+- Touch targets are at least 44px, scrollable tables are keyboard-focusable, icon buttons have
+  names, and low-contrast text on the landing page and code blocks was fixed. Missing theme colors
+  that rendered as transparent now exist. Landing and media-tab icons that showed an error glyph
+  now show the intended icon.
+
 **2026-11-10 — versions 3.3.1 through 3.3.28 are revoked as releases.** Their notes are
 folded below into one unreleased batch, pending the next release; the features and code
 stay in the tree. `CHANGELOG.md` ends its 3.3 line at v3.3.0.

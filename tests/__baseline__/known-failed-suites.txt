@@ -4,3 +4,4 @@ embeddings.cloud.test.js
 kimchi-strip-reasoning.test.js
 kimchi.test.js
 wave-c-saver-ui.test.js
+saml.test.js
