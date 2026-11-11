@@ -24,6 +24,8 @@ version and this file is removed.
 **2026-11-10 — versions 3.3.1 through 3.3.28 are revoked as releases.** Their notes are
 folded below into one unreleased batch, pending the next release; the features and code
 stay in the tree. `CHANGELOG.md` ends its 3.3 line at v3.3.0.
+**2026-11-11:** the app version is 3.3.0 again and the git tags v3.3.1 through v3.3.28 were removed,
+so the dashboard header matches the last real release.
 
 ## Folded from CHANGELOG.md — former 3.3.1 … 3.3.28 (2026-11-02 … 2026-11-05)
 
