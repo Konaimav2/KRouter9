@@ -11,9 +11,10 @@ export default function SegmentedControl({
   className,
 }) {
   const sizes = {
-    sm: "h-7 text-xs",
-    md: "h-9 text-sm",
-    lg: "h-11 text-base",
+    // Every size keeps a 44px touch target; sm/md differ in type size only.
+    sm: "min-h-11 text-xs",
+    md: "min-h-11 text-sm",
+    lg: "min-h-12 text-base",
   };
 
   return (

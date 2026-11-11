@@ -44,7 +44,7 @@ export default function ProviderInfoCard({ config, provider, title = "Provider I
             href={signupUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+            className="text-xs text-primary hover:underline inline-flex min-h-11 items-center gap-1"
           >
             <Icon name="open_in_new" className="text-sm" />
             Get API Key
@@ -60,7 +60,7 @@ export default function ProviderInfoCard({ config, provider, title = "Provider I
                 href={r.raw}
                 target="_blank"
                 rel="noopener noreferrer"
-                className={`text-sm text-primary hover:underline truncate ${r.mono ? "font-mono" : ""}`}
+                className={`inline-flex min-h-11 items-center text-sm text-primary hover:underline truncate ${r.mono ? "font-mono" : ""}`}
               >
                 {r.value}
               </a>

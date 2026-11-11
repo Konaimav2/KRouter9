@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/shared/components";
 import Icon from "@/shared/components/Icon";
 import ProviderIcon from "@/shared/components/ProviderIcon";
+import LoadFailedState from "@/shared/components/LoadFailedState";
 import { AI_PROVIDERS, getProvidersByKind } from "@/shared/constants/providers";
 
 function getEffectiveStatus(conn) {
@@ -75,12 +76,23 @@ export default function WebProvidersPage() {
   const router = useRouter();
   const [connections, setConnections] = useState([]);
   const [combos, setCombos] = useState([]);
+  // A failed load must not render every provider as "No connections".
+  const [loadError, setLoadError] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const fetchAll = async () => {
     try {
       const [connsRes, combosRes] = await Promise.all([fetch("/api/providers?mode=full", { cache: "no-store" }), fetch("/api/combos", { cache: "no-store" })]);
-      if (connsRes.ok) setConnections((await connsRes.json()).connections || []);
-      if (combosRes.ok) setCombos((await combosRes.json()).combos || []);
-    } catch { /* noop */ }
+      if (!connsRes.ok || !combosRes.ok) throw new Error(`Web providers load failed (HTTP ${connsRes.ok ? combosRes.status : connsRes.status})`);
+      setConnections((await connsRes.json()).connections || []);
+      setCombos((await combosRes.json()).combos || []);
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
+    }
+  };
+  const retryLoad = async () => {
+    setRetrying(true);
+    try { await fetchAll(); } finally { setRetrying(false); }
   };
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchAll(); }, []);
@@ -94,5 +106,8 @@ export default function WebProvidersPage() {
     if (res.ok) { const created = await res.json(); router.push(`/dashboard/media-providers/combo/${created.id}`); }
     else { const err = await res.json(); alert(err.error || "Failed to create combo"); }
   };
+  if (loadError) {
+    return <div className="flex flex-col gap-6"><LoadFailedState title="Couldn't load web providers" message="Connections or combos could not be loaded, so provider status is hidden rather than shown as empty. Retry to load them again." onRetry={retryLoad} retrying={retrying} /></div>;
+  }
   return <div className="flex flex-col gap-6"><Section number="01" title="Web Search" kind="webSearch" providers={searchProviders} connections={connections} combos={combos.filter((c) => c.kind === "webSearch")} onCreateCombo={() => handleCreateCombo("webSearch")} /><Section number="02" title="Web Fetch" kind="webFetch" providers={fetchProviders} connections={connections} combos={combos.filter((c) => c.kind === "webFetch")} onCreateCombo={() => handleCreateCombo("webFetch")} /></div>;
 }

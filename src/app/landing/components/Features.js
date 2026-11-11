@@ -3,7 +3,7 @@ import Icon from "@/shared/components/Icon";
 
 const FEATURES = [
   { 
-    icon: "link", 
+    icon: "api", 
     title: "Unified Endpoint", 
     desc: "Access all providers via a single standard API URL.", 
     colors: {
@@ -27,7 +27,7 @@ const FEATURES = [
     }
   },
   { 
-    icon: "shield_with_heart", 
+    icon: "shield_lock", 
     title: "Model Fallback", 
     desc: "Automatically switch providers on failure or high latency.", 
     colors: {
@@ -39,7 +39,7 @@ const FEATURES = [
     }
   },
   { 
-    icon: "monitoring", 
+    icon: "query_stats", 
     title: "Usage Tracking", 
     desc: "Detailed analytics and cost monitoring across all models.", 
     colors: {
@@ -63,7 +63,7 @@ const FEATURES = [
     }
   },
   { 
-    icon: "cloud_sync", 
+    icon: "cloud_upload", 
     title: "Cloud Sync", 
     desc: "Sync your configurations across devices instantly.", 
     colors: {
@@ -87,7 +87,7 @@ const FEATURES = [
     }
   },
   { 
-    icon: "dashboard", 
+    icon: "grid_view", 
     title: "Dashboard", 
     desc: "Visual dashboard for real-time traffic analysis.", 
     colors: {

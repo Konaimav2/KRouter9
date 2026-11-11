@@ -7,6 +7,7 @@ import Button from "@/shared/components/Button";
 import Drawer from "@/shared/components/Drawer";
 import Pagination from "@/shared/components/Pagination";
 import { cn } from "@/shared/utils/cn";
+import LoadFailedState from "@/shared/components/LoadFailedState";
 import { AI_PROVIDERS, getProviderByAlias } from "@/shared/constants/providers";
 import { deriveListFields } from "./usageMeta.js";
 
@@ -109,6 +110,8 @@ export default function RequestDetailsTab() {
     totalPages: 0
   });
   const [loading, setLoading] = useState(false);
+  // A failed load is distinct from "No request details found".
+  const [detailsError, setDetailsError] = useState(false);
   const [selectedDetail, setSelectedDetail] = useState(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [providers, setProviders] = useState([]);
@@ -144,13 +147,16 @@ export default function RequestDetailsTab() {
       if (filters.endDate) params.append("endDate", filters.endDate);
 
       const res = await fetch(`/api/usage/request-details?${params}`);
+      if (!res.ok) throw new Error(`Request details failed (HTTP ${res.status})`);
       const data = await res.json();
 
       setDetails(data.details || []);
       setAllTime(data.allTime || null);
       setPagination(prev => ({ ...prev, ...data.pagination }));
+      setDetailsError(false);
     } catch (error) {
       console.error("Failed to fetch request details:", error);
+      setDetailsError(true);
     } finally {
       setLoading(false);
     }
@@ -221,7 +227,7 @@ export default function RequestDetailsTab() {
               value={filters.provider}
               onChange={(e) => setFilters({ ...filters, provider: e.target.value })}
               className={cn(
-                "h-9 px-3 rounded-lg border border-black/10 dark:border-white/10 bg-surface",
+                "h-11 px-3 rounded-lg border border-black/10 dark:border-white/10 bg-surface",
                 "text-sm text-text-main focus:outline-none focus:ring-2 focus:ring-primary/20",
                 "w-full min-w-0 cursor-pointer"
               )}
@@ -244,7 +250,7 @@ export default function RequestDetailsTab() {
               value={filters.startDate}
               onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
               className={cn(
-                "h-9 px-3 rounded-lg border border-black/10 dark:border-white/10 bg-surface",
+                "h-11 px-3 rounded-lg border border-black/10 dark:border-white/10 bg-surface",
                 "w-full min-w-0 text-sm text-text-main focus:outline-none focus:ring-2 focus:ring-primary/20"
               )}
             />
@@ -258,7 +264,7 @@ export default function RequestDetailsTab() {
               value={filters.endDate}
               onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
               className={cn(
-                "h-9 px-3 rounded-lg border border-black/10 dark:border-white/10 bg-surface",
+                "h-11 px-3 rounded-lg border border-black/10 dark:border-white/10 bg-surface",
                 "w-full min-w-0 text-sm text-text-main focus:outline-none focus:ring-2 focus:ring-primary/20"
               )}
             />
@@ -307,6 +313,16 @@ export default function RequestDetailsTab() {
                     <td colSpan="15" className="h-12 animate-pulse border-b border-black/5 bg-[var(--color-surface-strong)] dark:border-white/5" />
                   </tr>
                 ))
+              ) : detailsError ? (
+                <tr>
+                  <td colSpan="15" className="p-4">
+                    <LoadFailedState
+                      title="Request details unavailable"
+                      message="Request details could not be loaded. Retry to load them again."
+                      onRetry={fetchDetails}
+                    />
+                  </td>
+                </tr>
               ) : details.length === 0 ? (
                 <tr>
                   <td colSpan="15" className="p-8 text-center text-text-muted">

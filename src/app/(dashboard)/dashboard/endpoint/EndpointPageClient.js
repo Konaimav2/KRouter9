@@ -864,7 +864,8 @@ export default function APIPageClient({ machineId }) {
 
   if (loading) {
     return (
-      <div className="flex min-w-0 flex-col gap-8" aria-label="Loading endpoint configuration">
+      <div className="flex min-w-0 flex-col gap-8" role="status" aria-busy="true">
+        <span className="sr-only">Loading endpoint configuration</span>
         <CardSkeleton />
         <CardSkeleton />
       </div>
@@ -881,7 +882,7 @@ export default function APIPageClient({ machineId }) {
       : a.name.localeCompare(b.name));
 
   return (
-    <main className="min-w-0 max-w-full space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-w-0 max-w-full space-y-6 px-4 py-6 sm:px-6 lg:px-8">
       <header className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="flex items-center gap-2"><h1 className="text-[length:var(--text-xl)] font-semibold tracking-[-0.02em]">Endpoint &amp; API keys</h1><span className="text-xs text-text-muted">Local mode</span></div>
@@ -893,7 +894,7 @@ export default function APIPageClient({ machineId }) {
       <section className="rounded-[var(--radius-field)] border border-border bg-surface" aria-labelledby="security-title">
         <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div><h2 id="security-title" className="text-sm font-semibold">Security</h2><p className="mt-1 text-xs text-text-muted">API key required <span className={requireApiKey ? "text-success" : "text-danger"}>{requireApiKey ? "Enabled" : "Not required"}</span> · Remote exposure {tunnelEnabled || tsEnabled ? "on" : "off"}</p></div>
-          <a href="/dashboard/profile" className="text-sm text-primary hover:underline">Open settings</a>
+          <a href="/dashboard/profile" className="inline-flex min-h-11 items-center self-start text-sm text-primary hover:underline sm:self-auto">Open settings</a>
         </div>
         {(isLoginUnsafe || (isRemoteHost && !requireApiKey)) && <div className="border-t border-border p-3"><SecurityWarning message={isLoginUnsafe ? unsafeReason : "Remote API access is open without a required key."} action={{ label: "Open settings", href: "/dashboard/profile" }} /></div>}
       </section>
@@ -913,21 +914,21 @@ export default function APIPageClient({ machineId }) {
         <header className="flex flex-col gap-3 border-b border-border px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
           <div><h2 id="keys-title" className="font-semibold">API keys <span className="font-normal text-text-muted">({filteredKeys.length})</span></h2><p className="text-xs text-text-muted">Named credentials and routing policy.</p></div>
           <div className="flex flex-wrap items-center gap-2">
-            <label className="relative min-w-[13rem] flex-1"><Search aria-hidden="true" className="absolute left-3 top-2.5 size-4 text-text-muted"/><span className="sr-only">Search keys</span><input type="search" value={keyQuery} onChange={(event) => setKeyQuery(event.target.value)} className="h-9 w-full rounded-[var(--radius-control)] border border-border-strong bg-surface pl-9 pr-3 text-sm" placeholder="Search keys" /></label>
-            <label><span className="sr-only">Status</span><select value={keyStatus} onChange={(event) => setKeyStatus(event.target.value)} className="h-9 rounded-[var(--radius-control)] border border-border-strong bg-surface px-3 text-sm"><option value="all">All statuses</option><option value="active">Active</option><option value="paused">Paused</option></select></label>
-            <label><span className="sr-only">Sort keys</span><select value={keySort} onChange={(event) => setKeySort(event.target.value)} className="h-9 rounded-[var(--radius-control)] border border-border-strong bg-surface px-3 text-sm"><option value="name">Name</option><option value="created">Newest</option></select></label>
-            <label className="flex min-h-9 items-center gap-2 px-2 text-sm"><Toggle size="sm" checked={requireApiKey} ariaLabel="Require API key" onChange={() => handleRequireApiKey(!requireApiKey)} />Require API key</label>
+            <label className="relative min-w-[13rem] flex-1"><Search aria-hidden="true" className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-muted"/><span className="sr-only">Search keys</span><input type="search" value={keyQuery} onChange={(event) => setKeyQuery(event.target.value)} className="h-11 w-full rounded-[var(--radius-control)] border border-border-strong bg-surface pl-9 pr-3 text-sm" placeholder="Search keys" /></label>
+            <label><span className="sr-only">Status</span><select value={keyStatus} onChange={(event) => setKeyStatus(event.target.value)} className="h-11 rounded-[var(--radius-control)] border border-border-strong bg-surface px-3 text-sm"><option value="all">All statuses</option><option value="active">Active</option><option value="paused">Paused</option></select></label>
+            <label><span className="sr-only">Sort keys</span><select value={keySort} onChange={(event) => setKeySort(event.target.value)} className="h-11 rounded-[var(--radius-control)] border border-border-strong bg-surface px-3 text-sm"><option value="name">Name</option><option value="created">Newest</option></select></label>
+            <label className="flex min-h-11 items-center gap-2 px-2 text-sm"><Toggle size="sm" checked={requireApiKey} ariaLabel="Require API key" onChange={() => handleRequireApiKey(!requireApiKey)} />Require API key</label>
           </div>
         </header>
         {revealError && <p className="border-b border-border px-4 py-2 text-sm text-danger" role="alert">{revealError}</p>}
-        <div className="hidden grid-cols-[minmax(9rem,1fr)_minmax(12rem,1.5fr)_minmax(8rem,1fr)_8rem_7rem_7rem] border-b border-border bg-surface-2 px-4 py-2 text-xs font-semibold text-text-muted md:grid"><span>Name</span><span>Key</span><span>Policy</span><span>Limits</span><span>Created</span><span>Status / actions</span></div>
-        {keysLoadError ? <div role="alert" className="flex flex-wrap items-center justify-between gap-3 px-4 py-6 text-sm text-danger"><span>{keysLoadError}</span><button type="button" className="font-semibold underline" onClick={() => { setLoading(true); fetchData(); }}>Retry</button></div> : !filteredKeys.length ? <div className="px-4 py-12 text-center"><KeyRound className="mx-auto size-7 text-text-muted"/><p className="mt-3 font-semibold">{keys.length ? "No keys match this search." : "No API keys yet"}</p><p className="mt-1 text-sm text-text-muted">{keys.length ? "Clear search or change the status filter." : "Create a named key before sending requests to /v1."}</p>{keys.length ? <button type="button" className="mt-3 text-sm text-primary hover:underline" onClick={() => { setKeyQuery(""); setKeyStatus("all"); }}>Clear search</button> : <Button className="mt-4" onClick={() => setShowAddModal(true)}>Create API key</Button>}</div> : filteredKeys.map((key) => <div key={key.id} className="grid min-w-0 gap-2 border-b border-border px-4 py-3 last:border-b-0 hover:bg-surface-hover md:grid-cols-[minmax(9rem,1fr)_minmax(12rem,1.5fr)_minmax(8rem,1fr)_8rem_7rem_7rem] md:items-center">
+        <div className="hidden grid-cols-[minmax(9rem,1fr)_minmax(12rem,1.5fr)_minmax(8rem,1fr)_8rem_6rem_9rem] border-b border-border bg-surface-2 px-4 py-2 text-xs font-semibold text-text-muted md:grid"><span>Name</span><span>Key</span><span>Policy</span><span>Limits</span><span>Created</span><span>Status / actions</span></div>
+        {keysLoadError ? <div role="alert" className="flex flex-wrap items-center justify-between gap-3 px-4 py-6 text-sm text-danger"><span>{keysLoadError}</span><button type="button" className="inline-flex min-h-11 min-w-11 items-center justify-center font-semibold underline" onClick={() => { setLoading(true); fetchData(); }}>Retry</button></div> : !filteredKeys.length ? <div className="px-4 py-12 text-center"><KeyRound className="mx-auto size-7 text-text-muted"/><p className="mt-3 font-semibold">{keys.length ? "No keys match this search." : "No API keys yet"}</p><p className="mt-1 text-sm text-text-muted">{keys.length ? "Clear search or change the status filter." : "Create a named key before sending requests to /v1."}</p>{keys.length ? <button type="button" className="mt-3 text-sm text-primary hover:underline" onClick={() => { setKeyQuery(""); setKeyStatus("all"); }}>Clear search</button> : <Button className="mt-4" onClick={() => setShowAddModal(true)}>Create API key</Button>}</div> : filteredKeys.map((key) => <div key={key.id} className="grid min-w-0 gap-2 border-b border-border px-4 py-3 last:border-b-0 hover:bg-surface-hover md:grid-cols-[minmax(9rem,1fr)_minmax(12rem,1.5fr)_minmax(8rem,1fr)_8rem_6rem_9rem] md:items-center">
           <div className="min-w-0"><p className="line-clamp-2 text-sm font-medium">{key.name}</p>{key.expiresAt && Date.parse(key.expiresAt) > expiryNow && Date.parse(key.expiresAt) - expiryNow < 24 * 60 * 60 * 1000 && <span className="text-xs text-warning">Expires within 24h</span>}</div>
-          <div className="flex min-w-0 items-center gap-1"><code className="min-w-0 truncate font-[var(--font-data)] text-xs text-text-muted" title={displayMask(key)}>{revealedKeys[key.id] || displayMask(key)}</code><button type="button" onClick={() => revealKey(key.id)} className="grid size-9 shrink-0 place-content-center rounded-[var(--radius-control)] hover:bg-surface-active" aria-label={revealedKeys[key.id] ? `Hide ${key.name} key` : `Show ${key.name} key`}>{revealedKeys[key.id] ? <EyeOff size={14}/> : <Eye size={14}/>}</button><button type="button" onClick={() => copyKeyViaReveal(key.id)} className="grid size-9 shrink-0 place-content-center rounded-[var(--radius-control)] text-primary hover:bg-surface-active" aria-label={`Copy ${key.name} key`}>{copied === key.id ? <Check size={14}/> : <Copy size={14}/>}</button></div>
+          <div className="flex min-w-0 items-center gap-1"><code className="min-w-0 truncate font-[var(--font-data)] text-xs text-text-muted" title={displayMask(key)}>{revealedKeys[key.id] || displayMask(key)}</code><button type="button" onClick={() => revealKey(key.id)} className="grid size-11 shrink-0 place-content-center rounded-[var(--radius-control)] hover:bg-surface-hover" aria-label={revealedKeys[key.id] ? `Hide ${key.name} key` : `Show ${key.name} key`}>{revealedKeys[key.id] ? <EyeOff size={14}/> : <Eye size={14}/>}</button><button type="button" onClick={() => copyKeyViaReveal(key.id)} className="grid size-11 shrink-0 place-content-center rounded-[var(--radius-control)] text-primary hover:bg-surface-hover" aria-label={`Copy ${key.name} key`}>{copied === key.id ? <Check size={14}/> : <Copy size={14}/>}</button></div>
           <div className="text-xs text-text-muted">{key.modelPolicy === "whitelist" ? `${parsePolicyCount(key.allowedModels)} allowed` : key.modelPolicy === "blacklist" ? `${parsePolicyCount(key.blockedModels)} blocked` : "All models"}</div>
           <div className="text-xs text-text-muted">{key.rpmLimit > 0 ? `${key.rpmLimit} RPM` : "Unlimited"}</div>
           <div className="font-[var(--font-data)] text-xs text-text-muted">{new Date(key.createdAt).toLocaleDateString()}</div>
-          <div className="flex items-center justify-between gap-1 md:justify-start"><Toggle size="sm" checked={key.isActive ?? true} onChange={(checked) => handleToggleKey(key.id, checked)} title={key.isActive ? "Pause key" : "Resume key"}/><button type="button" onClick={() => setManageKey(key)} className="grid size-9 place-content-center rounded-[var(--radius-control)] text-primary hover:bg-surface-active" aria-label={`Manage ${key.name}`}><Settings size={16}/></button><button type="button" onClick={() => handleDeleteKey(key.id)} className="grid size-9 place-content-center rounded-[var(--radius-control)] text-danger hover:bg-danger-wash" aria-label={`Delete ${key.name}`}><Trash2 size={16}/></button></div>
+          <div className="flex items-center justify-between gap-1 md:justify-start"><Toggle size="sm" checked={key.isActive ?? true} onChange={(checked) => handleToggleKey(key.id, checked)} title={key.isActive ? "Pause key" : "Resume key"}/><button type="button" onClick={() => setManageKey(key)} className="grid size-11 place-content-center rounded-[var(--radius-control)] text-primary hover:bg-surface-hover" aria-label={`Manage ${key.name}`}><Settings size={16}/></button><button type="button" onClick={() => handleDeleteKey(key.id)} className="grid size-11 place-content-center rounded-[var(--radius-control)] text-danger hover:bg-danger-wash" aria-label={`Delete ${key.name}`}><Trash2 size={16}/></button></div>
         </div>)}
       </section>
 
@@ -1088,7 +1089,7 @@ export default function APIPageClient({ machineId }) {
 
           <div className="grid grid-cols-2 gap-3">
             {TUNNEL_BENEFITS.map((benefit) => (
-              <div key={benefit.title} className="flex flex-col items-center text-center p-3 rounded-lg bg-sidebar/50">
+              <div key={benefit.title} className="flex flex-col items-center text-center p-3 rounded-lg bg-surface-2">
                 <ShieldCheck size={20} className="mb-1 text-[var(--color-primary)]"/>
                 <p className="text-xs font-semibold">{benefit.title}</p>
                 <p className="text-xs text-text-muted">{benefit.desc}</p>
@@ -1220,7 +1221,7 @@ export default function APIPageClient({ machineId }) {
         message={confirmState?.message}
         variant="danger"
       />
-    </main>
+    </div>
   );
 }
 

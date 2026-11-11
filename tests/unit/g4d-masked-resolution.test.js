@@ -93,12 +93,14 @@ const MEDIA_CARDS = [
 ];
 
 describe("g4f consumer-level masked resolution (each consumer)", () => {
-  it.each(MEDIA_CARDS)("%s resolves via pickDefaultKeyId + revealKeyById in useEffect", (file) => {
+  // Superseded by ui-fix Wave B (owner decision 2026-11-10): consumers pick
+  // the default id but never reveal on mount; the raw key resolves at click
+  // time through useOnDemandKey (-> revealKeyById, guarded endpoint).
+  it.each(MEDIA_CARDS)("%s picks via pickDefaultKeyId and resolves only on demand", (file) => {
     const s = read(file);
     expect(s).toMatch(/pickDefaultKeyId/);
-    expect(s).toMatch(/revealKeyById/);
-    // Reveal URL must be the guarded single-record endpoint with confirm.
-    expect(s).toMatch(/revealKeyById|reveal\?confirm=true/);
+    expect(s).toMatch(/useOnDemandKey/);
+    expect(s).not.toMatch(/revealKeyById/);
   });
 
   it.each(MEDIA_CARDS)("%s catch sets key error state, never empty swallow", (file) => {
@@ -107,9 +109,10 @@ describe("g4f consumer-level masked resolution (each consumer)", () => {
     expect(s).not.toMatch(/\.catch\(\(\)\s*=>\s*\{\}\)/);
   });
 
-  it.each(MEDIA_CARDS)("%s gates Run via isKeyActionBlocked", (file) => {
+  it.each(MEDIA_CARDS)("%s gates Run via isRunBlocked (never reveal state)", (file) => {
     const s = read(file);
-    expect(s).toMatch(/isKeyActionBlocked/);
+    expect(s).toMatch(/isRunBlocked/);
+    expect(s).not.toMatch(/isKeyActionBlocked/);
   });
 
   it.each(MEDIA_CARDS)("%s never reads raw .key from the masked list payload", (file) => {
@@ -126,20 +129,22 @@ describe("g4f consumer-level masked resolution (each consumer)", () => {
     expect(s).toMatch(/keyError/);
   });
 
-  it("media combo [id] page resolves via pickDefaultKeyId + reveal + blocked gating", () => {
+  it("media combo [id] page resolves via pickDefaultKeyId + on-demand reveal + blocked gating", () => {
     const s = read("src/app/(dashboard)/dashboard/media-providers/combo/[id]/page.js");
     expect(s).toMatch(/pickDefaultKeyId/);
-    expect(s).toMatch(/revealKeyById/);
-    expect(s).toMatch(/isKeyActionBlocked/);
+    expect(s).toMatch(/useOnDemandKey/);
+    expect(s).not.toMatch(/revealKeyById/);
+    expect(s).toMatch(/isRunBlocked/);
     expect(s).toMatch(/setKeyError/);
     expect(s).not.toMatch(/\.find\([^)]*\)\?\.key/);
   });
 
-  it("MitmServerCard offers id-options, resolves via reveal, gates Start, no silent sk_krouter9 fallback", () => {
+  it("MitmServerCard offers id-options, resolves on demand, gates Start, no silent sk_krouter9 fallback", () => {
     const s = read("src/app/(dashboard)/dashboard/cli-tools/components/MitmServerCard.js");
     expect(s).toMatch(/pickDefaultKeyId/);
-    expect(s).toMatch(/revealKeyById/);
-    expect(s).toMatch(/isKeyActionBlocked/);
+    expect(s).toMatch(/useOnDemandKey/);
+    expect(s).not.toMatch(/revealKeyById/);
+    expect(s).toMatch(/isRunBlocked/);
     expect(s).toMatch(/role="alert"/);
     // Id-based option values carry ids, raw secrets never land in option values.
     expect(s).toMatch(/value=\{[^}]*\.id[^}]*\}/);

@@ -76,7 +76,8 @@ describe("Token Saver per-stage evidence contract (FR-4)", () => {
     // The savings read is gated on the status probe, so a down service is an
     // error state without a guaranteed-500 request from the browser.
     expect(UI).toContain("if (headroomStatus.loading || !headroomStatus.running) return undefined;");
-    expect(UI).toContain("}, [headroomStatus.loading, headroomStatus.running]);");
+    // G1: statsRetry re-runs the gated read on the "stats unavailable" Retry.
+    expect(UI).toContain("}, [headroomStatus.loading, headroomStatus.running, statsRetry]);");
     expect(UI).toContain("setPxpipeSavings({ error: true })");
 
     // Output compression keeps the qualifier even when unavailable

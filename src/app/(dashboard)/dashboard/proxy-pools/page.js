@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { Button, CardSkeleton, Input, MaskedProxyValue, Modal, Toggle, ConfirmModal } from "@/shared/components";
 import Icon from "@/shared/components/Icon";
+import LoadFailedState from "@/shared/components/LoadFailedState";
 import { useNotificationStore } from "@/store/notificationStore";
 import { redactSensitiveText } from "@/lib/proxyMask.js";
 import { FREE_PROVIDERS } from "@/shared/constants/providers";
@@ -28,6 +29,12 @@ function normalizeFormData(data = {}, isEdit = false) {
 export default function ProxyPoolsPage() {
   const [proxyPools, setProxyPools] = useState([]);
   const [loading, setLoading] = useState(true);
+  // A failed load is its own state: never fall through to the empty list.
+  const [loadError, setLoadError] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  // Settings only feed the free-lane binding notes; a failure there warns
+  // inline and never hides the pool list.
+  const [settingsLoadFailed, setSettingsLoadFailed] = useState(false);
   const [showFormModal, setShowFormModal] = useState(false);
   const [showBatchImportModal, setShowBatchImportModal] = useState(false);
   const [showVercelModal, setShowVercelModal] = useState(false);
@@ -69,15 +76,17 @@ export default function ProxyPoolsPage() {
     try {
       const [res, settingsRes] = await Promise.all([
         fetch("/api/proxy-pools?includeUsage=true", { cache: "no-store" }),
-        fetch("/api/settings", { cache: "no-store" }),
+        fetch("/api/settings", { cache: "no-store" }).catch(() => null),
       ]);
+      if (!res.ok) throw new Error(`Proxy pools load failed (HTTP ${res.status})`);
       const data = await res.json();
-      if (res.ok) {
-        setProxyPools(data.proxyPools || []);
-      }
+      setProxyPools(data.proxyPools || []);
+      setLoadError(false);
       // Free-lane bindings live in settings.providerStrategies (no-auth providers have no
       // connection row), so surface them here where pools are managed.
-      const settings = settingsRes.ok ? await settingsRes.json() : {};
+      const settings = settingsRes?.ok ? await settingsRes.json().catch(() => null) : null;
+      setSettingsLoadFailed(!settings);
+      if (!settings) return;
       const strategies = settings.providerStrategies || {};
       const pools = {};
       const rotation = [];
@@ -93,10 +102,20 @@ export default function ProxyPoolsPage() {
       setFreeLaneBindings({ pools, rotation });
     } catch (error) {
       console.log("Error fetching proxy pools:", error);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const retryLoad = async () => {
+    setRetrying(true);
+    try {
+      await fetchProxyPools();
+    } finally {
+      setRetrying(false);
+    }
+  };
 
   // Initial API synchronization intentionally updates local view state.
   useEffect(() => {
@@ -661,9 +680,9 @@ export default function ProxyPoolsPage() {
         <div className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <span>01 Proxy routes</span>
-            <span className="data-text">Total {proxyPools.length} · Active {activeCount}</span>
+            <span className="data-text">{loadError ? "Not loaded" : `Total ${proxyPools.length} · Active ${activeCount}`}</span>
           </div>
-          {proxyPools.length > 0 && (
+          {!loadError && proxyPools.length > 0 && (
             <label className="flex min-h-11 cursor-pointer items-center gap-2 text-xs text-text-muted">
               <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="size-4 border-border" />
               {allSelected ? "Unselect all" : "Select all"}
@@ -688,7 +707,22 @@ export default function ProxyPoolsPage() {
           </div>
         )}
 
-        {proxyPools.length === 0 ? (
+        {!loadError && settingsLoadFailed && (
+          <div data-testid="secondary-load-warning" role="status" className="border-b border-[var(--color-warning)] bg-[var(--color-warning-wash)] px-3 py-2 text-xs text-[var(--color-text)]">
+            Couldn&apos;t load settings, so free-lane bindings are not shown. The pool list below is current.
+          </div>
+        )}
+
+        {loadError ? (
+          <div className="p-3">
+            <LoadFailedState
+              title="Couldn't load proxy pools"
+              message="The proxy pool list could not be loaded, so nothing below reflects saved pools. Retry to load them again."
+              onRetry={retryLoad}
+              retrying={retrying}
+            />
+          </div>
+        ) : proxyPools.length === 0 ? (
           <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] flex flex-wrap items-center justify-between gap-3 px-3 py-5">
             <div><p className="font-medium">No proxy pool entries yet</p><p className="text-sm text-text-muted">Create a proxy pool entry, then assign it to connections.</p></div>
             <Button icon="add" onClick={openCreateModal}>Add Proxy Pool</Button>
@@ -699,7 +733,7 @@ export default function ProxyPoolsPage() {
           const statusGlyph = status === "active" ? "●" : status === "error" ? "■" : "○";
           return (
             <div key={pool.id} className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] grid grid-cols-[auto_2rem_minmax(0,1fr)] items-start gap-3 px-3 py-3 sm:grid-cols-[auto_2rem_minmax(0,1fr)_auto]">
-              <input type="checkbox" checked={selectedIds.includes(pool.id)} onChange={() => toggleSelect(pool.id)} className="mt-1 size-4 border-border" aria-label={`Select ${pool.name}`} />
+              <label className="-ml-3 -mt-3 flex min-h-11 w-11 cursor-pointer items-center justify-center self-start"><input type="checkbox" checked={selectedIds.includes(pool.id)} onChange={() => toggleSelect(pool.id)} className="size-4 border-border" aria-label={`Select ${pool.name}`} /></label>
               <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">{String(index + 1).padStart(2, "0")}</span>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1"><p className="truncate text-sm font-medium">{pool.name}</p><span className={`inline-flex items-center gap-1 text-xs ${statusTone}`}><span aria-hidden="true">{statusGlyph}</span>{status}</span><span className={pool.isActive ? "text-success text-xs" : "text-text-muted text-xs"}>{pool.isActive ? "● Active" : "Ⅱ Inactive"}</span></div>

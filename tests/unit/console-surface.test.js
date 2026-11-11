@@ -54,6 +54,7 @@ const moduleMocks = {
   "@/shared/constants/config": { CONSOLE_LOG_CONFIG: { maxLines: 500 } },
   "./tokenRefreshSpam": { filterTokenRefreshSpam },
   "@/lib/proxyMask.js": { redactSensitiveText },
+  "@/shared/components/LoadFailedState": () => null,
 };
 
 const clientModule = { exports: {} };

@@ -3,7 +3,7 @@ import Icon from "@/shared/components/Icon";
 
 export default function HowItWorks() {
   return (
-    <section className="py-24 border-y border-[#3a2f27] bg-[#23180f]/30" id="how-it-works">
+    <section className="py-24 border-y border-[#3a2f27] bg-[#1b1510] text-white" id="how-it-works">
       <div className="max-w-7xl mx-auto px-6">
         <div className="mb-16">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">How KRouter9 Works</h2>

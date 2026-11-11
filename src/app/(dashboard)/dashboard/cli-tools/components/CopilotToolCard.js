@@ -7,6 +7,7 @@ import Image from "next/image";
 import BaseUrlSelect from "./BaseUrlSelect";
 import { rememberEndpoint } from "./cliEndpointPresets";
 import ApiKeySelect from "./ApiKeySelect";
+import { useCliApiKey } from "./useCliApiKey";
 import { matchKnownEndpoint } from "./cliEndpointMatch";
 
 export default function CopilotToolCard({ tool, isExpanded, onToggle, baseUrl, apiKeys, activeProviders, cloudEnabled, initialStatus, tunnelEnabled, tunnelPublicUrl, tailscaleEnabled, tailscaleUrl }) {
@@ -15,7 +16,8 @@ export default function CopilotToolCard({ tool, isExpanded, onToggle, baseUrl, a
   const [applying, setApplying] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [message, setMessage] = useState(null);
-  const [selectedApiKey, setSelectedApiKey] = useState("");
+  // Key id only; the raw key is revealed inside Apply / Copy handlers.
+  const apiKey = useCliApiKey({ apiKeys });
   const [customBaseUrl, setCustomBaseUrl] = useState("");
   const [modelAliases, setModelAliases] = useState({});
   const [showManualConfigModal, setShowManualConfigModal] = useState(false);
@@ -27,11 +29,6 @@ export default function CopilotToolCard({ tool, isExpanded, onToggle, baseUrl, a
     selectedModelsRef.current = selectedModels;
   }, [selectedModels]);
 
-  useEffect(() => {
-    if (apiKeys?.length > 0 && !selectedApiKey) {
-      setSelectedApiKey(apiKeys[0].key);
-    }
-  }, [apiKeys, selectedApiKey]);
 
   useEffect(() => {
     if (initialStatus) setStatus(initialStatus);
@@ -66,9 +63,9 @@ export default function CopilotToolCard({ tool, isExpanded, onToggle, baseUrl, a
 
   const saveModels = async (models) => {
     try {
-      const keyToUse = (selectedApiKey && selectedApiKey.trim())
-        ? selectedApiKey
-        : (!cloudEnabled ? "sk_krouter9" : selectedApiKey);
+      const resolved = await apiKey.resolve({ fallback: !cloudEnabled ? "sk_krouter9" : null, label: "apply", retry: () => saveModels(models) });
+      if (!resolved.ok) return;
+      const keyToUse = resolved.key;
       await fetch("/api/cli-tools/copilot-settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -116,9 +113,9 @@ export default function CopilotToolCard({ tool, isExpanded, onToggle, baseUrl, a
     setApplying(true);
     setMessage(null);
     try {
-      const keyToUse = (selectedApiKey && selectedApiKey.trim())
-        ? selectedApiKey
-        : (!cloudEnabled ? "sk_krouter9" : selectedApiKey);
+      const resolved = await apiKey.resolve({ fallback: !cloudEnabled ? "sk_krouter9" : null, label: "apply", retry: handleApply });
+      if (!resolved.ok) return;
+      const keyToUse = resolved.key;
 
       const res = await fetch("/api/cli-tools/copilot-settings", {
         method: "POST",
@@ -161,10 +158,9 @@ export default function CopilotToolCard({ tool, isExpanded, onToggle, baseUrl, a
     }
   };
 
-  const getManualConfigs = () => {
-    const keyToUse = (selectedApiKey && selectedApiKey.trim())
-      ? selectedApiKey
-      : (!cloudEnabled ? "sk_krouter9" : "<API_KEY_FROM_DASHBOARD>");
+  const manualFallbackKey = (!cloudEnabled ? "sk_krouter9" : "<API_KEY_FROM_DASHBOARD>");
+  // Preview shows the masked token; Copy passes the revealed key.
+  const getManualConfigs = (keyToUse = apiKey.display(manualFallbackKey)) => {
     const effectiveBaseUrl = getEffectiveBaseUrl();
     const modelsToShow = selectedModels.length > 0 ? selectedModels : ["provider/model-id"];
 
@@ -244,7 +240,7 @@ export default function CopilotToolCard({ tool, isExpanded, onToggle, baseUrl, a
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[8rem_auto_1fr_auto] sm:items-center sm:gap-2">
                   <span className="text-xs font-semibold text-text-main sm:text-right sm:text-sm">API Key</span>
                   <Icon name="arrow_forward" className="hidden text-text-muted text-[14px] sm:inline" />
-                  <ApiKeySelect value={selectedApiKey} onChange={setSelectedApiKey} apiKeys={apiKeys} cloudEnabled={cloudEnabled} />
+                  <ApiKeySelect {...apiKey.selectProps} apiKeys={apiKeys} cloudEnabled={cloudEnabled} />
                 </div>
 
                 {/* Models */}
@@ -259,7 +255,7 @@ export default function CopilotToolCard({ tool, isExpanded, onToggle, baseUrl, a
                         selectedModels.map((model) => (
                           <span key={model} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-black/5 dark:bg-white/5 text-text-muted border border-transparent hover:border-border">
                             {model}
-                            <button onClick={(e) => { e.stopPropagation(); removeModel(model); }} className="ml-0.5 hover:text-red-500">
+                            <button type="button" aria-label={`Remove ${model}`} onClick={(e) => { e.stopPropagation(); removeModel(model); }} className="ml-0.5 hover:text-red-500">
                               <Icon name="close" className="text-[12px]" />
                             </button>
                           </span>
@@ -325,6 +321,10 @@ export default function CopilotToolCard({ tool, isExpanded, onToggle, baseUrl, a
         onClose={() => setShowManualConfigModal(false)}
         title="GitHub Copilot - Manual Configuration"
         configs={getManualConfigs()}
+        resolveCopyContent={async (index) => {
+          const resolved = await apiKey.resolve({ fallback: manualFallbackKey, label: "copy" });
+          return resolved.ok ? getManualConfigs(resolved.key)[index]?.content : null;
+        }}
       />
     </Card>
   );

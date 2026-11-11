@@ -19,7 +19,7 @@ function CompatibleModelRow({ modelId, fullModel, copied, onCopy, onDeleteAlias,
     : undefined;
 
   return (
-    <div className={`flex items-center gap-3 p-3 rounded-lg border ${borderColor} hover:bg-sidebar/50`}>
+    <div className={`flex items-center gap-3 p-3 rounded-lg border ${borderColor} hover:bg-surface-2/60`}>
       <Icon
         name={testStatus === "ok" ? "check_circle" : testStatus === "error" ? "cancel" : "smart_toy"}
         size={16}
@@ -28,12 +28,14 @@ function CompatibleModelRow({ modelId, fullModel, copied, onCopy, onDeleteAlias,
       />
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium truncate">{modelId}</p>
-        <div className="flex items-center gap-1 mt-1">
-          <code className="text-xs text-text-muted font-mono bg-sidebar px-1.5 py-0.5 rounded">{fullModel}</code>
+        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1">
+          <code className="min-w-0 break-all rounded bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-text-muted">{fullModel}</code>
           <div className="relative group/btn">
             <button
+              type="button"
               onClick={() => onCopy(fullModel, `model-${modelId}`)}
-              className="p-0.5 hover:bg-sidebar rounded text-text-muted hover:text-primary"
+              aria-label={`Copy ${fullModel}`}
+              className="-my-2.5 inline-flex size-11 shrink-0 items-center justify-center rounded text-text-muted hover:bg-surface-2 hover:text-primary"
             >
               <Icon name={copied === `model-${modelId}` ? "check" : "content_copy"} size={14} />
             </button>
@@ -44,9 +46,11 @@ function CompatibleModelRow({ modelId, fullModel, copied, onCopy, onDeleteAlias,
           {onTest && (
             <div className="relative group/btn">
               <button
+                type="button"
                 onClick={onTest}
                 disabled={isTesting}
-                className="p-0.5 hover:bg-sidebar rounded text-text-muted hover:text-primary transition-colors"
+                aria-label={`Test ${fullModel}`}
+                className="-my-2.5 inline-flex size-11 shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:bg-surface-2 hover:text-primary"
               >
                 <Icon name={isTesting ? "progress_activity" : "science"} size={14} className={isTesting ? "animate-spin" : ""} />
               </button>
@@ -58,8 +62,10 @@ function CompatibleModelRow({ modelId, fullModel, copied, onCopy, onDeleteAlias,
         </div>
       </div>
       <button
+        type="button"
         onClick={onDeleteAlias}
-        className="p-1 hover:bg-red-50 rounded text-red-500"
+        aria-label={`Remove ${fullModel}`}
+        className="inline-flex size-11 shrink-0 items-center justify-center rounded text-red-500 hover:bg-red-500/10"
         title="Remove model"
       >
         <Icon name="delete" size={14} />
@@ -174,7 +180,7 @@ export default function CompatibleModelsSection({ providerStorageAlias, provider
             onChange={(e) => setNewModel(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleAdd()}
             placeholder={isAnthropic ? "claude-3-opus-20240229" : "gpt-4o"}
-            className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+            className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary"
           />
         </div>
         <Button size="sm" icon="add" onClick={handleAdd} disabled={!newModel.trim() || adding}>

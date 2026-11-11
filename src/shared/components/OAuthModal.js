@@ -708,7 +708,7 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
             {authMode === "browser" && (
               <>
                 {step === "waiting" && (
-                  <div className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg bg-sidebar/50">
+                  <div className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg bg-surface-2">
                     <Icon name="progress_activity" className="text-base text-primary animate-spin" />
                     <span className="text-sm">Waiting for browser authorization…</span>
                   </div>
@@ -763,7 +763,7 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         {(step === "waiting" || step === "input") && !isDeviceCode && !PROXY_OAUTH_PROVIDERS.has(provider) && (
           <>
             {/* Option A: Auto via popup */}
-            <div className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg bg-sidebar/50">
+            <div className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg bg-surface-2">
               <Icon name="progress_activity" className="text-base text-primary animate-spin" />
               <span className="text-sm">
                 {isXaiProvider ? "Waiting for Grok Build OAuth…" : "Waiting for popup authorization…"}
@@ -829,7 +829,7 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
               <p className="text-sm text-text-muted mb-4">
                 Visit the login URL below and authorize:
               </p>
-              <div className="bg-sidebar p-4 rounded-lg mb-4">
+              <div className="bg-surface-2 p-4 rounded-lg mb-4">
                 <p className="text-xs text-text-muted mb-1">Login URL</p>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 text-sm break-all">{deviceLoginUrl}</code>

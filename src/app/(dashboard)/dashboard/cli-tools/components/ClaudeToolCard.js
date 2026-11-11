@@ -7,6 +7,7 @@ import Image from "next/image";
 import BaseUrlSelect from "./BaseUrlSelect";
 import { rememberEndpoint } from "./cliEndpointPresets";
 import ApiKeySelect from "./ApiKeySelect";
+import { useCliApiKey } from "./useCliApiKey";
 import { matchKnownEndpoint } from "./cliEndpointMatch";
 
 const CLOUD_URL = process.env.NEXT_PUBLIC_CLOUD_URL;
@@ -46,7 +47,8 @@ export default function ClaudeToolCard({
   const [showInstallGuide, setShowInstallGuide] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [currentEditingAlias, setCurrentEditingAlias] = useState(null);
-  const [selectedApiKey, setSelectedApiKey] = useState("");
+  // Key id only; the raw key is revealed inside Apply / manual-config Copy.
+  const apiKey = useCliApiKey({ apiKeys });
   const [modelAliases, setModelAliases] = useState({});
   const [showManualConfigModal, setShowManualConfigModal] = useState(false);
   const [customBaseUrl, setCustomBaseUrl] = useState("");
@@ -66,12 +68,6 @@ export default function ClaudeToolCard({
   };
 
   const configStatus = getConfigStatus();
-
-  useEffect(() => {
-    if (apiKeys?.length > 0 && !selectedApiKey) {
-      setSelectedApiKey(apiKeys[0].key);
-    }
-  }, [apiKeys, selectedApiKey]);
 
   useEffect(() => {
     if (initialStatus) {
@@ -132,11 +128,8 @@ export default function ClaudeToolCard({
           }
         }
       });
-      // Restore key from settings.json; ApiKeySelect matches it against saved presets
-      const tokenFromFile = env.ANTHROPIC_AUTH_TOKEN;
-      if (tokenFromFile) {
-        setSelectedApiKey(tokenFromFile);
-      }
+      // The token already in settings.json is not copied into the picker; with
+      // no selection, Apply keeps it (see handleApplySettings).
     }
   }, [claudeStatus, apiKeys, tool.defaultModels, onModelMappingChange]);
 
@@ -170,10 +163,17 @@ export default function ClaudeToolCard({
     try {
       const env = { ANTHROPIC_BASE_URL: getEffectiveBaseUrl() };
 
-      // Get key from dropdown, fallback to first key or sk_krouter9 for localhost
-      const keyToUse = selectedApiKey?.trim()
-        || (apiKeys?.length > 0 ? apiKeys[0].key : null)
-        || (!cloudEnabled ? "sk_krouter9" : null);
+      // Selected key (revealed now). With no selection, a token already in
+      // settings.json is kept (the route merges env, so it is simply not
+      // sent); otherwise sk_krouter9 for localhost.
+      const hasFileToken = !!claudeStatus?.settings?.env?.ANTHROPIC_AUTH_TOKEN;
+      const resolved = await apiKey.resolve({
+        fallback: hasFileToken ? null : (!cloudEnabled ? "sk_krouter9" : null),
+        label: "apply",
+        retry: handleApplySettings,
+      });
+      if (!resolved.ok) return;
+      const keyToUse = resolved.key;
 
       if (keyToUse) {
         env.ANTHROPIC_AUTH_TOKEN = keyToUse;
@@ -196,7 +196,10 @@ export default function ClaudeToolCard({
         // Remember the endpoint so it stays selectable next time
         rememberEndpoint(getEffectiveBaseUrl(), { tunnelPublicUrl, tailscaleUrl });
         setMessage({ type: "success", text: "Settings applied successfully!" });
-        setClaudeStatus(prev => ({ ...prev, hasBackup: true, settings: { ...prev?.settings, env }, exaMcpEnabled }));
+        // Local copy keeps the masked token only, never the revealed key.
+        const shownEnv = { ...env };
+        if (keyToUse) shownEnv.ANTHROPIC_AUTH_TOKEN = apiKey.display(keyToUse);
+        setClaudeStatus(prev => ({ ...prev, hasBackup: true, settings: { ...prev?.settings, env: shownEnv }, exaMcpEnabled }));
       } else {
         setMessage({ type: "error", text: data.error || "Failed to apply settings" });
       }
@@ -216,7 +219,7 @@ export default function ClaudeToolCard({
       if (res.ok) {
         setMessage({ type: "success", text: "Settings reset successfully!" });
         tool.defaultModels.forEach((model) => onModelMappingChange(model.alias, model.defaultValue || ""));
-        setSelectedApiKey("");
+        apiKey.clear();
         setExaMcpEnabled(false);
         setMaxContextTokens("");
       } else {
@@ -239,10 +242,9 @@ export default function ClaudeToolCard({
   };
 
   // Generate settings.json content for manual copy
-  const getManualConfigs = () => {
-    const keyToUse = (selectedApiKey && selectedApiKey.trim())
-      ? selectedApiKey
-      : (!cloudEnabled ? "sk_krouter9" : "<API_KEY_FROM_DASHBOARD>");
+  const manualFallbackKey = !cloudEnabled ? "sk_krouter9" : "<API_KEY_FROM_DASHBOARD>";
+  // Preview shows the masked token; Copy passes the revealed key.
+  const getManualConfigs = (keyToUse = apiKey.display(manualFallbackKey)) => {
     const env = { ANTHROPIC_BASE_URL: getEffectiveBaseUrl(), ANTHROPIC_AUTH_TOKEN: keyToUse };
     tool.defaultModels.forEach((model) => {
       const targetModel = modelMappings[model.alias];
@@ -359,7 +361,7 @@ export default function ClaudeToolCard({
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[8rem_auto_1fr_auto] sm:items-center sm:gap-2">
                   <span className="text-xs font-semibold text-text-main sm:text-right sm:text-sm">API Key</span>
                   <Icon name="arrow_forward" className="hidden text-text-muted text-[14px] sm:inline" />
-                  <ApiKeySelect value={selectedApiKey} onChange={setSelectedApiKey} apiKeys={apiKeys} cloudEnabled={cloudEnabled} />
+                  <ApiKeySelect {...apiKey.selectProps} apiKeys={apiKeys} cloudEnabled={cloudEnabled} />
                 </div>
 
                 {/* Model Mappings */}
@@ -379,7 +381,7 @@ export default function ClaudeToolCard({
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[8rem_auto_1fr_auto] sm:items-center sm:gap-2">
                   <span className="text-xs font-semibold text-text-main sm:text-right sm:text-sm">Context window</span>
                   <Icon name="arrow_forward" className="hidden text-text-muted text-[14px] sm:inline" />
-                  <select value={maxContextTokens} onChange={(e) => setMaxContextTokens(e.target.value)} className="w-full min-w-0 px-2 py-2 bg-surface rounded border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary/50 sm:py-1.5">
+                  <select aria-label="Context window" value={maxContextTokens} onChange={(e) => setMaxContextTokens(e.target.value)} className="w-full min-w-0 px-2 py-2 bg-surface rounded border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary/50 sm:py-1.5">
                     {CONTEXT_OPTIONS.map((opt) => (
                       <option key={opt.label} value={opt.value}>{opt.label}</option>
                     ))}
@@ -445,6 +447,10 @@ export default function ClaudeToolCard({
         onClose={() => setShowManualConfigModal(false)}
         title="Claude CLI - Manual Configuration"
         configs={getManualConfigs()}
+        resolveCopyContent={async (index) => {
+          const resolved = await apiKey.resolve({ fallback: manualFallbackKey, label: "copy" });
+          return resolved.ok ? getManualConfigs(resolved.key)[index]?.content : null;
+        }}
       />
     </Card>
   );

@@ -17,11 +17,8 @@ import transformModulesCommonjs from "next/dist/compiled/babel/plugin-transform-
 const copiedTexts = [];
 const embedCalls = [];
 
-function compileCard(mocks) {
-  const path = new URL(
-    "../../src/app/(dashboard)/dashboard/media-providers/[kind]/[id]/components/EmbeddingExampleCard.js",
-    import.meta.url
-  );
+function compileCard(mocks, url = "../../src/app/(dashboard)/dashboard/media-providers/[kind]/[id]/components/EmbeddingExampleCard.js") {
+  const path = new URL(url, import.meta.url);
   const { code } = transformSync(readFileSync(path, "utf8"), {
     filename: path.pathname,
     presets: [[presetReact, { runtime: "classic" }]],
@@ -163,6 +160,11 @@ async function renderSettledEmpty() {
       }),
     },
     "@/lib/maskedKeyClient": masked,
+    // ui-fix Wave B: on-demand reveal hook, compiled with the same fake hooks.
+    "@/shared/hooks/useOnDemandKey": compileCard(
+      { react: h.react, "@/lib/maskedKeyClient": masked },
+      "../../src/shared/hooks/useOnDemandKey.js"
+    ),
     "./exampleShared": {
       __esModule: true,
       Row: ({ children, label }) =>

@@ -461,7 +461,7 @@ export default function ProvidersPage() {
   ];
 
   if (loading) {
-    return <div className="space-y-3" aria-label="Loading providers">{Array.from({ length: 8 }, (_, index) => <CardSkeleton key={index} />)}</div>;
+    return <div className="space-y-3" role="status" aria-busy="true"><span className="sr-only">Loading providers</span>{Array.from({ length: 8 }, (_, index) => <CardSkeleton key={index} />)}</div>;
   }
 
   return (
@@ -471,7 +471,7 @@ export default function ProvidersPage() {
           <div className="min-w-0"><h2 className="text-xl font-semibold">Connection scope</h2><p className="mt-1 max-w-3xl text-sm text-[var(--color-text-muted)]">Filter the live matrix, inspect evidence, then enter the exact provider lane that needs intervention.</p></div>
           <div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" icon="play_arrow" loading={testingMode === "all"} onClick={() => handleBatchTest("all")}>Test all lanes</Button><Button size="sm" icon="add" onClick={() => setShowAddCompatibleModal(true)}>Add endpoint</Button></div>
         </div>
-        <div className="grid gap-px border-y border-[var(--color-border)] bg-[var(--color-border)] sm:grid-cols-2 xl:grid-cols-6" aria-label="Health evidence filters">
+        <div className="grid gap-px border-y border-[var(--color-border)] bg-[var(--color-border)] sm:grid-cols-2 xl:grid-cols-6" role="group" aria-label="Health evidence filters">
           {healthFilters.map(([id, label, count, icon, type]) => {
             const active = id === "connected" || id === "disabled" ? statusFilter === id : errorClassFilter === id;
             return (
@@ -482,8 +482,8 @@ export default function ProvidersPage() {
           })}
         </div>
         <div className="grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto]">
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="min-h-10 rounded-[var(--radius-control)] border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm" aria-label="Filter providers by connection status">{STATUS_FILTER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
-          <select value={errorClassFilter} onChange={(event) => setErrorClassFilter(event.target.value)} className="min-h-10 rounded-[var(--radius-control)] border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm" aria-label="Filter providers by normalized error class"><option value="all">All error classes</option><option value="auth-invalid">Auth invalid</option><option value="refresh-invalid">Refresh invalid</option><option value="ratelimited">Rate limited</option><option value="network">Network</option></select>
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="min-h-11 rounded-[var(--radius-control)] border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm" aria-label="Filter providers by connection status">{STATUS_FILTER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
+          <select value={errorClassFilter} onChange={(event) => setErrorClassFilter(event.target.value)} className="min-h-11 rounded-[var(--radius-control)] border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-sm" aria-label="Filter providers by normalized error class"><option value="all">All error classes</option><option value="auth-invalid">Auth invalid</option><option value="refresh-invalid">Refresh invalid</option><option value="ratelimited">Rate limited</option><option value="network">Network</option></select>
           <ModelAvailabilityBadge />
         </div>
       </header>
@@ -527,7 +527,7 @@ export default function ProvidersPage() {
 
 function ProviderGroup({ label, count, onTest, testing, children }) {
   const [open, setOpen] = useState(true);
-  return <section ><header className="flex items-center justify-between gap-3 bg-[var(--color-surface-strong)] px-4 py-2"><button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} className="flex min-h-10 items-center gap-2 text-sm font-semibold"><Icon name={open ? "chevron_down" : "chevron_right"} /><span>{label}</span><span className="font-mono text-xs tabular-nums text-[var(--color-text-muted)]">{count}</span></button><Button size="sm" variant="ghost" icon="play_arrow" loading={testing} onClick={onTest}>Test</Button></header>{open && <div className="divide-y divide-[var(--color-border)]">{children}</div>}</section>;
+  return <section ><header className="flex items-center justify-between gap-3 bg-[var(--color-surface-strong)] px-4 py-2"><button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} className="flex min-h-11 items-center gap-2 text-sm font-semibold"><Icon name={open ? "chevron_down" : "chevron_right"} /><span>{label}</span><span className="font-mono text-xs tabular-nums text-[var(--color-text-muted)]">{count}</span></button><Button size="sm" variant="ghost" icon="play_arrow" loading={testing} onClick={onTest}>Test</Button></header>{open && <div className="divide-y divide-[var(--color-border)]">{children}</div>}</section>;
 }
 
 function StatusGlyph({ type = "unknown" }) {

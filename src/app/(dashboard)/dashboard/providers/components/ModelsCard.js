@@ -14,16 +14,16 @@ export function ModelRow({ model, fullModel, copied, onCopy, testStatus, isCusto
   const iconColor = testStatus === "ok" ? "#22c55e" : testStatus === "error" ? "#ef4444" : undefined;
 
   return (
-    <div className={`group px-3 py-2 rounded-lg border ${borderColor} hover:bg-sidebar/50`}>
-      <div className="flex items-center gap-2">
+    <div className={`group px-3 py-2 rounded-lg border ${borderColor} hover:bg-surface-2/60`}>
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
         <Icon name={testStatus === "ok" ? "check_circle" : testStatus === "error" ? "cancel" : "smart_toy"} size={16} style={iconColor ? { color: iconColor } : undefined} />
-        <div className="flex flex-col gap-1">
-          <code className="text-xs text-text-muted font-mono bg-sidebar px-1.5 py-0.5 rounded">{fullModel}</code>
-          {model.name && <span className="text-[9px] text-text-muted/70 italic pl-1">{model.name}</span>}
+        <div className="flex min-w-0 flex-col gap-1">
+          <code className="break-all rounded bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-text-muted">{fullModel}</code>
+          {model.name && <span className="text-[9px] text-text-muted italic pl-1">{model.name}</span>}
         </div>
         {onTest && (
           <div className="relative group/btn">
-            <button onClick={onTest} disabled={isTesting} className={`p-0.5 hover:bg-sidebar rounded text-text-muted hover:text-primary transition-opacity ${isTesting ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+            <button type="button" onClick={onTest} disabled={isTesting} aria-label={`Test ${fullModel}`} className={`-my-2.5 inline-flex size-11 shrink-0 items-center justify-center rounded text-text-muted transition-opacity hover:bg-surface-2 hover:text-primary ${isTesting ? "opacity-100" : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"}`}>
               <Icon name={isTesting ? "progress_activity" : "science"} size={14} className={isTesting ? "animate-spin" : ""} />
             </button>
             <span className="pointer-events-none absolute mt-1 top-5 left-1/2 -translate-x-1/2 text-[10px] text-text-muted whitespace-nowrap opacity-0 group-hover/btn:opacity-100 transition-opacity">
@@ -32,7 +32,7 @@ export function ModelRow({ model, fullModel, copied, onCopy, testStatus, isCusto
           </div>
         )}
         <div className="relative group/btn">
-          <button onClick={() => onCopy(fullModel, `model-${model.id}`)} className="p-0.5 hover:bg-sidebar rounded text-text-muted hover:text-primary">
+          <button type="button" onClick={() => onCopy(fullModel, `model-${model.id}`)} aria-label={`Copy ${fullModel}`} className="-my-2.5 inline-flex size-11 shrink-0 items-center justify-center rounded text-text-muted hover:bg-surface-2 hover:text-primary">
             <Icon name={copied === `model-${model.id}` ? "check" : "content_copy"} size={14} />
           </button>
           <span className="pointer-events-none absolute mt-1 top-5 left-1/2 -translate-x-1/2 text-[10px] text-text-muted whitespace-nowrap opacity-0 group-hover/btn:opacity-100 transition-opacity">
@@ -41,7 +41,7 @@ export function ModelRow({ model, fullModel, copied, onCopy, testStatus, isCusto
         </div>
         {isFree && <span className="text-[10px] font-bold text-green-500 bg-green-500/10 px-1.5 py-0.5 rounded">FREE</span>}
         {isCustom && (
-          <button onClick={onDeleteAlias} className="p-0.5 hover:bg-red-500/10 rounded text-text-muted hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity ml-auto" title="Remove custom model">
+          <button type="button" onClick={onDeleteAlias} aria-label={`Remove ${fullModel}`} className="ml-auto -my-2.5 inline-flex size-11 shrink-0 items-center justify-center rounded text-text-muted opacity-100 transition-opacity hover:bg-red-500/10 hover:text-red-500 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100" title="Remove custom model">
             <Icon name="close" size={14} />
           </button>
         )}
@@ -79,7 +79,7 @@ function AddCustomModelModal({ isOpen, onSave, onClose }) {
         <div>
           <label className="text-xs text-text-muted mb-1 block">Model ID</label>
           <input
-            className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+            className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary"
             value={modelId}
             onChange={(e) => setModelId(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSave()}
@@ -260,7 +260,7 @@ export default function ModelsCard({ providerId, kindFilter, providerAliasOverri
 
           <button
             onClick={() => setShowAddCustomModel(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-dashed border-black/15 dark:border-white/15 text-xs text-text-muted hover:text-primary hover:border-primary/40 transition-colors"
+            className="flex min-h-11 items-center gap-1.5 px-3 py-2 rounded-lg border border-dashed border-black/15 dark:border-white/15 text-xs text-text-muted hover:text-primary hover:border-primary/40 transition-colors"
           >
             <Icon name="add" size={14} />
             Add Model

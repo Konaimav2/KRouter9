@@ -11,7 +11,7 @@ export default function EndpointRow({ label, url, copyId, copied, onCopy, status
       <code className="min-w-0 truncate font-[var(--font-data)] text-xs text-text-muted" title={url}>{url}</code>
       <span className="text-xs text-text-muted">{access}</span>
       <div className="flex min-w-0 flex-wrap items-center gap-1">
-        <button type="button" disabled={disabled} onClick={() => onCopy(url, copyId)} className="flex min-h-9 items-center gap-2 rounded-[var(--radius-control)] px-2 text-xs text-primary hover:bg-surface-hover disabled:text-text-disabled disabled:hover:bg-transparent" aria-label={`Copy ${label} endpoint`}>{copied === copyId ? <Check size={15}/> : <Copy size={15}/>}Copy</button>
+        <button type="button" disabled={disabled} onClick={() => onCopy(url, copyId)} className="flex min-h-11 items-center gap-2 rounded-[var(--radius-control)] px-2 text-xs text-primary hover:bg-surface-hover disabled:text-text-disabled disabled:hover:bg-transparent" aria-label={`Copy ${label} endpoint`}>{copied === copyId ? <Check size={15}/> : <Copy size={15}/>}Copy</button>
         {actions}
       </div>
     </div>

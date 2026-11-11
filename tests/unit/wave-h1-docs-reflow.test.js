@@ -7,7 +7,7 @@ import { expect, it } from "vitest";
 it("allows docs branding and header actions to reflow on 390px screens", () => {
   const mod = { exports: {} };
   const code = transformSync(readFileSync(new URL("../../src/app/docs/page.js", import.meta.url), "utf8"), { presets: [[presetReact, { runtime: "classic" }]], plugins: [commonjs] }).code;
-  new Function("require", "module", "exports", "React", code)(() => ({ __esModule: true, default: () => null }), mod, mod.exports, React);
+  new Function("require", "module", "exports", "React", code)((id) => (id === "@/shared/utils/gatewayOrigin" ? { getGatewayOrigin: () => "http://gateway.test" } : { __esModule: true, default: () => null }), mod, mod.exports, React);
   const page = mod.exports.default();
   const header = React.Children.toArray(page.props.children).find(n => n.type === "header");
   const row = header.props.children;

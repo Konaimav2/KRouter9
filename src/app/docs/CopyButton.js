@@ -3,7 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import Icon from "@/shared/components/Icon";
 
-export default function CopyButton({ text, path, label = "Copy" }) {
+// tone="code": the button sits on a code surface (dark in both themes), so its
+// text uses the paired code token instead of the theme text colour.
+const TONES = {
+  default: "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]",
+  code: "text-[var(--color-code-muted)] hover:bg-[color-mix(in_srgb,var(--color-code-fg)_12%,transparent)] hover:text-[var(--color-code-fg)]",
+};
+
+export default function CopyButton({ text, path, label = "Copy", tone = "default" }) {
   const [state, setState] = useState("idle");
   const timerRef = useRef(null);
   useEffect(() => () => clearTimeout(timerRef.current), []);
@@ -20,5 +27,5 @@ export default function CopyButton({ text, path, label = "Copy" }) {
     }
   };
 
-  return <span className="inline-flex flex-col items-end gap-1"><button type="button" onClick={onCopy} aria-label={label} className="inline-flex min-h-9 items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--button-border)] px-2.5 text-xs text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]"><Icon name={state === "copied" ? "check" : "copy"} size={15}/>{state === "copied" ? "Copied" : label}</button><span className="sr-only" aria-live="polite">{state === "copied" ? "Copied" : state === "failed" ? "Copy failed — select manually" : ""}</span>{state === "failed" ? <span className="text-xs text-[var(--color-danger)]">Copy failed — select manually</span> : null}</span>;
+  return <span className="inline-flex flex-col items-end gap-1"><button type="button" onClick={onCopy} aria-label={label} className={`inline-flex min-h-11 items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--button-border)] px-2.5 text-xs ${TONES[tone] || TONES.default}`}><Icon name={state === "copied" ? "check" : "copy"} size={15}/>{state === "copied" ? "Copied" : label}</button><span className="sr-only" aria-live="polite">{state === "copied" ? "Copied" : state === "failed" ? "Copy failed — select manually" : ""}</span>{state === "failed" ? <span className="text-xs text-[var(--color-danger)]">Copy failed — select manually</span> : null}</span>;
 }

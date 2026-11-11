@@ -115,7 +115,7 @@ describe("usage overview behavior", () => {
       react: fakeReact,
       "next/link": ({ children }) => React.createElement("a", null, children),
       "next/navigation": navigation,
-      "@/shared/components/Badge": ({ children }) => React.createElement("span", null, children),
+      "@/shared/components/LoadFailedState": () => null, "@/shared/components/Badge": ({ children }) => React.createElement("span", null, children),
       "lucide-react": { CircleCheck: () => null, CircleX: () => null },
       "@/shared/constants/providers": { AI_PROVIDERS: {}, FREE_PROVIDERS: {} },
       "./OverviewCards": { __esModule: true, default: () => React.createElement("div", null, "cards") },
@@ -144,7 +144,7 @@ describe("usage overview behavior", () => {
       react: fakeReact,
       "next/link": ({ children }) => React.createElement("a", null, children),
       "next/navigation": navigation,
-      "@/shared/components/Badge": ({ children }) => React.createElement("span", null, children),
+      "@/shared/components/LoadFailedState": () => null, "@/shared/components/Badge": ({ children }) => React.createElement("span", null, children),
       "lucide-react": { CircleCheck: () => null, CircleX: () => null },
       "@/shared/constants/providers": { AI_PROVIDERS: {}, FREE_PROVIDERS: {} },
       "./OverviewCards": { __esModule: true, default: () => null },
@@ -154,8 +154,8 @@ describe("usage overview behavior", () => {
     }, fakeReact);
 
     const html = renderToStaticMarkup(UsageDashboard({ period: "today", mode: "tokens" }));
-    expect(html).toContain('class="text-[var(--success)]">← 12');
-    expect(html).toContain('class="text-[var(--danger)]">7 →');
+    expect(html).toContain('class="text-[var(--color-success)]">← 12');
+    expect(html).toContain('class="text-[var(--color-danger)]">7 →');
   });
 });
 
@@ -165,15 +165,15 @@ describe("usage logs and per-key surfaces", () => {
     const { default: UsageLogs } = compile("components/UsageLogs.js", {
       react: fakeReact,
       "lucide-react": { CircleCheck: () => null, CircleDashed: () => null, CircleX: () => null },
-      "@/shared/components/Toggle": () => null,
+      "@/shared/components/LoadFailedState": () => null, "@/shared/components/Toggle": () => null,
     }, fakeReact);
     const html = renderToStaticMarkup(UsageLogs());
 
     expect(html).toContain("Request logs");
     expect(html).toContain("Token In");
     expect(html).toContain("Token Out");
-    expect(html).toContain('font-mono text-[var(--success)]">← 12');
-    expect(html).toContain('font-mono text-[var(--danger)]">7 →');
+    expect(html).toContain('font-mono text-[var(--color-success)]">← 12');
+    expect(html).toContain('font-mono text-[var(--color-danger)]">7 →');
   });
 
   it("renders the dedicated per-key section and its directional token metrics", () => {

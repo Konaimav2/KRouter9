@@ -11,7 +11,7 @@ export default function SecurityWarning({ message, action }) {
       {action && (
         <a
           href={action.href}
-          className="text-xs font-medium underline shrink-0 hover:opacity-80"
+          className="inline-flex min-h-11 shrink-0 items-center self-center text-xs font-medium underline hover:opacity-80"
           onClick={action.href.startsWith("#") ? (e) => {
             e.preventDefault();
             document.getElementById(action.href.slice(1))?.scrollIntoView({ behavior: "smooth" });

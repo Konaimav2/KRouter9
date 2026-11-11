@@ -1,11 +1,15 @@
 import Link from "next/link";
 import CopyButton from "./CopyButton";
 import DocsJumpMenu from "./DocsJumpMenu";
+import { getGatewayOrigin } from "@/shared/utils/gatewayOrigin";
 
 export const metadata = {
   title: "API Reference — KRouter9",
   description: "KRouter9 OpenAI-compatible API reference",
 };
+
+// Server-rendered: NEXT_PUBLIC_BASE_URL when set, else the documented default.
+const GATEWAY_ORIGIN = getGatewayOrigin();
 
 const ENDPOINTS = [
   ["Chat", [
@@ -87,19 +91,19 @@ function clientExample(endpoint) {
     `headers: ${JSON.stringify(headers, null, 2)}`,
   ];
   if (endpoint.body) options.push(`body: JSON.stringify(${json(endpoint.body)})`);
-  return `const baseUrl = "http://localhost:20128";\nconst response = await fetch(\`${"${baseUrl}"}${path}\`, {\n  ${options.join(",\n  ")}\n});\n${endpoint.output ? "const audio = await response.blob();" : "const result = await response.json();"}`;
+  return `const baseUrl = ${JSON.stringify(GATEWAY_ORIGIN)};\nconst response = await fetch(\`${"${baseUrl}"}${path}\`, {\n  ${options.join(",\n  ")}\n});\n${endpoint.output ? "const audio = await response.blob();" : "const result = await response.json();"}`;
 }
 
 const QUICKSTART = curlExample(ENDPOINTS[0][1][0]);
 
 function CodeExample({ label, text, language = "json" }) {
   return (
-    <div className="overflow-hidden border border-[var(--color-border)] bg-[var(--color-code-bg)]">
-      <div className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] px-3 py-2 text-xs text-[var(--p-carbon-300)]">
+    <div className="overflow-hidden border border-[var(--color-border)] bg-[var(--color-code-bg)] text-[var(--color-code-fg)]">
+      <div className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] px-3 py-2 text-xs text-[var(--color-code-muted)]">
         <span className="data-text">{label}</span>
-        <CopyButton label={`Copy ${label}`} text={text} />
+        <CopyButton label={`Copy ${label}`} text={text} tone="code" />
       </div>
-      <pre className="overflow-x-auto p-4 text-xs text-[var(--p-carbon-100)]"><code className={`language-${language}`}>{text}</code></pre>
+      <pre tabIndex={0} aria-label={label} className="overflow-x-auto p-4 text-xs text-[var(--color-code-fg)]"><code className={`language-${language}`}>{text}</code></pre>
     </div>
   );
 }
@@ -121,8 +125,8 @@ export default function DocsPage() {
           <span className="font-semibold">KRouter9</span><span className="text-[var(--color-text-subtle)]">/</span>
           <span className="text-sm text-[var(--color-text-muted)]">API Reference</span>
           <nav className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto sm:flex-nowrap">
-            <Link href="/dashboard" className="rounded-[var(--radius-sm)] border border-[var(--button-border)] px-3 py-2 text-sm">Dashboard</Link>
-            <a href="/api/docs/openapi.yaml" className="rounded-[var(--radius-sm)] bg-[var(--color-primary)] px-3 py-2 text-sm font-semibold text-[var(--color-on-primary)]">OpenAPI YAML</a>
+            <Link href="/dashboard" className="inline-flex min-h-11 items-center rounded-[var(--radius-sm)] border border-[var(--button-border)] px-3 py-2 text-sm">Dashboard</Link>
+            <a href="/api/docs/openapi.yaml" className="inline-flex min-h-11 items-center rounded-[var(--radius-sm)] bg-[var(--color-primary)] px-3 py-2 text-sm font-semibold text-[var(--color-on-primary)]">OpenAPI YAML</a>
           </nav>
         </div>
       </header>
@@ -135,7 +139,7 @@ export default function DocsPage() {
             <div className="space-y-4 p-5"><p className="text-sm leading-6 text-[var(--color-text-muted)]">Set <code>$BASE</code> to your gateway origin. Create an API key in Endpoint &amp; Key. Replace the placeholder key before sending the request. Add <code>&quot;stream&quot;: true</code> for server-sent events.</p><CodeExample label="shell" text={QUICKSTART} language="shell" /></div>
           </section>
           <section id="authentication" tabIndex={-1} className="min-w-0 overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)] mt-8 scroll-mt-24"><header className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3"><span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">02</span><h2 className="font-semibold">Authentication</h2></header><ul className="list-disc space-y-2 p-5 pl-10 text-sm leading-6 text-[var(--color-text-muted)]"><li><strong className="text-[var(--color-text)]">LLM API</strong> — send <code>Authorization: Bearer &lt;key&gt;</code> or <code>x-api-key</code>. The Gemini-native <code>/v1beta/*</code> surface also accepts <code>x-goog-api-key</code> and <code>?key=</code>.</li><li><strong className="text-[var(--color-text)]">Dashboard API</strong> — same-origin session cookie/JWT or <code>x-9r-cli-token</code>.</li><li>Per-key limits: RPM, TPM, model allow/deny, credit and token quota (0 = unlimited).</li></ul></section>
-          <section id="errors" tabIndex={-1} className="min-w-0 overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)] mt-8 scroll-mt-24"><header className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3"><span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">03</span><h2 className="font-semibold">Errors</h2></header><div className="space-y-3 p-5"><pre className="overflow-x-auto bg-[var(--color-code-bg)] p-4 text-xs text-[var(--p-carbon-100)]"><code>{`{ "error": { "message": "...", "type": "...", "code": "..." } }`}</code></pre><p className="text-sm text-[var(--color-text-muted)]">400 bad request · 401 missing/invalid key · 402 credit exhausted · 403 model not allowed · 404 model not found · 429 rate/token limit · 502/503/504 upstream failure</p></div></section>
+          <section id="errors" tabIndex={-1} className="min-w-0 overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)] mt-8 scroll-mt-24"><header className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3"><span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">03</span><h2 className="font-semibold">Errors</h2></header><div className="space-y-3 p-5"><pre tabIndex={0} aria-label="Error response shape" className="overflow-x-auto bg-[var(--color-code-bg)] p-4 text-xs text-[var(--color-code-fg)]"><code>{`{ "error": { "message": "...", "type": "...", "code": "..." } }`}</code></pre><p className="text-sm text-[var(--color-text-muted)]">400 bad request · 401 missing/invalid key · 402 credit exhausted · 403 model not allowed · 404 model not found · 429 rate/token limit · 502/503/504 upstream failure</p></div></section>
           {ENDPOINTS.map(([title, endpoints], sectionIndex) => (
             <section id={slug(title)} key={title} tabIndex={-1} className="min-w-0 overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)] mt-8 scroll-mt-24">
               <header className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3"><span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">{String(sectionIndex + 4).padStart(2, "0")}</span><h2 className="font-semibold">{title}</h2></header>

@@ -3,9 +3,9 @@
 import Icon from "@/shared/components/Icon";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, Button, Badge, Input } from "@/shared/components";
-import { revealKeyById, pickDefaultKeyId, labelForMaskedKey, isKeyActionBlocked } from "@/lib/maskedKeyClient";
-
-const DEFAULT_MITM_ROUTER_BASE = "http://localhost:20128";
+import { pickDefaultKeyId, labelForMaskedKey, isRunBlocked } from "@/lib/maskedKeyClient";
+import { useOnDemandKey } from "@/shared/hooks/useOnDemandKey";
+import { getGatewayOrigin, isDefaultGatewayOrigin } from "@/shared/utils/gatewayOrigin";
 
 /**
  * Shared MITM infrastructure card — manages SSL cert + server start/stop.
@@ -15,37 +15,32 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [sudoPassword, setSudoPassword] = useState("");
+  const [sudoPassword, setSudoPasswordState] = useState("");
+  // Mirror of the typed sudo password, read at the moment an action runs.
+  // Retry closures and the port-443 conflict never capture the value itself.
+  const sudoPasswordRef = useRef("");
   const [maskedKeys, setMaskedKeys] = useState(() => apiKeys || []);
   const [selectedKeyId, setSelectedKeyId] = useState(() => pickDefaultKeyId(apiKeys || []));
-  const [selectedApiKey, setSelectedApiKey] = useState("");
-  const [resolvingKey, setResolvingKey] = useState(false);
+  // Manual entry only (used when no stored keys exist). Stored keys are never
+  // revealed on mount: the raw key is fetched when Start is clicked.
+  const [manualApiKey, setManualApiKey] = useState("");
   const [keyError, setKeyError] = useState("");
   const [pendingAction, setPendingAction] = useState(null);
   const [modalError, setModalError] = useState(null);
   const [actionError, setActionError] = useState(null);
-  const [mitmRouterBaseUrl, setMitmRouterBaseUrl] = useState(DEFAULT_MITM_ROUTER_BASE);
+  // Empty until mount, then the page origin (or the server-reported value).
+  const [mitmRouterBaseUrl, setMitmRouterBaseUrl] = useState("");
   const [port443Conflict, setPort443Conflict] = useState(null);
-  // Stale-reveal guard: each reveal is bound to the selection it was issued
-  // for. A slow reveal that completes after a reselection is ignored, and
-  // switching selection clears the previous credential immediately so a stale
-  // secret is never submitted while the new reveal is in flight.
-  const revealSeqRef = useRef(0);
-  const resolveForSelection = useCallback((id) => {
-    const seq = ++revealSeqRef.current;
-    setSelectedApiKey("");
-    if (!id) { setResolvingKey(false); return; }
-    setResolvingKey(true);
-    setKeyError("");
-    revealKeyById(id)
-      .then((raw) => { if (revealSeqRef.current === seq) setSelectedApiKey(raw); })
-      .catch((err) => {
-        if (revealSeqRef.current !== seq) return;
-        setSelectedApiKey("");
-        setKeyError(err.message || "Failed to resolve API key");
-      })
-      .finally(() => { if (revealSeqRef.current === seq) setResolvingKey(false); });
-  }, []);
+  const onDemand = useOnDemandKey();
+
+  const setSudoPassword = (value) => {
+    sudoPasswordRef.current = value;
+    setSudoPasswordState(value);
+  };
+  const clearSudoPassword = () => setSudoPassword("");
+
+  // Never keep the sudo password after the card goes away.
+  useEffect(() => () => { sudoPasswordRef.current = ""; }, []);
 
   const serverIsWindows = status?.isWin === true;
   const canRunWithoutPassword = serverIsWindows || status?.hasCachedPassword || status?.needsSudoPassword === false;
@@ -59,8 +54,10 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
       if (res.ok) {
         const data = await res.json();
         setStatus(data);
+        // The server reports its documented default when nothing was saved;
+        // show the origin this dashboard really runs on instead.
         if (data.mitmRouterBaseUrl) {
-          setMitmRouterBaseUrl(data.mitmRouterBaseUrl);
+          setMitmRouterBaseUrl(isDefaultGatewayOrigin(data.mitmRouterBaseUrl) ? getGatewayOrigin({ loopback: true }) : data.mitmRouterBaseUrl);
         }
         onStatusChange?.(data);
       }
@@ -75,17 +72,27 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
     });
   }, [fetchStatus]);
 
+  // Default router base derives from the current origin after mount, so the
+  // field shows the port the dashboard really runs on (no hydration mismatch).
+  // The MITM server dials it from this machine, so localhost is pinned to the
+  // loopback address.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMitmRouterBaseUrl((current) => current || getGatewayOrigin({ loopback: true }));
+  }, []);
+
   useEffect(() => {
     const keys = apiKeys || [];
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMaskedKeys(keys);
     const id = pickDefaultKeyId(keys);
-    // Empty / no-default: invalidate any in-flight reveal and clear stale
-    // selection + credential so manual entry starts clean.
-    if (!id) { setSelectedKeyId(""); resolveForSelection(""); setKeyError(""); return; }
-    setSelectedKeyId(id);
-    resolveForSelection(id);
-  }, [apiKeys, resolveForSelection]);
+    // Selection only: the key itself is resolved when Start is clicked. Any
+    // cached or revealed key from a previous list is dropped.
+    onDemand.reset();
+    setKeyError("");
+    clearSudoPassword();
+    setSelectedKeyId(id || "");
+  }, [apiKeys]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleAction = (action) => {
     setActionError(null);
@@ -100,6 +107,17 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
     }
   };
 
+  // Retry of a failed Start re-reads the password at retry time. If it was
+  // cleared (modal closed, selection changed) and one is needed, ask again.
+  const retryStart = (forceKillPort443 = false) => {
+    const password = sudoPasswordRef.current;
+    if (!canRunWithoutPassword && !password) {
+      handleAction("start");
+      return;
+    }
+    doAction("start", password, forceKillPort443);
+  };
+
   const doAction = async (action, password, forceKillPort443 = false) => {
     setLoading(true);
     setActionError(null);
@@ -112,13 +130,14 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
           body: JSON.stringify({ action: "trust-cert", sudoPassword: password }),
         });
       } else if (action === "start") {
-        let keyToUse = selectedApiKey?.trim() || null;
+        let keyToUse = maskedKeys.length === 0 ? (manualApiKey.trim() || null) : null;
         if (!keyToUse && selectedKeyId) {
-          try {
-            keyToUse = await revealKeyById(selectedKeyId);
-            setSelectedApiKey(keyToUse);
-          } catch (e) {
-            setKeyError(e.message || "Failed to resolve API key");
+          // Lazy reveal at click time. A failure (429 included) shows an
+          // inline alert with Retry and leaves Start enabled.
+          await onDemand.withKey(selectedKeyId, (raw) => { keyToUse = raw; }, "start", {
+            retry: () => retryStart(forceKillPort443),
+          });
+          if (!keyToUse) {
             setLoading(false);
             setPendingAction(null);
             return;
@@ -136,7 +155,7 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
           body: JSON.stringify({
             apiKey: keyToUse,
             sudoPassword: password,
-            mitmRouterBaseUrl: mitmRouterBaseUrl.trim() || DEFAULT_MITM_ROUTER_BASE,
+            mitmRouterBaseUrl: mitmRouterBaseUrl.trim() || getGatewayOrigin({ loopback: true }),
             forceKillPort443,
           }),
         });
@@ -150,15 +169,18 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         if (data.code === "PORT_443_BUSY" && data.portOwner) {
+          // The password stays only in the ref until Kill & Start or Cancel.
+          sudoPasswordRef.current = password;
           setShowPasswordModal(false);
-          setPort443Conflict({ owner: data.portOwner, password });
+          setSudoPasswordState("");
+          setPort443Conflict({ owner: data.portOwner });
           return;
         }
         setActionError(data.error || `Failed to ${action} MITM server`);
         return;
       }
       setShowPasswordModal(false);
-      setSudoPassword("");
+      clearSudoPassword();
       setPort443Conflict(null);
       await fetchStatus();
     } catch (e) {
@@ -170,8 +192,7 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
   };
 
   const handleKillAndStart = () => {
-    const pwd = port443Conflict?.password || "";
-    doAction("start", pwd, true);
+    doAction("start", sudoPasswordRef.current, true);
   };
 
   const handleConfirmPassword = () => {
@@ -184,8 +205,10 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
 
   const isRunning = status?.running;
   // Keys arrive via props with no load signal from the parent: the list is
-  // treated as settled (manual entry when empty), matching helper defaults.
-  const keyBlocked = isKeyActionBlocked({ keys: maskedKeys, rawKey: selectedApiKey, resolving: resolvingKey, error: keyError, loading: false, keysError: "" });
+  // treated as settled (manual entry when empty). Reveal state never blocks.
+  const keyBlocked = isRunBlocked({ keys: maskedKeys, selectedId: selectedKeyId, loading: false, keysError: "" });
+  const selectedKey = maskedKeys.find((k) => k.id === selectedKeyId);
+  const revealedKey = onDemand.revealedFor(selectedKeyId);
 
   return (
     <>
@@ -235,9 +258,10 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
                 type="text"
                 value={mitmRouterBaseUrl}
                 onChange={(e) => setMitmRouterBaseUrl(e.target.value)}
-                placeholder={DEFAULT_MITM_ROUTER_BASE}
+                aria-label="KRouter9 base URL"
+                placeholder="http://127.0.0.1:<port>"
                 disabled={isRunning}
-                className="flex-1 min-w-0 px-2 py-1.5 bg-surface rounded border border-border text-xs text-text-main focus:outline-none focus:ring-1 focus:ring-primary/50 disabled:opacity-50"
+                className="flex-1 min-w-0 min-h-11 px-2 py-1.5 bg-surface rounded border border-border text-xs text-text-main focus:outline-none focus:ring-1 focus:ring-primary/50 disabled:opacity-50"
               />
             </div>
             {!isRunning && (
@@ -246,31 +270,57 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
                 <Icon name="arrow_forward" className="hidden text-text-muted text-[14px] sm:inline" />
                 <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                   {maskedKeys.length > 0 ? (
-                    <select
-                      value={selectedKeyId}
-                      onChange={(e) => {
-                        const id = e.target.value;
-                        setSelectedKeyId(id);
-                        resolveForSelection(id);
-                      }}
-                      className="flex-1 min-w-0 px-2 py-1.5 bg-surface rounded border border-border text-xs text-text-main focus:outline-none focus:ring-1 focus:ring-primary/50"
-                    >
-                      <option value="">{cloudEnabled ? "Select API key" : "Select API key (or type below)"}</option>
-                      {maskedKeys.map((key) => (
-                        <option key={key.id} value={key.id}>{labelForMaskedKey(key)}</option>
-                      ))}
-                    </select>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <select
+                        aria-label="API key for the MITM server"
+                        value={selectedKeyId}
+                        onChange={(e) => {
+                          onDemand.reset();
+                          setKeyError("");
+                          clearSudoPassword();
+                          setSelectedKeyId(e.target.value);
+                        }}
+                        className="flex-1 min-w-0 min-h-11 px-2 py-1.5 bg-surface rounded border border-border text-xs text-text-main focus:outline-none focus:ring-1 focus:ring-primary/50"
+                      >
+                        <option value="">Select API key</option>
+                        {maskedKeys.map((key) => (
+                          <option key={key.id} value={key.id}>{labelForMaskedKey(key)}</option>
+                        ))}
+                      </select>
+                      {selectedKeyId && (
+                        <button
+                          type="button"
+                          onClick={() => (revealedKey ? onDemand.hide() : onDemand.reveal(selectedKeyId))}
+                          aria-pressed={!!revealedKey}
+                          aria-label={revealedKey ? `Hide ${selectedKey?.name || "API key"}` : `Reveal ${selectedKey?.name || "API key"}`}
+                          disabled={onDemand.pending === "reveal"}
+                          className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1 rounded border border-border px-2 text-[11px] text-text-muted hover:text-primary transition-colors disabled:opacity-50"
+                        >
+                          <Icon name={revealedKey ? "visibility_off" : "visibility"} className="text-[14px]" />
+                          {revealedKey ? "Hide" : "Reveal"}
+                        </button>
+                      )}
+                    </div>
                   ) : (
                     <input
-                      type="text"
-                      value={selectedApiKey}
-                      onChange={(e) => setSelectedApiKey(e.target.value)}
+                      type="password"
+                      value={manualApiKey}
+                      aria-label="API key"
+                      onChange={(e) => { setKeyError(""); setManualApiKey(e.target.value); }}
                       placeholder={cloudEnabled ? "Enter API key" : "Enter API key manually"}
-                      className="flex-1 min-w-0 px-2 py-1.5 bg-surface rounded border border-border text-xs text-text-main focus:outline-none focus:ring-1 focus:ring-primary/50"
+                      className="flex-1 min-w-0 min-h-11 px-2 py-1.5 bg-surface rounded border border-border text-xs text-text-main focus:outline-none focus:ring-1 focus:ring-primary/50"
                     />
                   )}
-                  {resolvingKey && <span className="text-[11px] text-text-muted">Resolving selected key…</span>}
+                  {revealedKey && (
+                    <code className="block break-all rounded bg-surface px-2 py-1 text-[11px] font-mono text-text-main">{revealedKey}</code>
+                  )}
                   {keyError && <span role="alert" className="text-[11px] text-red-500 break-words">{keyError}</span>}
+                  {onDemand.error && (
+                    <span role="alert" className="flex flex-wrap items-center gap-2 text-[11px] text-red-500">
+                      <span className="break-words">{onDemand.error}</span>
+                      <button type="button" onClick={onDemand.retry} className="underline hover:text-primary">Retry</button>
+                    </span>
+                  )}
                 </div>
               </div>
             )}
@@ -302,7 +352,7 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
                 onClick={() => handleAction("start")}
                 disabled={loading || !status || (serverIsWindows && !isAdmin) || keyBlocked}
                 title={serverIsWindows && !isAdmin ? "Administrator required" : undefined}
-                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-xs font-medium text-primary transition-colors hover:bg-primary/20 disabled:opacity-50 sm:w-auto sm:py-1.5"
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-xs font-medium text-primary transition-colors hover:bg-primary/20 disabled:opacity-50 min-h-11 sm:w-auto sm:py-1.5"
               >
                 <Icon name="play_circle" className="text-[16px]" />
                 Start Server
@@ -354,7 +404,7 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
               </div>
             )}
             <div className="flex items-center justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => { setShowPasswordModal(false); setSudoPassword(""); setModalError(null); }} disabled={loading}>
+              <Button variant="ghost" size="sm" onClick={() => { setShowPasswordModal(false); clearSudoPassword(); setModalError(null); }} disabled={loading}>
                 Cancel
               </Button>
               <Button variant="primary" size="sm" onClick={handleConfirmPassword} loading={loading}>
@@ -381,7 +431,7 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
               </div>
             </div>
             <div className="flex items-center justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => { setPort443Conflict(null); setLoading(false); }} disabled={loading}>
+              <Button variant="ghost" size="sm" onClick={() => { setPort443Conflict(null); clearSudoPassword(); setLoading(false); }} disabled={loading}>
                 Cancel
               </Button>
               <Button variant="primary" size="sm" onClick={handleKillAndStart} loading={loading}>

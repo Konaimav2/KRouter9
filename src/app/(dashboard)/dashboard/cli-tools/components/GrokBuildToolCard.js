@@ -8,7 +8,9 @@ import Image from "next/image";
 import BaseUrlSelect from "./BaseUrlSelect";
 import { rememberEndpoint } from "./cliEndpointPresets";
 import ApiKeySelect from "./ApiKeySelect";
+import { useCliApiKey } from "./useCliApiKey";
 import { matchKnownEndpoint } from "./cliEndpointMatch";
+import { getGatewayOrigin } from "@/shared/utils/gatewayOrigin";
 
 const ENDPOINT = "/api/cli-tools/grok-build-settings";
 const MODEL_SLOT = "krouter9";
@@ -38,7 +40,8 @@ function ModelField({ label, value, placeholder, onChange, onSelect, disabled, h
           <button
             type="button"
             onClick={() => onChange("")}
-            className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-text-muted hover:text-red-500 rounded transition-colors"
+            aria-label="Clear subagent model"
+            className="hit-target absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-text-muted hover:text-red-500 rounded transition-colors"
             title="Clear (inherit main model for subagents)"
           >
             <Icon name="close" className="text-[14px]" />
@@ -88,7 +91,8 @@ export default function GrokBuildToolCard({
   const [applying, setApplying] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [message, setMessage] = useState(null);
-  const [selectedApiKey, setSelectedApiKey] = useState(apiKeys?.[0]?.key || "");
+  // Key id only; the raw key is revealed inside Apply / Copy handlers.
+  const apiKey = useCliApiKey({ apiKeys });
   const [selectedModel, setSelectedModel] = useState(initialModel);
   const [subagentModels, setSubagentModels] = useState(initialSubagents);
   const [modelTarget, setModelTarget] = useState(null); // "main" or subagent type
@@ -155,9 +159,7 @@ export default function GrokBuildToolCard({
   }, [isExpanded, checkStatus, fetchModelAliases]);
 
   const getEffectiveBaseUrl = () => {
-    const url = customBaseUrl || (typeof window !== "undefined"
-      ? window.location.origin.replace("://localhost", "://127.0.0.1")
-      : "http://127.0.0.1:20128");
+    const url = customBaseUrl || getGatewayOrigin({ loopback: true });
     return url.endsWith("/v1") ? url : `${url}/v1`;
   };
 
@@ -165,9 +167,9 @@ export default function GrokBuildToolCard({
     setApplying(true);
     setMessage(null);
     try {
-      const keyToUse = selectedApiKey?.trim()
-        || (apiKeys?.length > 0 ? apiKeys[0].key : null)
-        || (!cloudEnabled ? "sk_krouter9" : null);
+      const resolved = await apiKey.resolve({ fallback: !cloudEnabled ? "sk_krouter9" : null, label: "apply", retry: handleApply });
+      if (!resolved.ok) return;
+      const keyToUse = resolved.key;
       const mappedSubagents = {};
       for (const type of SUBAGENT_TYPES) {
         const model = subagentModels[type.id]?.trim();
@@ -231,9 +233,9 @@ export default function GrokBuildToolCard({
     setModelTarget(null);
   };
 
-  const getManualConfigs = () => {
-    const keyToUse = selectedApiKey?.trim()
-      || (!cloudEnabled ? "sk_krouter9" : "<API_KEY_FROM_DASHBOARD>");
+  const manualFallbackKey = !cloudEnabled ? "sk_krouter9" : "<API_KEY_FROM_DASHBOARD>";
+  // Preview shows the masked token; Copy passes the revealed key.
+  const getManualConfigs = (keyToUse = apiKey.display(manualFallbackKey)) => {
     const baseUrl = getEffectiveBaseUrl();
     const mainModel = selectedModel || "provider/model-id";
     const blocks = [
@@ -329,7 +331,7 @@ export default function GrokBuildToolCard({
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[8rem_auto_1fr] sm:items-center sm:gap-2">
                   <span className="text-xs font-semibold text-text-main sm:text-right sm:text-sm">API Key</span>
                   <Icon name="arrow_forward" className="hidden text-text-muted text-[14px] sm:inline" />
-                  <ApiKeySelect value={selectedApiKey} onChange={setSelectedApiKey} apiKeys={apiKeys} cloudEnabled={cloudEnabled} />
+                  <ApiKeySelect {...apiKey.selectProps} apiKeys={apiKeys} cloudEnabled={cloudEnabled} />
                 </div>
 
                 <ModelField label="Main Model" value={selectedModel} onChange={setSelectedModel} placeholder="provider/model-id" onSelect={() => setModelTarget("main")} disabled={!hasActiveProviders} />
@@ -382,7 +384,11 @@ export default function GrokBuildToolCard({
         />
       )}
 
-      <ManualConfigModal isOpen={showManualConfigModal} onClose={() => setShowManualConfigModal(false)} title="Grok Build - Manual Configuration" configs={getManualConfigs()} />
+      <ManualConfigModal isOpen={showManualConfigModal} onClose={() => setShowManualConfigModal(false)} title="Grok Build - Manual Configuration" configs={getManualConfigs()}
+        resolveCopyContent={async (index) => {
+          const resolved = await apiKey.resolve({ fallback: manualFallbackKey, label: "copy" });
+          return resolved.ok ? getManualConfigs(resolved.key)[index]?.content : null;
+        }} />
     </Card>
   );
 }

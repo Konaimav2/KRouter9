@@ -30,21 +30,20 @@ const windowAfter = (s, needle, len = 800) => {
 };
 
 describe("G4J(1): manual entry invalidates pending reveal + clears stale state", () => {
-  it("embedding: typing a manual key kills the in-flight auto-reveal and drops stale resolving/error", () => {
+  // ui-fix Wave B: there is no auto-reveal to invalidate any more; a typed
+  // key simply wins over the stored selection at click time.
+  it("embedding: typing a manual key clears the stale error and wins", () => {
     const w = windowAfter(src("embedding"), "value={apiKey}", 800);
-    // Bumps the reveal generation so a late completion cannot clobber input.
-    expect(w).toMatch(/revealSeqRef\.current\s*(\+\+|\+=\s*1)/);
-    // No stuck spinner / stale error blocking the typed credential.
-    expect(w).toMatch(/setResolvingKey\(false\)/);
+    expect(w).not.toMatch(/revealSeqRef/);
     expect(w).toMatch(/setKeyError\(""\)/);
-    // The typed raw value wins.
     expect(w).toMatch(/setApiKey\(e\.target\.value\)/);
+    expect(src("embedding")).toMatch(/if \(manualKey\) return action\(manualKey\)/);
   });
 
-  it("mitm: empty/no-default list kills in-flight reveal + clears stale id/raw", () => {
+  it("mitm: a new key list drops cached/revealed keys + clears stale id", () => {
     const w = windowAfter(src("mitm"), "const id = pickDefaultKeyId(keys);", 300);
-    expect(w).toMatch(/setSelectedKeyId\(""\)/);
-    expect(w).toMatch(/resolveForSelection\(\s*""\s*\)/);
+    expect(w).toMatch(/onDemand\.reset\(\)/);
+    expect(w).toMatch(/setSelectedKeyId\(id \|\| ""\)/);
   });
 });
 
@@ -67,9 +66,10 @@ describe("G4J(2a): non-OK key-list responses enter error state, never settled-em
 describe("G4J(2b): settled-empty requires explicit credential or explicit keyless", () => {
   for (const k of ["generic", "stt", "combo"]) {
     it(`${k}: settled-empty list without a resolved credential stays blocked`, () => {
+      // ui-fix Wave B: no raw key is held, so only a stored key to resolve at
+      // click time makes settled-empty usable.
       const w = windowAfter(src(k), "const listEmptyOk", 500);
-      expect(w).toMatch(/maskedKeys\.length > 0/);
-      expect(w).toMatch(/!!apiKey/);
+      expect(w).toMatch(/const listEmptyOk = maskedKeys\.length > 0;/);
       expect(w).toMatch(/keyBlocked/);
     });
   }

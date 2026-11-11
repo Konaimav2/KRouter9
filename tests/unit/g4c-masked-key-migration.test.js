@@ -7,8 +7,15 @@ describe("G4c masked-key migration", () => {
     expect(s).not.toMatch(/apiKeys\[0\]\.key/);
     expect(s).not.toMatch(/\(k\)\s*=>[^;\n]*k\.key/);
     expect(s).not.toMatch(/\.some\(\(k\)/);
-    expect(s).toMatch(/\/api\/keys\/.*\/reveal\?confirm=true/);
     expect(s).toMatch(/maskedKey/);
+    // Wave F1 (M1): selection never reveals; ApiKeySelect emits the id only and
+    // the card resolves lazily via useCliApiKey -> useOnDemandKey -> the
+    // guarded single-record endpoint in maskedKeyClient.
+    expect(s).not.toMatch(/fetch\(/);
+    expect(s).toMatch(/onKeyIdChange/);
+    const hook = read("src/app/(dashboard)/dashboard/cli-tools/components/useCliApiKey.js");
+    expect(hook).toMatch(/useOnDemandKey/);
+    expect(read("src/lib/maskedKeyClient.js")).toMatch(/\/api\/keys\/.*\/reveal\?confirm=true/);
   });
   it("Codex apply never submits dummy sk_krouter9 silently (explicit error)", () => {
     const s = read("src/app/(dashboard)/dashboard/cli-tools/components/CodexToolCard.js");

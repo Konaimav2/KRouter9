@@ -48,7 +48,7 @@ export default function Modal({ isOpen, onClose, title, operationLabel, children
       <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={title ? titleId : undefined} className={cn("relative flex max-h-[90vh] w-full flex-col overflow-hidden rounded-[var(--dialog-radius)] border border-[var(--dialog-border)] bg-[var(--dialog-bg)] shadow-[var(--shadow-float)]", sizes[size], className)}>
         <div className="flex min-h-14 shrink-0 items-center justify-between gap-4 border-b border-[var(--ledger-rule)] px-5 py-2">
           {title ? <div className="flex min-w-0 items-baseline gap-3"><span className="ledger-number shrink-0">{operation}</span><h2 id={titleId} className="min-w-0 text-lg font-semibold">{title}</h2></div> : <span />}
-          <button type="button" onClick={onClose} aria-label="Close dialog" className="grid size-10 shrink-0 place-items-center rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]"><Icon name="close" className="text-[20px]" /></button>
+          <button type="button" onClick={onClose} aria-label="Close dialog" className="-my-1 grid size-11 shrink-0 place-items-center rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]"><Icon name="close" className="text-[20px]" /></button>
         </div>
         <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-5">{children}</div>
         {footer ? <div className="flex shrink-0 flex-col gap-3 border-t border-[var(--ledger-rule)] bg-[var(--dialog-bg)] p-4 sm:flex-row sm:items-center sm:justify-end">{footer}</div> : null}

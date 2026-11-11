@@ -6,14 +6,15 @@ import { ConfirmDialog, PopoverMenu } from "@/shared/components/overlays";
 import { CONSOLE_LOG_CONFIG } from "@/shared/constants/config";
 import { filterTokenRefreshSpam } from "./tokenRefreshSpam";
 import { redactSensitiveText } from "@/lib/proxyMask.js";
+import LoadFailedState from "@/shared/components/LoadFailedState";
 
 const LEVELS = ["ERROR", "WARN", "INFO", "LOG", "DEBUG"];
 const LEVEL_STYLES = {
-  ERROR: "text-danger",
-  WARN: "text-warning",
-  INFO: "text-info",
-  LOG: "text-text-secondary",
-  DEBUG: "text-text-muted",
+  ERROR: "text-[var(--color-code-danger)]",
+  WARN: "text-[var(--color-code-warning)]",
+  INFO: "text-[var(--color-code-info)]",
+  LOG: "text-[var(--color-code-fg)]",
+  DEBUG: "text-[var(--color-code-muted)]",
 };
 
 function parseLine(line) {
@@ -33,7 +34,7 @@ function renderLine(line) {
       <div className="font-[var(--font-data)] text-[var(--color-rail-muted)] md:pr-3">{parsed.time}</div>
       <div className={`font-semibold ${LEVEL_STYLES[parsed.level] || LEVEL_STYLES.LOG} md:border-l md:border-border md:px-3`}>{parsed.level}</div>
       <div className="min-w-0 truncate text-[var(--color-rail-muted)] md:border-l md:border-border md:px-3" title={parsed.source}>{parsed.source}</div>
-      <div className="min-w-0 whitespace-pre-wrap break-words text-text-primary md:border-l md:border-border md:pl-3">{parsed.message}</div>
+      <div className="min-w-0 whitespace-pre-wrap break-words text-[var(--color-code-fg)] md:border-l md:border-border md:pl-3">{parsed.message}</div>
     </div>
   );
 }
@@ -54,6 +55,10 @@ export default function ConsoleLogClient() {
   const logRef = useRef(null);
   const liveRef = useRef(true);
   const pausedBufferRef = useRef([]);
+  // A stream that fails before delivering data is a load failure, not "No logs yet".
+  const [streamError, setStreamError] = useState(false);
+  const sourceRef = useRef(null);
+  const receivedInitRef = useRef(false);
 
   const { visible: spamFilteredLogs, hiddenCount } = useMemo(
     () => filterTokenRefreshSpam(logs, hideTokenRefreshSpam),
@@ -93,12 +98,20 @@ export default function ConsoleLogClient() {
     if (buffered.length) setLogs((prev) => [...prev, ...buffered].slice(-CONSOLE_LOG_CONFIG.maxLines));
   }, []);
 
-  useEffect(() => {
+  const connectStream = useCallback(() => {
+    sourceRef.current?.close();
+    receivedInitRef.current = false;
+    setStreamError(false);
     const es = new EventSource("/api/translator/console-logs/stream");
+    sourceRef.current = es;
     es.onopen = () => setConnected(true);
     es.onmessage = (event) => {
       const msg = JSON.parse(event.data);
-      if (msg.type === "init") setLogs(msg.logs.map(redactSensitiveText).slice(-CONSOLE_LOG_CONFIG.maxLines));
+      if (msg.type === "init") {
+        receivedInitRef.current = true;
+        setStreamError(false);
+        setLogs(msg.logs.map(redactSensitiveText).slice(-CONSOLE_LOG_CONFIG.maxLines));
+      }
       else if (msg.type === "line" || msg.type === "lines") {
         const incoming = (msg.type === "line" ? [msg.line] : msg.lines).map(redactSensitiveText);
         if (!liveRef.current) {
@@ -113,9 +126,20 @@ export default function ConsoleLogClient() {
         setLogs([]);
       }
     };
-    es.onerror = () => setConnected(false);
-    return () => es.close();
+    es.onerror = () => {
+      setConnected(false);
+      // EventSource retries transient drops itself (CONNECTING). It gives up
+      // (CLOSED) on an HTTP error; before any data that is a failed load.
+      if (!receivedInitRef.current || es.readyState === 2) setStreamError(true);
+    };
   }, []);
+
+  useEffect(() => {
+    // Opening the stream intentionally updates local connection state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    connectStream();
+    return () => sourceRef.current?.close();
+  }, [connectStream]);
 
   useEffect(() => {
     if (!live || !atTail || !logRef.current) return;
@@ -123,7 +147,7 @@ export default function ConsoleLogClient() {
   }, [visibleLogs, live, atTail]);
 
   return (
-    <main className="flex min-h-[calc(100dvh-7rem)] min-w-0 flex-col px-4 py-6 sm:px-6 lg:px-8">
+    <div className="flex min-h-[calc(100dvh-7rem)] min-w-0 flex-col px-4 py-6 sm:px-6 lg:px-8">
       <header className="flex flex-col gap-2 border-b border-border pb-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-[length:var(--text-xl)] font-semibold tracking-[-0.02em]">Console log</h1>
@@ -136,27 +160,28 @@ export default function ConsoleLogClient() {
         </div>
       </header>
 
-      {!live && <p className="border-x border-border bg-warning-wash px-4 py-2 text-sm text-warning" role="status">Paused — {bufferedCount} new lines buffered.</p>}
+      {!live && <p className="border-x border-border bg-[var(--color-warning-wash)] px-4 py-2 text-sm text-warning" role="status">Paused — {bufferedCount} new lines buffered.</p>}
       <section className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-field)] border border-border bg-surface" aria-label="Gateway console log">
         <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-border bg-surface p-3">
-          <div className="inline-flex rounded-[var(--radius-status)] border border-border-strong p-0.5" role="radiogroup" aria-label="Log stream mode">
-            {[true, false].map((value) => <button key={String(value)} type="button" role="radio" aria-checked={live === value} className={`min-h-9 rounded-[var(--radius-status)] px-3 text-sm ${live === value ? "bg-surface-active text-primary" : "text-text-muted hover:bg-surface-hover"}`} onClick={() => setLiveMode(value)}>{value ? "Live" : "Pause"}</button>)}
+          <div className="inline-flex rounded-[var(--radius-control)] border border-border-strong p-0.5" role="radiogroup" aria-label="Log stream mode">
+            {[true, false].map((value) => <button key={String(value)} type="button" role="radio" aria-checked={live === value} className={`min-h-11 rounded-[var(--radius-control)] px-3 text-sm ${live === value ? "bg-[var(--color-primary-wash)] text-primary" : "text-text-muted hover:bg-[var(--color-surface-hover)]"}`} onClick={() => setLiveMode(value)}>{value ? "Live" : "Pause"}</button>)}
           </div>
           <div className="relative">
-            <button type="button" aria-haspopup="menu" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)} className="flex min-h-9 items-center gap-2 rounded-[var(--radius-control)] border border-border-strong px-3 text-sm hover:bg-surface-hover">Levels ({levels.size}/{LEVELS.length}) <ChevronDown size={14} /></button>
+            <button type="button" aria-haspopup="menu" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)} className="flex min-h-11 items-center gap-2 rounded-[var(--radius-control)] border border-border-strong px-3 text-sm hover:bg-surface-hover">Levels ({levels.size}/{LEVELS.length}) <ChevronDown size={14} /></button>
             <PopoverMenu open={filtersOpen} onDismiss={() => setFiltersOpen(false)} label="Log level filters">
-              {LEVELS.map((level) => <label key={level} role="menuitemcheckbox" aria-checked={levels.has(level)} className="flex min-h-9 cursor-pointer items-center gap-2 px-3 text-sm hover:bg-surface-hover"><input type="checkbox" checked={levels.has(level)} onChange={() => setLevels((current) => { const next = new Set(current); if (next.has(level)) next.delete(level); else next.add(level); return next; })} />{level}</label>)}
+              {LEVELS.map((level) => <label key={level} role="menuitemcheckbox" aria-checked={levels.has(level)} className="flex min-h-11 cursor-pointer items-center gap-2 px-3 text-sm hover:bg-surface-hover"><input type="checkbox" checked={levels.has(level)} onChange={() => setLevels((current) => { const next = new Set(current); if (next.has(level)) next.delete(level); else next.add(level); return next; })} />{level}</label>)}
             </PopoverMenu>
           </div>
-          <label className="min-w-[12rem] flex-1"><span className="sr-only">Search logs</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} className="h-9 w-full rounded-[var(--radius-control)] border border-border-strong bg-surface px-3 text-sm text-text-primary placeholder:text-text-muted" placeholder="Search logs" /></label>
-          <label className="flex min-h-9 items-center gap-2 px-2 text-sm"><input type="checkbox" checked={hideTokenRefreshSpam} onChange={(event) => setHideTokenRefreshSpam(event.target.checked)} />Hide refresh noise{hiddenCount > 0 ? ` (${hiddenCount})` : ""}</label>
-          <button type="button" disabled={!visibleLogs.length} onClick={copyVisible} className="flex min-h-9 items-center gap-2 rounded-[var(--radius-control)] border border-border-strong px-3 text-sm hover:bg-surface-hover disabled:text-disabled-text"><Clipboard size={15} />{copied ? "Copied" : "Copy visible"}</button>
-          <button type="button" disabled={!logs.length} onClick={() => setConfirmClear(true)} className="flex min-h-9 items-center gap-2 rounded-[var(--radius-control)] border border-danger px-3 text-sm text-danger hover:bg-danger-wash disabled:text-disabled-text"><Trash2 size={15} />Clear</button>
+          <label className="min-w-[12rem] flex-1"><span className="sr-only">Search logs</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} className="h-11 w-full rounded-[var(--radius-control)] border border-border-strong bg-surface px-3 text-sm text-text placeholder:text-text-muted" placeholder="Search logs" /></label>
+          <label className="flex min-h-11 items-center gap-2 px-2 text-sm"><input type="checkbox" checked={hideTokenRefreshSpam} onChange={(event) => setHideTokenRefreshSpam(event.target.checked)} />Hide refresh noise{hiddenCount > 0 ? ` (${hiddenCount})` : ""}</label>
+          <button type="button" disabled={!visibleLogs.length} onClick={copyVisible} className="flex min-h-11 items-center gap-2 rounded-[var(--radius-control)] border border-border-strong px-3 text-sm hover:bg-surface-hover disabled:text-text-disabled"><Clipboard size={15} />{copied ? "Copied" : "Copy visible"}</button>
+          <button type="button" disabled={!logs.length} onClick={() => setConfirmClear(true)} className="flex min-h-11 items-center gap-2 rounded-[var(--radius-control)] border border-danger px-3 text-sm text-danger hover:bg-danger-wash disabled:text-text-disabled"><Trash2 size={15} />Clear</button>
         </div>
 
+        {streamError && <div className="border-b border-border p-3"><LoadFailedState title="Couldn't load the console log" message={logs.length ? "The live log stream failed. Lines below may be stale. Retry to reconnect." : "The live log stream could not be opened, so no lines can be shown. Retry to reconnect."} onRetry={connectStream} /></div>}
         {clearError && <p role="alert" className="border-x border-border bg-danger-wash px-4 py-2 text-sm text-danger">{clearError}</p>}
-        <div ref={logRef} tabIndex={0} onScroll={(event) => { const node = event.currentTarget; setAtTail(node.scrollHeight - node.scrollTop - node.clientHeight < 24); }} className="max-h-[calc(100dvh-19rem)] min-h-[20rem] flex-1 overflow-auto overscroll-contain bg-[var(--color-code-bg)] font-[var(--font-data)] text-xs">
-          {visibleLogs.length ? visibleLogs.map((line, index) => <div key={`${index}-${line.slice(0, 24)}`}>{renderLine(line)}</div>) : <div className="grid min-h-[20rem] place-content-center px-4 text-center text-text-muted"><p className="font-semibold text-text-primary">{logs.length ? "No logs match these filters." : "No logs yet"}</p><p className="mt-1">{logs.length ? "Clear filters to see retained events." : "Events will appear when the gateway writes a log."}</p></div>}
+        <div ref={logRef} tabIndex={0} onScroll={(event) => { const node = event.currentTarget; setAtTail(node.scrollHeight - node.scrollTop - node.clientHeight < 24); }} className="max-h-[calc(100dvh-19rem)] min-h-[20rem] flex-1 overflow-auto overscroll-contain bg-[var(--color-code-bg)] font-[var(--font-data)] text-xs text-[var(--color-code-fg)]">
+          {visibleLogs.length ? visibleLogs.map((line, index) => <div key={`${index}-${line.slice(0, 24)}`}>{renderLine(line)}</div>) : <div className="grid min-h-[20rem] place-content-center px-4 text-center text-[var(--color-code-muted)]"><p className="font-semibold text-[var(--color-code-fg)]">{logs.length ? "No logs match these filters." : streamError ? "Log stream unavailable" : "No logs yet"}</p><p className="mt-1">{logs.length ? "Clear filters to see retained events." : streamError ? "Retry above to reconnect." : "Events will appear when the gateway writes a log."}</p></div>}
         </div>
         <footer className="flex items-center justify-between gap-3 border-t border-border px-3 py-2 text-xs text-text-muted">
           <span>{visibleLogs.length} visible / {logs.length} retained · Live tail {live && atTail ? "on" : "off"}</span>
@@ -164,6 +189,6 @@ export default function ConsoleLogClient() {
         </footer>
       </section>
       <ConfirmDialog open={confirmClear} onCancel={() => setConfirmClear(false)} onConfirm={clearLogs} title={`Clear ${logs.length} retained log lines?`} description="This cannot be undone." actionLabel="Clear log" cancelLabel="Cancel" destructive />
-    </main>
+    </div>
   );
 }

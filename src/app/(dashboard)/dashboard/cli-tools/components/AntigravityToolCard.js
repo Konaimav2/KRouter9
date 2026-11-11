@@ -1,9 +1,11 @@
 "use client";
 
 import Icon from "@/shared/components/Icon";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, Button, Badge, Modal, Input, ModelSelectModal } from "@/shared/components";
 import Image from "next/image";
+import { pickDefaultKeyId, labelForMaskedKey } from "@/lib/maskedKeyClient";
+import { useOnDemandKey } from "@/shared/hooks/useOnDemandKey";
 
 export default function AntigravityToolCard({
   tool,
@@ -20,19 +22,34 @@ export default function AntigravityToolCard({
   const [loading, setLoading] = useState(false);
   const [startingStep, setStartingStep] = useState(null); // "cert" | "server" | "dns" | null
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [sudoPassword, setSudoPassword] = useState("");
-  const [selectedApiKey, setSelectedApiKey] = useState("");
+  const [sudoPassword, setSudoPasswordState] = useState("");
+  // Mirror of the typed sudo password, read when an action runs so retry
+  // closures never capture the value itself.
+  const sudoPasswordRef = useRef("");
+  // Key ID only: the raw key is revealed at Start time, never kept in state.
+  const [selectedKeyId, setSelectedKeyId] = useState("");
   const [message, setMessage] = useState(null);
   const [modelMappings, setModelMappings] = useState({});
   const [modalOpen, setModalOpen] = useState(false);
   const [currentEditingAlias, setCurrentEditingAlias] = useState(null);
   const [modelAliases, setModelAliases] = useState({});
+  const onDemand = useOnDemandKey();
+
+  const setSudoPassword = (value) => {
+    sudoPasswordRef.current = value;
+    setSudoPasswordState(value);
+  };
+  const clearSudoPassword = () => setSudoPassword("");
+
+  // Never keep the sudo password after the card goes away.
+  useEffect(() => () => { sudoPasswordRef.current = ""; }, []);
 
   useEffect(() => {
-    if (apiKeys?.length > 0 && !selectedApiKey) {
-      setSelectedApiKey(apiKeys[0].key);
+    if (apiKeys?.length > 0 && !selectedKeyId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelectedKeyId(pickDefaultKeyId(apiKeys) || "");
     }
-  }, [apiKeys, selectedApiKey]);
+  }, [apiKeys, selectedKeyId]);
 
   useEffect(() => {
     if (initialStatus) setStatus(initialStatus);
@@ -106,15 +123,38 @@ export default function AntigravityToolCard({
     }
   };
 
+  // Retry re-reads the password at retry time; if it was cleared (modal
+  // closed, selection changed) and one is needed, ask for it again.
+  const retryStart = () => {
+    const password = sudoPasswordRef.current;
+    if (!canRunWithoutPassword && !password) {
+      setShowPasswordModal(true);
+      return;
+    }
+    doStart(password);
+  };
+
   const doStart = async (password) => {
     setLoading(true);
     setMessage(null);
     // Show steps progressing in order
     setStartingStep("cert");
     try {
-      const keyToUse = selectedApiKey?.trim()
-        || (apiKeys?.length > 0 ? apiKeys[0].key : null)
-        || (!cloudEnabled ? "sk_krouter9" : null);
+      let keyToUse = null;
+      const keyId = selectedKeyId || pickDefaultKeyId(apiKeys);
+      if (keyId) {
+        // Lazy single-record reveal at click time; a failure (429 included)
+        // shows an inline alert with Retry and leaves Start enabled.
+        await onDemand.withKey(keyId, (raw) => { keyToUse = raw; }, "start", {
+          retry: retryStart,
+        });
+        if (!keyToUse) {
+          setStartingStep(null);
+          return;
+        }
+      } else if (!cloudEnabled) {
+        keyToUse = "sk_krouter9";
+      }
 
       const res = await fetch("/api/cli-tools/antigravity-mitm", {
         method: "POST",
@@ -127,7 +167,7 @@ export default function AntigravityToolCard({
         setStartingStep(null);
         setMessage({ type: "success", text: "MITM started" });
         setShowPasswordModal(false);
-        setSudoPassword("");
+        clearSudoPassword();
         fetchStatus();
       } else {
         setStartingStep(null);
@@ -155,7 +195,7 @@ export default function AntigravityToolCard({
       if (res.ok) {
         setMessage({ type: "success", text: "MITM stopped" });
         setShowPasswordModal(false);
-        setSudoPassword("");
+        clearSudoPassword();
         fetchStatus();
       } else {
         setMessage({ type: "error", text: data.error || "Failed to stop" });
@@ -309,6 +349,14 @@ export default function AntigravityToolCard({
             )}
           </div>
 
+          {onDemand.error && (
+            <div role="alert" className="flex flex-wrap items-center gap-2 px-2 py-1.5 rounded text-xs bg-red-500/10 text-red-600">
+              <Icon name="error" className="text-[14px]" />
+              <span className="break-words">{onDemand.error}</span>
+              <button type="button" onClick={onDemand.retry} className="min-h-11 px-2 underline hover:text-primary">Retry</button>
+            </div>
+          )}
+
           {message?.type === "error" && (
             <div className="flex items-center gap-2 px-2 py-1.5 rounded text-xs bg-red-500/10 text-red-600">
               <Icon name="error" className="text-[14px]" />
@@ -324,11 +372,12 @@ export default function AntigravityToolCard({
                 <Icon name="arrow_forward" className="hidden text-text-muted text-[14px] sm:inline" />
                 {apiKeys.length > 0 ? (
                   <select
-                    value={selectedApiKey}
-                    onChange={(e) => setSelectedApiKey(e.target.value)}
+                    aria-label="API key for Antigravity"
+                    value={selectedKeyId}
+                    onChange={(e) => { onDemand.reset(); clearSudoPassword(); setSelectedKeyId(e.target.value); }}
                     className="w-full min-w-0 px-2 py-2 bg-surface rounded text-xs border border-border focus:outline-none focus:ring-1 focus:ring-primary/50 sm:py-1.5"
                   >
-                    {apiKeys.map((key) => <option key={key.id} value={key.key}>{key.key}</option>)}
+                    {apiKeys.map((key) => <option key={key.id} value={key.id}>{labelForMaskedKey(key)}</option>)}
                   </select>
                 ) : (
                   <span className="min-w-0 rounded bg-surface/40 px-2 py-2 text-xs text-text-muted sm:py-1.5">
@@ -352,7 +401,9 @@ export default function AntigravityToolCard({
                     {modelMappings[model.alias] && (
                       <button
                         onClick={() => handleModelMappingChange(model.alias, "")}
-                        className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-text-muted hover:text-red-500 rounded transition-colors"
+                        type="button"
+                        aria-label={`Clear mapping for ${model.alias}`}
+                        className="hit-target absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-text-muted hover:text-red-500 rounded transition-colors"
                         title="Clear"
                       >
                         <Icon name="close" className="text-[14px]" />
@@ -412,7 +463,7 @@ export default function AntigravityToolCard({
         isOpen={showPasswordModal}
         onClose={() => {
           setShowPasswordModal(false);
-          setSudoPassword("");
+          clearSudoPassword();
           setMessage(null);
         }}
         title="Sudo Password Required"
@@ -445,7 +496,7 @@ export default function AntigravityToolCard({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => { setShowPasswordModal(false); setSudoPassword(""); setMessage(null); }}
+              onClick={() => { setShowPasswordModal(false); clearSudoPassword(); setMessage(null); }}
               disabled={loading}
             >
               Cancel

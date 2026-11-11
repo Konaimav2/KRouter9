@@ -7,6 +7,7 @@ import Image from "next/image";
 import BaseUrlSelect from "./BaseUrlSelect";
 import { rememberEndpoint } from "./cliEndpointPresets";
 import ApiKeySelect from "./ApiKeySelect";
+import { useCliApiKey } from "./useCliApiKey";
 import { matchKnownEndpoint } from "./cliEndpointMatch";
 
 export default function OpenCodeToolCard({ tool, isExpanded, onToggle, baseUrl, apiKeys, activeProviders, cloudEnabled, initialStatus, tunnelEnabled, tunnelPublicUrl, tailscaleEnabled, tailscaleUrl }) {
@@ -16,7 +17,8 @@ export default function OpenCodeToolCard({ tool, isExpanded, onToggle, baseUrl, 
   const [restoring, setRestoring] = useState(false);
   const [message, setMessage] = useState(null);
   const [showInstallGuide, setShowInstallGuide] = useState(false);
-  const [selectedApiKey, setSelectedApiKey] = useState("");
+  // Key id only; the raw key is revealed inside Apply / Copy handlers.
+  const apiKey = useCliApiKey({ apiKeys });
   const [selectedModel, setSelectedModel] = useState("");
   const [subagentModel, setSubagentModel] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
@@ -32,11 +34,6 @@ export default function OpenCodeToolCard({ tool, isExpanded, onToggle, baseUrl, 
     selectedModelsRef.current = selectedModels;
   }, [selectedModels]);
 
-  useEffect(() => {
-    if (apiKeys?.length > 0 && !selectedApiKey) {
-      setSelectedApiKey(apiKeys[0].key);
-    }
-  }, [apiKeys, selectedApiKey]);
 
   useEffect(() => {
     if (initialStatus) setStatus(initialStatus);
@@ -76,9 +73,9 @@ export default function OpenCodeToolCard({ tool, isExpanded, onToggle, baseUrl, 
 
   const saveModels = async (models) => {
     try {
-      const keyToUse = (selectedApiKey && selectedApiKey.trim())
-        ? selectedApiKey
-        : (!cloudEnabled ? "sk_krouter9" : selectedApiKey);
+      const resolved = await apiKey.resolve({ fallback: !cloudEnabled ? "sk_krouter9" : null, label: "apply", retry: () => saveModels(models) });
+      if (!resolved.ok) return;
+      const keyToUse = resolved.key;
       const validActiveModel = models.includes(activeModel) ? activeModel : (models[0] || "");
       await fetch("/api/cli-tools/opencode-settings", {
         method: "POST",
@@ -132,9 +129,9 @@ export default function OpenCodeToolCard({ tool, isExpanded, onToggle, baseUrl, 
     setApplying(true);
     setMessage(null);
     try {
-      const keyToUse = (selectedApiKey && selectedApiKey.trim())
-        ? selectedApiKey
-        : (!cloudEnabled ? "sk_krouter9" : selectedApiKey);
+      const resolved = await apiKey.resolve({ fallback: !cloudEnabled ? "sk_krouter9" : null, label: "apply", retry: handleApply });
+      if (!resolved.ok) return;
+      const keyToUse = resolved.key;
 
       const res = await fetch("/api/cli-tools/opencode-settings", {
         method: "POST",
@@ -186,10 +183,9 @@ export default function OpenCodeToolCard({ tool, isExpanded, onToggle, baseUrl, 
     }
   };
 
-  const getManualConfigs = () => {
-    const keyToUse = (selectedApiKey && selectedApiKey.trim())
-      ? selectedApiKey
-      : (!cloudEnabled ? "sk_krouter9" : "<API_KEY_FROM_DASHBOARD>");
+  const manualFallbackKey = (!cloudEnabled ? "sk_krouter9" : "<API_KEY_FROM_DASHBOARD>");
+  // Preview shows the masked token; Copy passes the revealed key.
+  const getManualConfigs = (keyToUse = apiKey.display(manualFallbackKey)) => {
 
     const modelsToShow = selectedModels.length > 0 ? selectedModels : ["provider/model-id"];
     const activeModelToShow = activeModel || selectedModels[0] || modelsToShow[0];
@@ -322,7 +318,7 @@ export default function OpenCodeToolCard({ tool, isExpanded, onToggle, baseUrl, 
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[8rem_auto_1fr_auto] sm:items-center sm:gap-2">
                   <span className="text-xs font-semibold text-text-main sm:text-right sm:text-sm">API Key</span>
                   <Icon name="arrow_forward" className="hidden text-text-muted text-[14px] sm:inline" />
-                  <ApiKeySelect value={selectedApiKey} onChange={setSelectedApiKey} apiKeys={apiKeys} cloudEnabled={cloudEnabled} />
+                  <ApiKeySelect {...apiKey.selectProps} apiKeys={apiKeys} cloudEnabled={cloudEnabled} />
                 </div>
 
                 {/* Models */}
@@ -382,6 +378,7 @@ export default function OpenCodeToolCard({ tool, isExpanded, onToggle, baseUrl, 
                                   console.log("Error removing model:", error);
                                 }
                               }}
+                              aria-label={`Remove ${model}`}
                               className="ml-0.5 hover:text-red-500"
                             >
                               <Icon name="close" className="text-[12px]" />
@@ -426,7 +423,9 @@ export default function OpenCodeToolCard({ tool, isExpanded, onToggle, baseUrl, 
                   {subagentModel && (
                     <button
                       onClick={() => setSubagentModel("")}
-                      className="p-1 text-text-muted hover:text-red-500 rounded transition-colors"
+                      type="button"
+                      aria-label="Clear subagent model"
+                      className="hit-target p-1 text-text-muted hover:text-red-500 rounded transition-colors"
                       title="Clear (will use main model)"
                     >
                       <Icon name="close" className="text-[14px]" />
@@ -504,6 +503,10 @@ export default function OpenCodeToolCard({ tool, isExpanded, onToggle, baseUrl, 
         onClose={() => setShowManualConfigModal(false)}
         title="OpenCode - Manual Configuration"
         configs={getManualConfigs()}
+        resolveCopyContent={async (index) => {
+          const resolved = await apiKey.resolve({ fallback: manualFallbackKey, label: "copy" });
+          return resolved.ok ? getManualConfigs(resolved.key)[index]?.content : null;
+        }}
       />
     </Card>
   );

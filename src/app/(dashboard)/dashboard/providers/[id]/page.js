@@ -8,6 +8,7 @@ import { resolveCustomProviderId } from "../utils";
 import { getProviderIconSrc, markProviderIconMissing } from "@/shared/utils/providerIcon";
 import { Card, Button, Badge, Input, Modal, CardSkeleton, OAuthModal, KiroOAuthWrapper, CursorAuthModal, IFlowCookieModal, GitLabAuthModal, Toggle, Select, EditConnectionModal, NoAuthProxyCard, ConfirmModal } from "@/shared/components";
 import Icon from "@/shared/components/Icon";
+import LoadFailedState from "@/shared/components/LoadFailedState";
 import { OAUTH_PROVIDERS, APIKEY_PROVIDERS, FREE_PROVIDERS, FREE_TIER_PROVIDERS, WEB_COOKIE_PROVIDERS, getProviderAlias, isOpenAICompatibleProvider, isAnthropicCompatibleProvider, AI_PROVIDERS } from "@/shared/constants/providers";
 import { getModelsByProviderId, getModelKind } from "@/shared/constants/models";
 import { getThinkingLevels } from "open-sse/providers/thinkingLevels.js";
@@ -35,6 +36,21 @@ const AUTO_PING_SETTINGS_KEYS = {
   codex: "codexAutoPing",
 };
 
+// Selection checkbox (Wave G2): the native input fills its 44px label so the
+// pointer target is the input itself, while a 16px mark stays the visual.
+const CHECKBOX_INPUT_CLASS = "peer absolute inset-0 m-0 size-full cursor-pointer appearance-none opacity-0";
+
+function CheckboxMark() {
+  return (
+    <span
+      aria-hidden="true"
+      className="pointer-events-none grid size-4 shrink-0 place-items-center rounded border border-[var(--color-border-strong)] bg-[var(--color-surface)] text-transparent peer-checked:border-[var(--color-primary)] peer-checked:bg-[var(--color-primary)] peer-checked:text-[var(--color-on-primary)] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--color-primary)]"
+    >
+      <Icon name="check" size={12} />
+    </span>
+  );
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -53,6 +69,12 @@ export default function ProviderDetailPage() {
   const { getCaps } = useModelCaps();
   const [connections, setConnections] = useState([]);
   const [loading, setLoading] = useState(true);
+  // API failure (non-2xx or network) is distinct from a genuinely missing provider.
+  const [loadError, setLoadError] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  // Secondary loads (settings, proxy pools, aliases) never hide the page; a
+  // failure there is an inline warning naming what did not load.
+  const [secondaryFailures, setSecondaryFailures] = useState([]);
   // P2: incremental render for provider pages with thousands of connections.
   const [visibleCount, setVisibleCount] = useState(50);
   const [providerNode, setProviderNode] = useState(null);
@@ -297,12 +319,13 @@ export default function ProviderDetailPage() {
   const fetchAliases = useCallback(async () => {
     try {
       const res = await fetch("/api/models/alias");
+      if (!res.ok) throw new Error(`Aliases load failed (HTTP ${res.status})`);
       const data = await res.json();
-      if (res.ok) {
-        setModelAliases(data.aliases || {});
-      }
+      setModelAliases(data.aliases || {});
+      setSecondaryFailures((prev) => prev.filter((name) => name !== "model aliases"));
     } catch (error) {
       console.log("Error fetching aliases:", error);
+      setSecondaryFailures((prev) => (prev.includes("model aliases") ? prev : [...prev, "model aliases"]));
     }
   }, []);
 
@@ -332,57 +355,77 @@ export default function ProviderDetailPage() {
       const [connectionsRes, nodesRes, proxyPoolsRes, settingsRes] = await Promise.all([
         fetch("/api/providers?mode=full", { cache: "no-store" }),
         fetch("/api/provider-nodes", { cache: "no-store" }),
-        fetch("/api/proxy-pools?isActive=true", { cache: "no-store" }),
-        fetch("/api/settings", { cache: "no-store" }),
+        // Secondary: a failure here warns inline and never blocks the page.
+        fetch("/api/proxy-pools?isActive=true", { cache: "no-store" }).catch(() => null),
+        fetch("/api/settings", { cache: "no-store" }).catch(() => null),
       ]);
+      // Only a 404 from the provider-node lookup means "absent". Any other
+      // non-2xx is a load failure and must never render as "Provider not found".
+      const failed = (!connectionsRes.ok ? connectionsRes : null)
+        || (!nodesRes.ok && nodesRes.status !== 404 ? nodesRes : null);
+      if (failed) throw new Error(`Provider load failed (HTTP ${failed.status})`);
       const connectionsData = await connectionsRes.json();
-      const nodesData = await nodesRes.json();
-      const proxyPoolsData = await proxyPoolsRes.json();
-      const settingsData = settingsRes.ok ? await settingsRes.json() : {};
-      if (connectionsRes.ok) {
-        const filtered = (connectionsData.connections || []).filter(c => c.provider === providerId);
-        setConnections(filtered);
-        setVisibleCount(PAGE_SIZE);
+      const nodesData = nodesRes.ok ? await nodesRes.json() : { nodes: [] };
+      const readOptional = async (res) => (res?.ok ? res.json().catch(() => null) : null);
+      const proxyPoolsData = await readOptional(proxyPoolsRes);
+      const settingsData = await readOptional(settingsRes);
+      const filtered = (connectionsData.connections || []).filter(c => c.provider === providerId);
+      setConnections(filtered);
+      setVisibleCount(PAGE_SIZE);
+      if (proxyPoolsData) setProxyPools(proxyPoolsData.proxyPools || []);
+      if (settingsData) {
+        // Load per-provider strategy override
+        const override = (settingsData.providerStrategies || {})[providerId] || {};
+        setProviderStrategy(override.fallbackStrategy || null);
+        setProviderStickyLimit(override.stickyRoundRobinLimit != null ? String(override.stickyRoundRobinLimit) : "1");
+        // Load per-provider thinking config
+        const thinkingCfg = (settingsData.providerThinking || {})[providerId] || {};
+        setThinkingMode(thinkingCfg.mode || "auto");
+        const autoPingSettingsKey = AUTO_PING_SETTINGS_KEYS[providerId];
+        const apCfg = autoPingSettingsKey ? settingsData[autoPingSettingsKey] || {} : {};
+        setAutoPing({ enabled: apCfg.enabled === true, connections: apCfg.connections || {} });
       }
-      if (proxyPoolsRes.ok) {
-        setProxyPools(proxyPoolsData.proxyPools || []);
-      }
-      // Load per-provider strategy override
-      const override = (settingsData.providerStrategies || {})[providerId] || {};
-      setProviderStrategy(override.fallbackStrategy || null);
-      setProviderStickyLimit(override.stickyRoundRobinLimit != null ? String(override.stickyRoundRobinLimit) : "1");
-      // Load per-provider thinking config
-      const thinkingCfg = (settingsData.providerThinking || {})[providerId] || {};
-      setThinkingMode(thinkingCfg.mode || "auto");
-      const autoPingSettingsKey = AUTO_PING_SETTINGS_KEYS[providerId];
-      const apCfg = autoPingSettingsKey ? settingsData[autoPingSettingsKey] || {} : {};
-      setAutoPing({ enabled: apCfg.enabled === true, connections: apCfg.connections || {} });
-      if (nodesRes.ok) {
-        const allNodes = nodesData.nodes || [];
-        setProviderNodes(allNodes);
-        let node = allNodes.find((entry) => entry.id === providerId) || null;
+      setSecondaryFailures((prev) => {
+        const next = prev.filter((name) => name !== "proxy pools" && name !== "provider settings");
+        if (!proxyPoolsData) next.push("proxy pools");
+        if (!settingsData) next.push("provider settings");
+        return next;
+      });
+      const allNodes = nodesData.nodes || [];
+      setProviderNodes(allNodes);
+      let node = allNodes.find((entry) => entry.id === providerId) || null;
 
-        // Newly created compatible nodes can be briefly unavailable on one worker.
-        // Retry a few times before showing "Provider not found".
-        if (!node && isCompatible) {
-          for (let attempt = 0; attempt < 3; attempt += 1) {
-            await new Promise((resolve) => setTimeout(resolve, 150));
-            const retryRes = await fetch("/api/provider-nodes", { cache: "no-store" });
-            if (!retryRes.ok) continue;
-            const retryData = await retryRes.json();
-            node = (retryData.nodes || []).find((entry) => entry.id === providerId) || null;
-            if (node) break;
-          }
+      // Newly created compatible nodes can be briefly unavailable on one worker.
+      // Retry a few times before showing "Provider not found".
+      if (!node && isCompatible && nodesRes.ok) {
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          const retryRes = await fetch("/api/provider-nodes", { cache: "no-store" });
+          if (!retryRes.ok) continue;
+          const retryData = await retryRes.json();
+          node = (retryData.nodes || []).find((entry) => entry.id === providerId) || null;
+          if (node) break;
         }
-
-        setProviderNode(node);
       }
+
+      setProviderNode(node);
+      setLoadError(false);
     } catch (error) {
       console.log("Error fetching connections:", error);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
   }, [providerId, isCompatible]);
+
+  const retryLoad = async () => {
+    setRetrying(true);
+    try {
+      await fetchConnections();
+    } finally {
+      setRetrying(false);
+    }
+  };
 
   const handleUpdateNode = async (formData) => {
     try {
@@ -1045,15 +1088,16 @@ export default function ProviderDetailPage() {
         .slice(0, visibleCount)
         .map((conn, index) => (
           <div key={conn.id} className="flex min-w-0 items-stretch">
-            <div className="flex shrink-0 items-center pl-1 sm:pl-2">
+            <label className="relative flex min-h-11 w-11 shrink-0 cursor-pointer items-center justify-center">
               <input
                 type="checkbox"
                 checked={isSelected(conn.id)}
                 onChange={() => toggleSelectConnection(conn.id)}
                 aria-label={`Select ${conn.name || conn.email || conn.displayName || "connection"}`}
-                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                className={CHECKBOX_INPUT_CLASS}
               />
-            </div>
+              <CheckboxMark />
+            </label>
             <div className="flex-1 min-w-0">
               <ConnectionRow
                 connection={conn}
@@ -1377,11 +1421,28 @@ export default function ProviderDetailPage() {
     );
 }
 
+  if (loadError) {
+    return (
+      <div className="flex min-w-0 flex-col gap-4 px-1 py-6 sm:px-0">
+        <Link href="/dashboard/providers" className="inline-flex min-h-11 items-center gap-1 self-start text-sm text-text-muted hover:text-primary transition-colors">
+          <Icon name="arrow_back" size={18} />
+          Back to Providers
+        </Link>
+        <LoadFailedState
+          title="Couldn't load this provider"
+          message="The provider data could not be loaded. This is not a missing provider; retry to load it again."
+          onRetry={retryLoad}
+          retrying={retrying}
+        />
+      </div>
+    );
+  }
+
   if (!providerInfo) {
     return (
       <div className="text-center py-20">
         <p className="text-text-muted">Provider not found</p>
-        <Link href="/dashboard/providers" className="text-primary mt-4 inline-block">
+        <Link href="/dashboard/providers" className="text-primary mt-4 inline-flex min-h-11 items-center">
           Back to Providers
         </Link>
       </div>
@@ -1405,7 +1466,7 @@ export default function ProviderDetailPage() {
       <div className="min-w-0">
         <Link
           href="/dashboard/providers"
-          className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-primary transition-colors mb-4"
+          className="mb-2 inline-flex min-h-11 items-center gap-1 text-sm text-text-muted hover:text-primary transition-colors"
         >
           <Icon name="arrow_back" size={18} />
           Back to Providers
@@ -1444,7 +1505,7 @@ export default function ProviderDetailPage() {
                   href={providerInfo.notice?.apiKeyUrl || providerInfo.notice?.signupUrl || providerInfo.website}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                  className="inline-flex min-h-11 items-center gap-1 text-xs text-primary hover:underline"
                 >
                   <Icon name="open_in_new" size={14} />
                   {providerInfo.notice?.apiKeyUrl ? "Get API Key" : "Sign up / Learn more"}
@@ -1455,7 +1516,7 @@ export default function ProviderDetailPage() {
                   href="https://status.cursor.com"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                  className="inline-flex min-h-11 items-center gap-1 text-xs text-primary hover:underline"
                   title="Check whether Cursor's API is having an outage"
                 >
                   <Icon name="monitor_heart" size={14} />
@@ -1469,6 +1530,13 @@ export default function ProviderDetailPage() {
           </div>
         </div>
       </div>
+
+      {secondaryFailures.length > 0 && (
+        <div data-testid="secondary-load-warning" role="status" className="flex items-start gap-2 rounded-lg border border-[var(--color-warning)] bg-[var(--color-warning-wash)] px-3 py-2">
+          <Icon name="warning" size={16} className="mt-0.5 shrink-0 text-[var(--color-warning)]" aria-hidden="true" />
+          <p className="min-w-0 text-xs leading-relaxed text-[var(--color-text)]">Couldn&apos;t load {secondaryFailures.join(" and ")}. Connections are shown; options that depend on them may show defaults until you reload.</p>
+        </div>
+      )}
 
       {providerInfo.deprecated && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
@@ -1486,7 +1554,7 @@ export default function ProviderDetailPage() {
               href={providerInfo.notice.apiKeyUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex justify-center rounded bg-blue-500 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-600 sm:py-0.5"
+              className="inline-flex min-h-11 items-center justify-center rounded bg-[var(--color-primary)] px-3 text-xs font-medium text-[var(--color-on-primary)] transition-colors hover:bg-[var(--color-primary-hover)]"
             >
               Get API Key →
             </a>
@@ -1627,7 +1695,7 @@ export default function ProviderDetailPage() {
                       value={providerStickyLimit}
                       onChange={(e) => handleStickyLimitChange(e.target.value)}
                       placeholder="1"
-                      className="w-14 px-2 py-1 text-xs border border-border rounded-md bg-background focus:outline-none focus:border-primary"
+                      className="w-14 px-2 py-1 text-xs border border-border rounded-md bg-surface-2 focus:outline-none focus:border-primary"
                     />
                   </div>
                 )}
@@ -1714,13 +1782,14 @@ export default function ProviderDetailPage() {
               )}
               {connections.length > 0 && (
                 <div className="mb-3 flex items-center gap-2 border-b border-black/[0.03] pb-2 dark:border-white/[0.03]">
-                  <label className="flex cursor-pointer items-center gap-1.5 text-xs text-text-muted hover:text-primary">
+                  <label className="relative flex min-h-11 min-w-11 cursor-pointer items-center gap-1.5 pr-1 text-xs text-text-muted hover:text-primary">
                     <input
                       type="checkbox"
                       checked={allSelected}
                       onChange={toggleSelectAllConnections}
-                      className="h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary"
+                      className={CHECKBOX_INPUT_CLASS}
                     />
+                    <CheckboxMark />
                     Select All
                   </label>
                 </div>
@@ -1812,8 +1881,9 @@ export default function ProviderDetailPage() {
               <select
                 value={thinkingMode}
                 onChange={(e) => handleThinkingModeChange(e.target.value)}
+                aria-label="Thinking level suffix for copied model names"
                 title="Appends (level) suffix to copied model names"
-                className="rounded-md border border-border bg-background px-2 py-1 text-xs focus:border-primary focus:outline-none"
+                className="min-h-11 rounded-md border border-border bg-surface-2 px-2 py-1 text-xs focus:border-primary focus:outline-none"
               >
                 {providerThinkingLevels.map((opt) => (
                   <option key={opt} value={opt}>{`Thinking: ${opt.charAt(0).toUpperCase() + opt.slice(1)}`}</option>

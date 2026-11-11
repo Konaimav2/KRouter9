@@ -1,12 +1,13 @@
 "use client";
 
 import Icon from "@/shared/components/Icon";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card } from "@/shared/components";
 import { MEDIA_PROVIDER_KINDS, getProviderAlias, resolveProviderId } from "@/shared/constants/providers";
 import { getModelsByProviderId, getModelKind } from "@/shared/constants/models";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
-import { revealKeyById, pickDefaultKeyId, labelForMaskedKey, isKeyActionBlocked } from "@/lib/maskedKeyClient";
+import { pickDefaultKeyId, labelForMaskedKey, isRunBlocked, maskedKeyToken } from "@/lib/maskedKeyClient";
+import { useOnDemandKey } from "@/shared/hooks/useOnDemandKey";
 import { Row, KIND_EXAMPLE_CONFIG } from "./exampleShared";
 
 const CLOUDFLARE_TEST_IMAGE_URL = "https://pub-1fb693cb11cc46b2b2f656f51e015a2c.r2.dev/dog.png";
@@ -55,10 +56,8 @@ export function GenericExampleCard({ providerId, kind }) {
   const [extraValues, setExtraValues] = useState(() =>
     (safeExConfig.extraFields || []).reduce((acc, f) => { acc[f.key] = f.default ?? ""; return acc; }, {})
   );
-  const [apiKey, setApiKey] = useState("");
   const [maskedKeys, setMaskedKeys] = useState([]);
   const [selectedKeyId, setSelectedKeyId] = useState("");
-  const [resolvingKey, setResolvingKey] = useState(false);
   const [keyError, setKeyError] = useState("");
   const [keysLoading, setKeysLoading] = useState(true);
   const [keysError, setKeysError] = useState("");
@@ -76,28 +75,13 @@ export function GenericExampleCard({ providerId, kind }) {
   const [pinnedConnectionId, setPinnedConnectionId] = useState("");
   const { copied: copiedCurl, copy: copyCurl } = useCopyToClipboard();
   const { copied: copiedRes, copy: copyRes } = useCopyToClipboard();
-  // Stale-reveal guard: bind each resolved credential to the selection it was
-  // issued for; ignore completions that arrive after a reselection.
-  const revealSeqRef = useRef(0);
-  const resolveForSelection = useCallback((id, { clear = true } = {}) => {
-    const seq = ++revealSeqRef.current;
-    if (clear) setApiKey("");
-    if (!id) { setResolvingKey(false); return; }
-    setResolvingKey(true);
-    setKeyError("");
-    revealKeyById(id)
-      .then((raw) => { if (revealSeqRef.current === seq) setApiKey(raw); })
-      .catch((e) => {
-        if (revealSeqRef.current !== seq) return;
-        setApiKey("");
-        setKeyError(e.message || "Failed to resolve API key");
-      })
-      .finally(() => { if (revealSeqRef.current === seq) setResolvingKey(false); });
-  }, []);
+  // Stored keys stay masked: nothing is revealed on mount or selection. The
+  // raw key is fetched at Run/Copy click time, or shown after Reveal.
+  const onDemand = useOnDemandKey();
 
-  useEffect(() => {
-    setLocalEndpoint(window.location.origin);
-    fetch("/api/keys")
+  // API-key list load; Retry re-runs it after a failure (setState only in callbacks).
+  const fetchKeys = useCallback(() => {
+    return fetch("/api/keys")
       .then((r) => { if (!r.ok) throw new Error("Failed to load API keys"); return r.json(); })
       .then((d) => {
         const keys = d.keys || [];
@@ -107,9 +91,14 @@ export function GenericExampleCard({ providerId, kind }) {
         const id = pickDefaultKeyId(keys);
         if (!id) return;
         setSelectedKeyId(id);
-        resolveForSelection(id);
       })
       .catch((e) => { setKeysLoading(false); setKeysError(e.message || "Failed to load API keys"); setKeyError(e.message || "Failed to load API keys"); });
+  }, []);
+  const retryKeys = () => { setKeysLoading(true); setKeysError(""); setKeyError(""); fetchKeys(); };
+
+  useEffect(() => {
+    setLocalEndpoint(window.location.origin);
+    fetchKeys();
     fetch("/api/tunnel/status")
       .then((r) => r.json())
       .then((d) => { if (d.publicUrl) setTunnelEndpoint(d.publicUrl); })
@@ -122,7 +111,7 @@ export function GenericExampleCard({ providerId, kind }) {
         setConnections(conns);
       })
       .catch(() => { setConnections([]); });
-  }, [providerId]);
+  }, [providerId, fetchKeys]);
 
   // Safe to early-return now that all hooks are declared
   if (!kindConfig || !exConfig) return null;
@@ -134,9 +123,12 @@ export function GenericExampleCard({ providerId, kind }) {
     ? safeProviderAlias
     : (selectedModel ? `${safeProviderAlias}/${selectedModel}` : (allowManualModel ? "" : safeProviderAlias));
   // Settled-empty is not a manual-entry state here (no manual input): without
-  // a resolved credential the action stays blocked.
-  const listEmptyOk = maskedKeys.length > 0 || !!apiKey;
-  const keyBlocked = isKeyActionBlocked({ keys: maskedKeys, rawKey: apiKey, resolving: resolvingKey, error: keyError, loading: keysLoading, keysError }) || !listEmptyOk;
+  // a stored key to resolve at click time the action stays blocked. The
+  // reveal limiter never blocks Run (isRunBlocked ignores reveal state).
+  const listEmptyOk = maskedKeys.length > 0;
+  const keyBlocked = isRunBlocked({ keys: maskedKeys, selectedId: selectedKeyId, loading: keysLoading, keysError }) || !listEmptyOk;
+  const selectedKey = maskedKeys.find((k) => k.id === selectedKeyId);
+  const revealedKey = onDemand.revealedFor(selectedKeyId);
   const imageEditDefaults = getImageEditDefaults(providerId, selectedModel);
   const effectiveRefImage = refImage.trim() || imageEditDefaults.image || "";
   const effectiveMaskImage = maskImage.trim() || imageEditDefaults.mask_image || "";
@@ -163,13 +155,24 @@ export function GenericExampleCard({ providerId, kind }) {
   const wantBinary = kind === "image" && imageOutputFormat === "binary";
   const useStreaming = kind === "image" && providerId === "codex" && !wantBinary;
   const apiPathWithQuery = `${apiPath}${wantBinary ? "?response_format=binary" : ""}`;
-  const headersPreview = `-H "Content-Type: application/json" \\\n  -H "Authorization: Bearer ${apiKey || "YOUR_KEY"}"${pinnedConnectionId ? ` \\\n  -H "x-connection-id: ${pinnedConnectionId}"` : ""}${useStreaming ? ` \\\n  -H "Accept: text/event-stream"` : ""}`;
-  const curlSnippet = `curl -X ${kindConfig.endpoint.method} ${endpoint}${apiPathWithQuery} \\
-  ${headersPreview.replace(/\\\n  /g, "\\\n  ")} \\
+  const headersFor = (token) => `-H "Content-Type: application/json" \\\n  -H "Authorization: Bearer ${token}"${pinnedConnectionId ? ` \\\n  -H "x-connection-id: ${pinnedConnectionId}"` : ""}${useStreaming ? ` \\\n  -H "Accept: text/event-stream"` : ""}`;
+  const buildCurl = (token) => `curl -X ${kindConfig.endpoint.method} ${endpoint}${apiPathWithQuery} \\
+  ${headersFor(token).replace(/\\\n  /g, "\\\n  ")} \\
   -d '${JSON.stringify(requestBody)}'${wantBinary ? " \\\n  --output image.png" : ""}`;
+  // Displayed text only ever carries the masked token.
+  const curlSnippet = buildCurl(maskedKeyToken(selectedKey));
 
-  const handleRun = async () => {
-    if (!input.trim() || !modelFull) return;
+  const handleCopyCurl = () => {
+    if (!selectedKeyId) return undefined;
+    return onDemand.withKey(selectedKeyId, (key) => copyCurl(buildCurl(key)), "copy");
+  };
+
+  const handleRun = () => {
+    if (!input.trim() || !modelFull || !selectedKeyId) return undefined;
+    return onDemand.withKey(selectedKeyId, runWithKey, "run");
+  };
+
+  const runWithKey = async (apiKey) => {
     setRunning(true);
     setError("");
     setResult(null);
@@ -270,9 +273,10 @@ export function GenericExampleCard({ providerId, kind }) {
         {kindModels.length > 0 ? (
           <Row label="Model">
             <select
+              aria-label="Model"
               value={selectedModel}
               onChange={(e) => setSelectedModel(e.target.value)}
-              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary"
             >
               {kindModels.map((m) => (
                 <option key={m.id} value={m.id}>{m.name || m.id}</option>
@@ -282,10 +286,11 @@ export function GenericExampleCard({ providerId, kind }) {
         ) : allowManualModel ? (
           <Row label="Model">
             <input
+              aria-label="Model"
               value={selectedModel}
               onChange={(e) => setSelectedModel(e.target.value)}
               placeholder="Enter model id (provider-specific)"
-              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary font-mono"
+              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary font-mono"
             />
           </Row>
         ) : null}
@@ -293,7 +298,7 @@ export function GenericExampleCard({ providerId, kind }) {
         {/* Endpoint */}
         <Row label="Endpoint">
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-            <span className="w-full min-w-0 flex-1 px-3 py-1.5 text-sm font-mono text-text-main bg-sidebar rounded-lg truncate">
+            <span className="w-full min-w-0 flex-1 px-3 py-1.5 text-sm font-mono text-text-main bg-surface-2 rounded-lg truncate">
               {endpoint}{apiPath}
             </span>
             {tunnelEndpoint && (
@@ -311,26 +316,38 @@ export function GenericExampleCard({ providerId, kind }) {
           </div>
         </Row>
 
-        {/* API Key (masked — raw resolves via guarded reveal only) */}
+        {/* API Key (masked; raw only on explicit Reveal or at Run/Copy time) */}
         <Row label="API Key">
-          <span className="px-3 py-1.5 text-sm font-mono text-text-main bg-sidebar rounded-lg truncate block">
-            {resolvingKey
-              ? <span className="text-text-muted italic">Resolving selected key…</span>
-              : (selectedKeyId
-                ? labelForMaskedKey(maskedKeys.find((k) => k.id === selectedKeyId) || { id: selectedKeyId })
-                : <span className="text-text-muted italic">No key configured</span>)}
-          </span>
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="min-w-0 flex-1 px-3 py-1.5 text-sm font-mono text-text-main bg-surface-2 rounded-lg truncate block">
+              {selectedKeyId
+                ? (revealedKey || labelForMaskedKey(selectedKey || { id: selectedKeyId }))
+                : <span className="text-text-muted italic">No key configured</span>}
+            </span>
+            {selectedKeyId && (
+              <button
+                type="button"
+                onClick={() => (revealedKey ? onDemand.hide() : onDemand.reveal(selectedKeyId))}
+                aria-pressed={!!revealedKey}
+                disabled={onDemand.pending === "reveal"}
+                className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1 rounded-lg border border-border px-3 text-xs text-text-muted hover:text-primary transition-colors disabled:opacity-50"
+              >
+                <Icon name={revealedKey ? "visibility_off" : "visibility"} size={14} />
+                {revealedKey ? "Hide" : "Reveal"}
+              </button>
+            )}
+          </div>
         </Row>
         {maskedKeys.length > 1 && (
           <Row label="Key">
             <select
+              aria-label="Stored API key"
               value={selectedKeyId}
               onChange={(e) => {
-                const id = e.target.value;
-                setSelectedKeyId(id);
-                resolveForSelection(id);
+                onDemand.reset();
+                setSelectedKeyId(e.target.value);
               }}
-              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary"
             >
               {maskedKeys.map((k) => (
                 <option key={k.id} value={k.id}>{labelForMaskedKey(k)}</option>
@@ -338,13 +355,25 @@ export function GenericExampleCard({ providerId, kind }) {
             </select>
           </Row>
         )}
-        {keyError && <p role="alert" className="text-xs text-red-500 break-words">{keyError}</p>}
+        {keyError && (
+          <div role="alert" className="flex flex-wrap items-center gap-2 text-xs text-danger">
+            <span className="break-words">{keyError}</span>
+            {keysError && <button type="button" onClick={retryKeys} className="inline-flex min-h-11 items-center px-2 font-semibold underline hover:text-primary">Retry</button>}
+          </div>
+        )}
+        {onDemand.error && (
+          <div role="alert" className="flex flex-wrap items-center gap-2 text-xs text-danger">
+            <span className="break-words">{onDemand.error}</span>
+            <button type="button" onClick={onDemand.retry} className="inline-flex min-h-11 items-center px-2 font-semibold underline hover:text-primary">Retry</button>
+          </div>
+        )}
         {connections.length > 0 && (
           <Row label="Connection">
             <select
+              aria-label="Pinned connection"
               value={pinnedConnectionId}
               onChange={(e) => setPinnedConnectionId(e.target.value)}
-              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary"
             >
               <option value="">Auto (by priority)</option>
               {connections.map((c) => {
@@ -364,16 +393,18 @@ export function GenericExampleCard({ providerId, kind }) {
         <Row label={exConfig.inputLabel}>
           <div className="relative">
             <input
+              aria-label={exConfig.inputLabel}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder={exConfig.inputPlaceholder}
-              className="w-full px-3 py-1.5 pr-7 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+              className="w-full px-3 py-1.5 pr-7 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary"
             />
             {input && (
               <button
                 type="button"
+                aria-label={`Clear ${exConfig.inputLabel}`}
                 onClick={() => setInput("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-primary transition-colors"
+                className="hit-target absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-primary transition-colors"
               >
                 <Icon name="close" size={14} />
               </button>
@@ -387,16 +418,18 @@ export function GenericExampleCard({ providerId, kind }) {
             <div className="flex flex-col gap-2">
               <div className="relative">
                 <input
+                  aria-label="Reference image URL"
                   value={refImage}
                   onChange={(e) => setRefImage(e.target.value)}
                   placeholder={imageEditDefaults.image || "https://example.com/source.png"}
-                  className="w-full px-3 py-1.5 pr-7 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+                  className="w-full px-3 py-1.5 pr-7 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary"
                 />
                 {refImage && (
                   <button
                     type="button"
+                    aria-label="Clear reference image URL"
                     onClick={() => setRefImage("")}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-primary transition-colors"
+                    className="hit-target absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-primary transition-colors"
                   >
                     <Icon name="close" size={14} />
                   </button>
@@ -406,7 +439,7 @@ export function GenericExampleCard({ providerId, kind }) {
                 <img
                   src={refImagePreviewSrc}
                   alt="Reference"
-                  className="max-h-40 rounded-lg border border-border object-contain bg-sidebar"
+                  className="max-h-40 rounded-lg border border-border object-contain bg-surface-2"
                   onError={(e) => { e.currentTarget.style.display = "none"; }}
                   onLoad={(e) => { e.currentTarget.style.display = "block"; }}
                 loading="lazy"
@@ -422,16 +455,18 @@ export function GenericExampleCard({ providerId, kind }) {
             <div className="flex flex-col gap-2">
               <div className="relative">
                 <input
+                  aria-label="Mask image URL"
                   value={maskImage}
                   onChange={(e) => setMaskImage(e.target.value)}
                   placeholder={imageEditDefaults.mask_image || "https://example.com/mask.png"}
-                  className="w-full px-3 py-1.5 pr-7 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+                  className="w-full px-3 py-1.5 pr-7 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary"
                 />
                 {maskImage && (
                   <button
                     type="button"
+                    aria-label="Clear mask image URL"
                     onClick={() => setMaskImage("")}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-primary transition-colors"
+                    className="hit-target absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-primary transition-colors"
                   >
                     <Icon name="close" size={14} />
                   </button>
@@ -441,7 +476,7 @@ export function GenericExampleCard({ providerId, kind }) {
                 <img
                   src={maskImagePreviewSrc}
                   alt="Mask"
-                  className="max-h-40 rounded-lg border border-border object-contain bg-sidebar"
+                  className="max-h-40 rounded-lg border border-border object-contain bg-surface-2"
                   onError={(e) => { e.currentTarget.style.display = "none"; }}
                   onLoad={(e) => { e.currentTarget.style.display = "block"; }}
                 loading="lazy"
@@ -459,9 +494,10 @@ export function GenericExampleCard({ providerId, kind }) {
           <Row key={f.key} label={f.label}>
             {f.type === "select" ? (
               <select
+                aria-label={f.label}
                 value={extraValues[f.key] ?? ""}
                 onChange={(e) => setExtraValues((s) => ({ ...s, [f.key]: e.target.value }))}
-                className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+                className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary"
               >
                 {(f.options || []).map((opt) => (
                   <option key={opt} value={opt}>{opt === "" ? "(default)" : opt}</option>
@@ -470,19 +506,21 @@ export function GenericExampleCard({ providerId, kind }) {
             ) : f.type === "text" ? (
               <input
                 type="text"
+                aria-label={f.label}
                 value={extraValues[f.key] ?? ""}
                 placeholder={f.placeholder}
                 onChange={(e) => setExtraValues((s) => ({ ...s, [f.key]: e.target.value }))}
-                className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+                className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary"
               />
             ) : (
               <input
                 type="number"
+                aria-label={f.label}
                 value={extraValues[f.key] ?? ""}
                 min={f.min}
                 max={f.max}
                 onChange={(e) => setExtraValues((s) => ({ ...s, [f.key]: e.target.value === "" ? "" : Number(e.target.value) }))}
-                className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+                className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary"
               />
             )}
           </Row>
@@ -492,9 +530,10 @@ export function GenericExampleCard({ providerId, kind }) {
         {kind === "image" && (
           <Row label="Output Format">
             <select
+              aria-label="Output format"
               value={imageOutputFormat}
               onChange={(e) => setImageOutputFormat(e.target.value)}
-              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary"
             >
               <option value="json">JSON (Base64)</option>
               <option value="binary">Binary File</option>
@@ -508,7 +547,7 @@ export function GenericExampleCard({ providerId, kind }) {
             <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">Request</span>
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
               <button
-                onClick={() => copyCurl(curlSnippet)}
+                onClick={handleCopyCurl}
                 disabled={keyBlocked}
                 className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -518,19 +557,19 @@ export function GenericExampleCard({ providerId, kind }) {
             <button
               onClick={handleRun}
               disabled={running || !input.trim() || !modelFull || keyBlocked}
-              className="flex w-full sm:w-auto items-center justify-center gap-1.5 px-3 py-1 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex w-full sm:w-auto items-center justify-center gap-1.5 px-3 py-1 rounded-lg bg-primary text-[var(--color-on-primary)] text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 <Icon name="play_arrow" size={14} style={running ? { animation: "spin 1s linear infinite" } : undefined} />
                 {running ? "Running..." : "Run"}
               </button>
             </div>
           </div>
-          <pre className="bg-sidebar rounded-lg px-3 py-2.5 text-xs font-mono text-text-main overflow-x-auto whitespace-pre-wrap break-all">{curlSnippet}</pre>
+          <pre tabIndex={0} aria-label="Example request" className="bg-code-bg rounded-lg px-3 py-2.5 text-xs font-mono text-code-fg overflow-x-auto whitespace-pre-wrap break-all">{curlSnippet}</pre>
         </div>
 
         {/* Streaming progress */}
         {(running || progress) && useStreaming && (
-          <div className="flex flex-col gap-2 px-3 py-2 rounded-lg bg-sidebar border border-border sm:flex-row sm:items-center sm:gap-3">
+          <div className="flex flex-col gap-2 px-3 py-2 rounded-lg bg-surface-2 border border-border sm:flex-row sm:items-center sm:gap-3">
             <Icon name={running ? "progress_activity" : "check_circle"} size={16} className="text-primary" style={running ? { animation: "spin 1s linear infinite" } : undefined} />
             <span className="text-xs text-text-muted">
               {progress?.stage || "starting"}
@@ -554,7 +593,7 @@ export function GenericExampleCard({ providerId, kind }) {
         )}
 
         {/* Error */}
-        {error && <p className="text-xs text-red-500 break-words">{error}</p>}
+        {error && <p className="text-xs text-danger break-words">{error}</p>}
 
         {/* Response */}
         <div>
@@ -572,7 +611,7 @@ export function GenericExampleCard({ providerId, kind }) {
               </button>
             )}
           </div>
-          <pre className="bg-sidebar rounded-lg px-3 py-2.5 text-xs font-mono text-text-main overflow-x-auto whitespace-pre-wrap break-all opacity-70">
+          <pre tabIndex={0} aria-label="Example response" className="bg-code-bg rounded-lg px-3 py-2.5 text-xs font-mono text-code-muted overflow-x-auto whitespace-pre-wrap break-all">
             {result ? resultJson : exConfig.defaultResponse}
           </pre>
           {kind === "image" && (binaryImageUrl || result?.data?.data?.[0]) && (

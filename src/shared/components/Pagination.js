@@ -58,9 +58,10 @@ export default function Pagination({
             <span className="text-sm text-text-muted">Rows:</span>
             <select
               value={pageSize}
+              aria-label="Rows per page"
               onChange={(e) => onPageSizeChange(Number(e.target.value))}
               className={cn(
-                "h-9 rounded-lg border border-black/10 dark:border-white/10 bg-surface",
+                "h-11 rounded-lg border border-black/10 dark:border-white/10 bg-surface",
                 "text-sm text-text-main focus:outline-none focus:ring-2 focus:ring-primary/20",
                 "cursor-pointer"
               )}
@@ -80,9 +81,10 @@ export default function Pagination({
             <Button
               variant="outline"
               size="sm"
+              aria-label="Previous page"
               onClick={() => onPageChange(currentPage - 1)}
               disabled={currentPage === 1}
-              className="w-9 px-0"
+              className="w-11 px-0"
             >
               <Icon name="chevron_left" className="text-[18px]" />
             </Button>
@@ -93,7 +95,7 @@ export default function Pagination({
                   variant="ghost"
                   size="sm"
                   onClick={() => onPageChange(1)}
-                  className="w-9 px-0 hidden sm:inline-flex"
+                  className="w-11 px-0 hidden sm:inline-flex"
                 >
                   1
                 </Button>
@@ -110,7 +112,7 @@ export default function Pagination({
                 size="sm"
                 onClick={() => onPageChange(page)}
                 className={cn(
-                  "w-9 px-0",
+                  "w-11 px-0",
                   currentPage === page ? "inline-flex" : "hidden sm:inline-flex"
                 )}
               >
@@ -127,7 +129,7 @@ export default function Pagination({
                   variant="ghost"
                   size="sm"
                   onClick={() => onPageChange(totalPages)}
-                  className="w-9 px-0 hidden sm:inline-flex"
+                  className="w-11 px-0 hidden sm:inline-flex"
                 >
                   {totalPages}
                 </Button>
@@ -137,9 +139,10 @@ export default function Pagination({
             <Button
               variant="outline"
               size="sm"
+              aria-label="Next page"
               onClick={() => onPageChange(currentPage + 1)}
               disabled={currentPage === totalPages}
-              className="w-9 px-0"
+              className="w-11 px-0"
             >
               <Icon name="chevron_right" className="text-[18px]" />
             </Button>

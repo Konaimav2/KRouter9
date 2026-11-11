@@ -31,17 +31,17 @@ export default function KRouter9ToolCard() {
       <ol className="divide-y divide-border">
         {STEPS.map((step) => (
           <li key={step.title} className="min-w-0 space-y-2 py-3">
-            <h3 className="text-sm font-semibold text-text-primary">{step.title}</h3>
+            <h3 className="text-sm font-semibold text-text">{step.title}</h3>
             <p className="text-sm text-text-muted">{step.detail}</p>
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <pre className="min-w-0 flex-1 overflow-x-auto border border-border bg-[var(--color-code-bg)] p-3 text-xs" tabIndex={0} aria-label="Command"><code>{step.command}</code></pre>
+              <pre className="min-w-0 flex-1 overflow-x-auto border border-border bg-[var(--color-code-bg)] p-3 text-xs text-[var(--color-code-fg)]" tabIndex={0} aria-label="Command"><code>{step.command}</code></pre>
               <Button variant="secondary" className="min-h-11" aria-label={`Copy ${step.title.toLowerCase()} command`} onClick={() => copyCommand(step.command, step.title)}>{copiedStep === step.title ? "Copied" : "Copy"}</Button>
             </div>
           </li>
         ))}
       </ol>
       {copyError && <p role="alert" className="text-sm text-danger">Unable to copy. Select the command and copy it manually.</p>}
-      <p className="text-sm text-text-muted">Start explicitly with <code>bash ~/.krouter9/start-local.sh</code>. The scaffold binds to 127.0.0.1:20128. Configure providers and access in the local dashboard before exposing it remotely.</p>
+      <p className="text-sm text-text-muted">Start explicitly with <code>bash ~/.krouter9/start-local.sh</code>. The scaffold binds to the loopback address (127.0.0.1) only. Configure providers and access in the local dashboard before exposing it remotely.</p>
     </section>
   );
 }

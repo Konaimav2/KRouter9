@@ -6,6 +6,7 @@ import { Card, Button, ModelSelectModal, ManualConfigModal } from "@/shared/comp
 import Image from "next/image";
 import BaseUrlSelect from "./BaseUrlSelect";
 import ApiKeySelect from "./ApiKeySelect";
+import { useCliApiKey } from "./useCliApiKey";
 import { matchKnownEndpoint } from "./cliEndpointMatch";
 import { rememberEndpoint } from "./cliEndpointPresets";
 
@@ -16,7 +17,8 @@ export default function CodexToolCard({ tool, isExpanded, onToggle, baseUrl, api
   const [restoring, setRestoring] = useState(false);
   const [message, setMessage] = useState(null);
   const [showInstallGuide, setShowInstallGuide] = useState(false);
-  const [selectedApiKey, setSelectedApiKey] = useState("");
+  // Key id only; the raw key is revealed inside Apply / Copy handlers.
+  const apiKey = useCliApiKey({ apiKeys });
   const [selectedModel, setSelectedModel] = useState("");
   const [subagentModel, setSubagentModel] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
@@ -25,9 +27,8 @@ export default function CodexToolCard({ tool, isExpanded, onToggle, baseUrl, api
   const [showManualConfigModal, setShowManualConfigModal] = useState(false);
   const [customBaseUrl, setCustomBaseUrl] = useState("");
 
-  // Key selection is owned by ApiKeySelect: it lists by id/name/masked value and
-  // resolves ONLY the chosen credential via the guarded single-record reveal.
-  // No default here — ApiKeySelect auto-picks the first entry when empty.
+  // ApiKeySelect lists keys by id/name/masked value; the card keeps the id
+  // only and reveals the chosen credential at Apply/Copy time. No default.
 
   useEffect(() => {
     if (initialStatus) setCodexStatus(initialStatus);
@@ -102,10 +103,16 @@ export default function CodexToolCard({ tool, isExpanded, onToggle, baseUrl, api
     setApplying(true);
     setMessage(null);
     try {
-      // The selected key arrives ONLY via ApiKeySelect's guarded single-record
-      // reveal. Never fall back to a dummy value silently — an explicit error
+      // The selected key is revealed now, through the guarded single-record
+      // endpoint. Never fall back to a dummy value silently — an explicit error
       // forces the user to pick (or create) a real credential.
-      const keyToUse = (selectedApiKey && selectedApiKey.trim()) ? selectedApiKey : "";
+      if (!apiKey.hasKey) {
+        setMessage({ type: "error", text: "No API key selected — pick a key above (or create one in the Keys page) before applying." });
+        return;
+      }
+      const resolved = await apiKey.resolve({ fallback: "", label: "apply", retry: handleApplySettings });
+      if (!resolved.ok) return;
+      const keyToUse = resolved.key;
       if (!keyToUse || keyToUse === "sk_krouter9") {
         setMessage({ type: "error", text: "No API key selected — pick a key above (or create one in the Keys page) before applying." });
         return;
@@ -167,10 +174,9 @@ export default function CodexToolCard({ tool, isExpanded, onToggle, baseUrl, api
     setModalOpen(false);
   };
 
-  const getManualConfigs = () => {
-    const keyToUse = (selectedApiKey && selectedApiKey.trim())
-      ? selectedApiKey
-      : "<API_KEY_FROM_DASHBOARD — select a key above to fill this in>";
+  const manualFallbackKey = "<API_KEY_FROM_DASHBOARD — select a key above to fill this in>";
+  // Preview shows the masked token; Copy passes the revealed key.
+  const getManualConfigs = (keyToUse = apiKey.display(manualFallbackKey)) => {
 
     const effectiveSubagentModel = subagentModel || selectedModel;
 
@@ -305,7 +311,7 @@ default_subagent_model = "${effectiveSubagentModel}"
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[8rem_auto_1fr_auto] sm:items-center sm:gap-2">
                   <span className="text-xs font-semibold text-text-main sm:text-right sm:text-sm">API Key</span>
                   <Icon name="arrow_forward" className="hidden text-text-muted text-[14px] sm:inline" />
-                  <ApiKeySelect value={selectedApiKey} onChange={setSelectedApiKey} apiKeys={apiKeys} cloudEnabled={cloudEnabled} />
+                  <ApiKeySelect {...apiKey.selectProps} apiKeys={apiKeys} cloudEnabled={cloudEnabled} />
                 </div>
 
                 {/* Model */}
@@ -314,7 +320,7 @@ default_subagent_model = "${effectiveSubagentModel}"
                   <Icon name="arrow_forward" className="hidden text-text-muted text-[14px] sm:inline" />
                   <div className="relative w-full min-w-0">
                     <input type="text" value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)} placeholder="provider/model-id" className="w-full min-w-0 pl-2 pr-7 py-2 bg-surface rounded border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary/50 sm:py-1.5" />
-                    {selectedModel && <button onClick={() => setSelectedModel("")} className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-text-muted hover:text-red-500 rounded transition-colors" title="Clear"><Icon name="close" className="text-[14px]" /></button>}
+                    {selectedModel && <button type="button" aria-label="Clear model" onClick={() => setSelectedModel("")} className="hit-target absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-text-muted hover:text-red-500 rounded transition-colors" title="Clear"><Icon name="close" className="text-[14px]" /></button>}
                   </div>
                   <button onClick={() => setModalOpen(true)} disabled={!activeProviders?.length} className={`w-full sm:w-auto rounded border px-2 py-2 text-xs transition-colors sm:py-1.5 whitespace-nowrap sm:shrink-0 ${activeProviders?.length ? "bg-surface border-border text-text-main hover:border-primary cursor-pointer" : "opacity-50 cursor-not-allowed border-border"}`}>Select Model</button>
                 </div>
@@ -334,7 +340,9 @@ default_subagent_model = "${effectiveSubagentModel}"
                     {subagentModel && (
                       <button
                         onClick={() => setSubagentModel("")}
-                        className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-text-muted hover:text-red-500 rounded transition-colors"
+                        type="button"
+                        aria-label="Clear subagent model"
+                        className="hit-target absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-text-muted hover:text-red-500 rounded transition-colors"
                         title="Clear (will use main model)"
                       >
                         <Icon name="close" className="text-[14px]" />
@@ -359,7 +367,7 @@ default_subagent_model = "${effectiveSubagentModel}"
               )}
 
               <div className="grid grid-cols-1 gap-2 sm:flex sm:items-center">
-                <Button variant="primary" size="sm" onClick={handleApplySettings} disabled={!selectedApiKey || !selectedModel} loading={applying}>
+                <Button variant="primary" size="sm" onClick={handleApplySettings} disabled={!apiKey.hasKey || !selectedModel} loading={applying}>
                   <Icon name="save" className="text-[14px] mr-1" />Apply
                 </Button>
                 <Button variant="outline" size="sm" onClick={handleResetSettings} disabled={restoring} loading={restoring}>
@@ -403,6 +411,10 @@ default_subagent_model = "${effectiveSubagentModel}"
         onClose={() => setShowManualConfigModal(false)}
         title="Codex CLI - Manual Configuration"
         configs={getManualConfigs()}
+        resolveCopyContent={async (index) => {
+          const resolved = await apiKey.resolve({ fallback: manualFallbackKey, label: "copy" });
+          return resolved.ok ? getManualConfigs(resolved.key)[index]?.content : null;
+        }}
       />
     </Card>
   );

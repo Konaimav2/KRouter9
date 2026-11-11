@@ -1,12 +1,13 @@
 "use client";
 
 import Icon from "@/shared/components/Icon";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card } from "@/shared/components";
 import { getProviderAlias, isCustomEmbeddingProvider } from "@/shared/constants/providers";
 import { getModelsByProviderId, getModelKind } from "@/shared/constants/models";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
-import { revealKeyById, pickDefaultKeyId, isKeyActionBlocked } from "@/lib/maskedKeyClient";
+import { pickDefaultKeyId, labelForMaskedKey, isRunBlocked, maskedKeyToken } from "@/lib/maskedKeyClient";
+import { useOnDemandKey } from "@/shared/hooks/useOnDemandKey";
 import { Row } from "./exampleShared";
 
 const DEFAULT_RESPONSE_EXAMPLE = `{
@@ -20,6 +21,12 @@ const DEFAULT_RESPONSE_EXAMPLE = `{
   "usage": { "prompt_tokens": 9, "total_tokens": 9 }
 }`;
 
+// Typed keys are shown like stored ones: never in full in the snippet.
+function maskTypedKey(value) {
+  if (value.length <= 8) return "••••";
+  return `${value.slice(0, 3)}...${value.slice(-4)}`;
+}
+
 export function EmbeddingExampleCard({ providerId, customAlias }) {
   const isCustom = isCustomEmbeddingProvider(providerId);
   const providerAlias = isCustom ? (customAlias || providerId) : getProviderAlias(providerId);
@@ -30,7 +37,7 @@ export function EmbeddingExampleCard({ providerId, customAlias }) {
   const [dimensions, setDimensions] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [maskedKeys, setMaskedKeys] = useState([]);
-  const [resolvingKey, setResolvingKey] = useState(false);
+  const [selectedKeyId, setSelectedKeyId] = useState("");
   const [keyError, setKeyError] = useState("");
   const [keysLoading, setKeysLoading] = useState(true);
   const [keysError, setKeysError] = useState("");
@@ -40,52 +47,58 @@ export function EmbeddingExampleCard({ providerId, customAlias }) {
   const [result, setResult] = useState(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
+  const [gatewayHint, setGatewayHint] = useState("");
   const { copied: copiedCurl, copy: copyCurl } = useCopyToClipboard();
   const { copied: copiedRes, copy: copyRes } = useCopyToClipboard();
-  // Stale-reveal guard: bind each resolved credential to the selection it was
-  // issued for; ignore completions that arrive after a reselection.
-  const revealSeqRef = useRef(0);
-  const resolveForSelection = (id) => {
-    const seq = ++revealSeqRef.current;
-    setApiKey("");
-    if (!id) { setResolvingKey(false); return; }
-    setResolvingKey(true);
-    setKeyError("");
-    revealKeyById(id)
-      .then((raw) => { if (revealSeqRef.current === seq) setApiKey(raw); })
-      .catch((e) => {
-        if (revealSeqRef.current !== seq) return;
-        setApiKey("");
-        setKeyError(e.message || "Failed to resolve API key");
-      })
-      .finally(() => { if (revealSeqRef.current === seq) setResolvingKey(false); });
-  };
 
-  useEffect(() => {
-    setLocalEndpoint(window.location.origin);
-    fetch("/api/keys")
+  // API-key list load; Retry re-runs it after a failure (setState only in callbacks).
+  const fetchKeys = useCallback(() => {
+    return fetch("/api/keys")
       .then((r) => { if (!r.ok) throw new Error("Failed to load API keys"); return r.json(); })
       .then((d) => {
         const keys = d.keys || [];
         setMaskedKeys(keys);
         setKeysError("");
         setKeysLoading(false);
-        const id = pickDefaultKeyId(keys);
-        resolveForSelection(id);
+        setSelectedKeyId(pickDefaultKeyId(keys) || "");
       })
       .catch((e) => { setKeysLoading(false); setKeysError(e.message || "Failed to load API keys"); setKeyError(e.message || "Failed to load API keys"); });
+  }, [setKeyError]);
+  const retryKeys = () => { setKeysLoading(true); setKeysError(""); setKeyError(""); fetchKeys(); };
+
+  useEffect(() => {
+    // Page origin after mount (what getGatewayOrigin() returns on the client);
+    // it also serves as the placeholder once the field is cleared.
+    const origin = window.location.origin;
+    setLocalEndpoint(origin);
+    setGatewayHint(origin);
+    fetchKeys();
     fetch("/api/tunnel/status")
       .then((r) => r.json())
       .then((d) => { if (d.publicUrl) setTunnelEndpoint(d.publicUrl); })
       .catch(() => { setTunnelEndpoint(""); });
-  }, []);
+  }, [fetchKeys]);
+
+  // Stored keys stay masked: nothing is revealed on mount or selection. The
+  // raw key is fetched at Run/Copy click time, or shown after Reveal.
+  const onDemand = useOnDemandKey();
 
   const endpoint = useTunnel ? tunnelEndpoint : localEndpoint;
   const modelFull = selectedModel ? `${providerAlias}/${selectedModel}` : "";
-  // Settled-empty with an empty manual field is NOT usable: require a
-  // nonempty trimmed explicit credential (mirrors Generic/Stt listEmptyOk).
-  const hasCredential = apiKey.trim().length > 0;
-  const keyBlocked = isKeyActionBlocked({ keys: maskedKeys, rawKey: apiKey, resolving: resolvingKey, error: keyError, loading: keysLoading, keysError }) || (maskedKeys.length === 0 && !hasCredential);
+  // A typed key wins over the stored selection. Settled-empty with an empty
+  // manual field is NOT usable: require an explicit credential. The reveal
+  // limiter never blocks Run (isRunBlocked ignores reveal state).
+  const manualKey = apiKey.trim();
+  const selectedKey = maskedKeys.find((k) => k.id === selectedKeyId);
+  const hasCredential = manualKey.length > 0 || (!!selectedKeyId && maskedKeys.length > 0);
+  const keyBlocked = (!manualKey && isRunBlocked({ keys: maskedKeys, selectedId: selectedKeyId, loading: keysLoading, keysError })) || !hasCredential;
+  const revealedKey = onDemand.revealedFor(selectedKeyId);
+  const keyToken = manualKey ? maskTypedKey(manualKey) : maskedKeyToken(selectedKey);
+  const withCredential = (action, label) => {
+    if (manualKey) return action(manualKey);
+    if (!selectedKeyId) return undefined;
+    return onDemand.withKey(selectedKeyId, action, label);
+  };
 
   // Build request body — include dimensions only if user provided a positive number
   const buildBody = () => {
@@ -95,20 +108,31 @@ export function EmbeddingExampleCard({ providerId, customAlias }) {
     return body;
   };
 
-  const curlSnippet = `curl -X POST ${endpoint}/v1/embeddings \\
+  const buildCurl = (token) => `curl -X POST ${endpoint}/v1/embeddings \\
   -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer ${apiKey || "YOUR_KEY"}" \\
+  -H "Authorization: Bearer ${token}" \\
   -d '${JSON.stringify(buildBody())}'`;
+  // Displayed text only ever carries the masked token.
+  const curlSnippet = buildCurl(keyToken);
 
-  const handleRun = async () => {
-    if (!input.trim() || !modelFull || !hasCredential) return;
+  const handleCopyCurl = () => {
+    if (!hasCredential) return undefined;
+    return withCredential((key) => copyCurl(buildCurl(key)), "copy");
+  };
+
+  const handleRun = () => {
+    if (!input.trim() || !modelFull || !hasCredential) return undefined;
+    return withCredential(runWithKey, "run");
+  };
+
+  const runWithKey = async (key) => {
     setRunning(true);
     setError("");
     setResult(null);
     const start = Date.now();
     try {
       const headers = { "Content-Type": "application/json" };
-      if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+      if (key) headers["Authorization"] = `Bearer ${key}`;
       const res = await fetch("/api/v1/embeddings", {
         method: "POST",
         headers,
@@ -148,16 +172,18 @@ export function EmbeddingExampleCard({ providerId, customAlias }) {
         <Row label="Model">
           {isCustom ? (
             <input
+              aria-label="Model"
               value={selectedModel}
               onChange={(e) => setSelectedModel(e.target.value)}
               placeholder="e.g. voyage-3, embed-english-v3.0, text-embedding-3-small"
-              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary font-mono"
+              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary font-mono"
             />
           ) : (
             <select
+              aria-label="Embedding model"
               value={selectedModel}
               onChange={(e) => setSelectedModel(e.target.value)}
-              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary"
             >
               {embeddingModels.map((m) => (
                 <option key={m.id} value={m.id}>{m.name || m.id}</option>
@@ -170,10 +196,11 @@ export function EmbeddingExampleCard({ providerId, customAlias }) {
         <Row label="Endpoint">
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
             <input
+              aria-label="Endpoint"
               value={endpoint}
               onChange={(e) => useTunnel ? setTunnelEndpoint(e.target.value) : setLocalEndpoint(e.target.value)}
-              className="w-full min-w-0 flex-1 px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary font-mono"
-              placeholder="http://localhost:3000"
+              className="w-full min-w-0 flex-1 px-3 py-1.5 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary font-mono"
+              placeholder={gatewayHint || "Gateway URL"}
             />
             {/* Tunnel toggle — only show if tunnel URL is available */}
             {tunnelEndpoint && (
@@ -191,21 +218,66 @@ export function EmbeddingExampleCard({ providerId, customAlias }) {
           </div>
         </Row>
 
-        {/* API Key */}
+        {/* Stored key (masked; raw only on explicit Reveal or at Run/Copy time) */}
+        {maskedKeys.length > 0 && (
+          <Row label="Key">
+            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+              {maskedKeys.length > 1 ? (
+                <select
+                  aria-label="Stored API key"
+                  value={selectedKeyId}
+                  onChange={(e) => { onDemand.reset(); setSelectedKeyId(e.target.value); }}
+                  className="w-full min-w-0 flex-1 px-3 py-1.5 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary"
+                >
+                  {maskedKeys.map((k) => (
+                    <option key={k.id} value={k.id}>{labelForMaskedKey(k)}</option>
+                  ))}
+                </select>
+              ) : (
+                <span className="min-w-0 flex-1 px-3 py-1.5 text-sm font-mono text-text-main bg-surface-2 rounded-lg truncate">{labelForMaskedKey(selectedKey)}</span>
+              )}
+              {selectedKeyId && (
+                <button
+                  type="button"
+                  onClick={() => (revealedKey ? onDemand.hide() : onDemand.reveal(selectedKeyId))}
+                  aria-pressed={!!revealedKey}
+                  disabled={onDemand.pending === "reveal"}
+                  className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1 rounded-lg border border-border px-3 text-xs text-text-muted hover:text-primary transition-colors disabled:opacity-50"
+                >
+                  <Icon name={revealedKey ? "visibility_off" : "visibility"} size={14} />
+                  {revealedKey ? "Hide" : "Reveal"}
+                </button>
+              )}
+            </div>
+            {revealedKey && (
+              <code className="mt-1.5 block break-all rounded-lg bg-code-bg px-3 py-1.5 text-xs font-mono text-code-fg">{revealedKey}</code>
+            )}
+          </Row>
+        )}
+
+        {/* Manual API key (optional; wins over the stored key) */}
         <Row label="API Key">
           <input
             type="password"
             value={apiKey}
-            // Manual entry wins: invalidate any pending auto-reveal so a late
-            // completion cannot clobber the typed value, and drop stale
-            // resolving/error so the typed credential is usable immediately.
-            onChange={(e) => { revealSeqRef.current++; setResolvingKey(false); setKeyError(""); setApiKey(e.target.value); }}
-            placeholder="sk-..."
-            className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary font-mono"
+            aria-label="API key (optional, overrides the stored key)"
+            onChange={(e) => { setKeyError(""); setApiKey(e.target.value); }}
+            placeholder={maskedKeys.length > 0 ? "optional — overrides the stored key" : "sk-..."}
+            className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary font-mono"
           />
         </Row>
-        {resolvingKey && <p className="text-xs text-text-muted">Resolving selected key…</p>}
-        {keyError && <p role="alert" className="text-xs text-red-500 break-words">{keyError}</p>}
+        {keyError && (
+          <div role="alert" className="flex flex-wrap items-center gap-2 text-xs text-danger">
+            <span className="break-words">{keyError}</span>
+            {keysError && <button type="button" onClick={retryKeys} className="inline-flex min-h-11 items-center px-2 font-semibold underline hover:text-primary">Retry</button>}
+          </div>
+        )}
+        {onDemand.error && (
+          <div role="alert" className="flex flex-wrap items-center gap-2 text-xs text-danger">
+            <span className="break-words">{onDemand.error}</span>
+            <button type="button" onClick={onDemand.retry} className="inline-flex min-h-11 items-center px-2 font-semibold underline hover:text-primary">Retry</button>
+          </div>
+        )}
         {maskedKeys.length === 0 && !hasCredential && !keysLoading && !keysError && (
           <p className="text-xs text-text-muted">Enter an API key to run this example.</p>
         )}
@@ -214,15 +286,17 @@ export function EmbeddingExampleCard({ providerId, customAlias }) {
         <Row label="Input">
           <div className="relative">
             <input
+              aria-label="Input text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              className="w-full px-3 py-1.5 pr-7 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+              className="w-full px-3 py-1.5 pr-7 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary"
             />
             {input && (
               <button
                 type="button"
+                aria-label="Clear input text"
                 onClick={() => setInput("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-primary transition-colors"
+                className="hit-target absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-primary transition-colors"
               >
                 <Icon name="close" size={14} />
               </button>
@@ -234,11 +308,12 @@ export function EmbeddingExampleCard({ providerId, customAlias }) {
         <Row label="Dimensions">
           <input
             type="number"
+            aria-label="Dimensions (optional)"
             min="1"
             value={dimensions}
             onChange={(e) => setDimensions(e.target.value)}
             placeholder="optional, e.g. 512, 1024 (leave empty for default)"
-            className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+            className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary"
           />
         </Row>
 
@@ -248,7 +323,7 @@ export function EmbeddingExampleCard({ providerId, customAlias }) {
             <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">Request</span>
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
               <button
-                onClick={() => { if (hasCredential) copyCurl(curlSnippet); }}
+                onClick={handleCopyCurl}
                 disabled={keyBlocked}
                 className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -258,18 +333,18 @@ export function EmbeddingExampleCard({ providerId, customAlias }) {
               <button
                 onClick={handleRun}
                 disabled={running || !input.trim() || !modelFull || keyBlocked}
-                className="flex w-full sm:w-auto items-center justify-center gap-1.5 px-3 py-1 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex w-full sm:w-auto items-center justify-center gap-1.5 px-3 py-1 rounded-lg bg-primary text-[var(--color-on-primary)] text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Icon name="play_arrow" size={14} style={running ? { animation: "spin 1s linear infinite" } : undefined} />
                 {running ? "Running..." : "Run"}
               </button>
             </div>
           </div>
-          <pre className="bg-sidebar rounded-lg px-3 py-2.5 text-xs font-mono text-text-main overflow-x-auto whitespace-pre-wrap break-all">{curlSnippet}</pre>
+          <pre tabIndex={0} aria-label="Example request" className="bg-code-bg rounded-lg px-3 py-2.5 text-xs font-mono text-code-fg overflow-x-auto whitespace-pre-wrap break-all">{curlSnippet}</pre>
         </div>
 
         {/* Error */}
-        {error && <p className="text-xs text-red-500 break-words">{error}</p>}
+        {error && <p className="text-xs text-danger break-words">{error}</p>}
 
         {/* Response — default example or real result */}
         <div>
@@ -287,7 +362,7 @@ export function EmbeddingExampleCard({ providerId, customAlias }) {
               </button>
             )}
           </div>
-          <pre className="bg-sidebar rounded-lg px-3 py-2.5 text-xs font-mono text-text-main overflow-x-auto whitespace-pre-wrap break-all opacity-70">
+          <pre tabIndex={0} aria-label="Example response" className="bg-code-bg rounded-lg px-3 py-2.5 text-xs font-mono text-code-muted overflow-x-auto whitespace-pre-wrap break-all">
             {formatResultJson(result?.data)}
           </pre>
         </div>

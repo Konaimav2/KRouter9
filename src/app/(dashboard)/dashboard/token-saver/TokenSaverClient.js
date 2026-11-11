@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Button, Input, Toggle, ConfirmModal } from "@/shared/components";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
+import LoadFailedState from "@/shared/components/LoadFailedState";
 import { getCurrentLocale, onLocaleChange } from "@/i18n/runtime";
 import {
   WENYAN_LOCALES,
@@ -73,6 +74,8 @@ export default function TokenSaverClient() {
 
   const { copied, copy } = useCopyToClipboard();
   const [settingsActionError, setSettingsActionError] = useState("");
+  // Bumped by the "stats unavailable" Retry to re-run both stats reads (kept last: hook order).
+  const [statsRetry, setStatsRetry] = useState(0);
 
   const patchSetting = async (patch) => {
     const res = await fetch("/api/settings", {
@@ -529,7 +532,7 @@ export default function TokenSaverClient() {
       })
       .catch(() => { if (alive) setSavings({ error: true }); });
     return () => { alive = false; };
-  }, [headroomStatus.loading, headroomStatus.running]);
+  }, [headroomStatus.loading, headroomStatus.running, statsRetry]);
 
   useEffect(() => {
     let alive = true;
@@ -586,7 +589,7 @@ export default function TokenSaverClient() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [statsRetry]);
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -677,14 +680,21 @@ export default function TokenSaverClient() {
     },
   ];
 
+  // Stats Retry: re-probe Headroom (a stopped service is one cause) and re-read both stats routes.
+  const retryStats = () => { setSavings(null); setPxpipeSavings(null); setStatsRetry((value) => value + 1); refreshHeadroomStatus(); };
+  const retrySettings = () => { setSettingsActionError(""); setSettingsLoading(true); setSettingsError(false); setSettingsRetry((value) => value + 1); };
+
   if (settingsLoading || settingsError) {
     return (
       <section className="space-y-4 p-4 sm:p-6" aria-busy={settingsLoading}>
-        <p role={settingsError ? "alert" : "status"} className="text-sm text-text-muted">
-          {settingsError ? "Unable to load token saver settings. Retry before changing stages." : "Loading token saver settings"}
-        </p>
-        {settingsError ? <Button variant="secondary" onClick={() => { setSettingsLoading(true); setSettingsError(false); setSettingsRetry((value) => value + 1); }}>Retry</Button>
-          : <div aria-hidden="true" className="h-48 border border-border bg-surface-2 motion-safe:animate-pulse" />}
+        {settingsError ? (
+          <LoadFailedState title="Token saver settings unavailable" message="Unable to load token saver settings. Retry before changing stages." onRetry={retrySettings} />
+        ) : (
+          <>
+            <p role="status" className="text-sm text-text-muted">Loading token saver settings</p>
+            <div aria-hidden="true" className="h-48 border border-border bg-surface-2 motion-safe:animate-pulse" />
+          </>
+        )}
       </section>
     );
   }
@@ -697,9 +707,10 @@ export default function TokenSaverClient() {
       </div>
 
       {settingsActionError && (
-        <p role="alert" className="border border-danger bg-[var(--color-danger-wash)] px-3 py-2 text-xs text-danger">
-          Settings not saved: {settingsActionError}
-        </p>
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-2 border border-danger bg-[var(--color-danger-wash)] px-3 py-2 text-xs text-danger">
+          <span className="min-w-0 break-words">Settings not saved: {settingsActionError} Retry reloads the saved values.</span>
+          <button type="button" onClick={retrySettings} className="inline-flex min-h-11 shrink-0 items-center px-3 font-semibold underline">Retry</button>
+        </div>
       )}
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.7fr)]">
@@ -728,7 +739,7 @@ export default function TokenSaverClient() {
             <h2 id="savings-title" className="font-semibold">Current savings evidence</h2>
             <p className="mt-1 text-xs text-text-muted">Per-stage token evidence and persisted status.</p>
           </div>
-          <div className="mt-3 overflow-x-auto">
+          <div tabIndex={0} role="region" aria-label="Current savings evidence table" className="mt-3 overflow-x-auto">
             <table className="w-full border-collapse text-left text-xs">
               <thead>
                 <tr className="border-b border-border bg-surface-2 text-text-muted">
@@ -747,7 +758,7 @@ export default function TokenSaverClient() {
                   </td>
                   <td className="p-2">
                     {pxpipeSavings?.error ? (
-                      <span role="alert" className="font-mono text-danger">stats unavailable</span>
+                      <span role="alert" className="inline-flex flex-wrap items-center gap-2 font-mono text-danger">stats unavailable <button type="button" onClick={retryStats} className="inline-flex min-h-11 items-center px-2 font-sans font-semibold underline">Retry</button></span>
                     ) : pxpipeSavings?.before != null ? (
                       <span className="font-mono tabular-nums">
                         {formatTokens(pxpipeSavings.before)} → {formatTokens(pxpipeSavings.after)} ({formatTokens(pxpipeSavings.saved)} saved{pxpipeSavings.pct != null ? ` · ${pxpipeSavings.pct}%` : ""})
@@ -772,7 +783,7 @@ export default function TokenSaverClient() {
                   <td className="p-2">
                     <div className="space-y-0.5">
                       {savings?.error || (!headroomStatus.loading && !headroomStatus.running) ? (
-                        <span role="alert" className="font-mono text-danger">stats unavailable</span>
+                        <span role="alert" className="inline-flex flex-wrap items-center gap-2 font-mono text-danger">stats unavailable <button type="button" onClick={retryStats} className="inline-flex min-h-11 items-center px-2 font-sans font-semibold underline">Retry</button></span>
                       ) : savings?.before != null ? (
                         <span className="font-mono tabular-nums">
                           {formatTokens(savings.before)} → {formatTokens(Math.max(0, savings.before - savings.saved))} ({formatTokens(savings.saved)} saved{savings.pct != null ? ` · ${savings.pct}% avg` : ""})
@@ -827,12 +838,12 @@ export default function TokenSaverClient() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{step.label}</h3><span className="text-xs font-semibold text-text-muted">{step.state}</span></div>
                 <p className="mt-1 text-sm text-text-muted">{step.body}</p>
-                {step.command && <div className="mt-3 flex flex-col gap-2 sm:flex-row"><pre className="min-w-0 flex-1 overflow-x-auto border border-border bg-[var(--color-code-bg)] p-3 font-mono text-xs">{step.command}</pre><Button size="sm" variant="secondary" onClick={() => copy(step.command)}>{copied ? "Copied" : "Copy command"}</Button></div>}
+                {step.command && <div className="mt-3 flex flex-col gap-2 sm:flex-row"><pre tabIndex={0} aria-label="Command" className="min-w-0 flex-1 overflow-x-auto border border-border bg-[var(--color-code-bg)] p-3 font-mono text-xs text-[var(--color-code-fg)]">{step.command}</pre><Button size="sm" variant="secondary" onClick={() => copy(step.command)}>{copied ? "Copied" : "Copy command"}</Button></div>}
                 {step.id === "install" && !headroomLocalUrl && !headroomRunning && (
                   <div className="mt-3 space-y-2">
                     <p className="text-xs text-text-muted">Published image, pinned to headroom {HEADROOM_VERSION}. Publish the port on loopback only; the acknowledgement variable is what lets the proxy bind inside the container. No Dockerfile to write.</p>
                     <div className="flex flex-col gap-2 sm:flex-row">
-                      <pre className="min-w-0 flex-1 overflow-x-auto border border-border bg-[var(--color-code-bg)] p-3 font-mono text-xs">{buildHeadroomRunCommand()}</pre>
+                      <pre tabIndex={0} aria-label="Headroom run command" className="min-w-0 flex-1 overflow-x-auto border border-border bg-[var(--color-code-bg)] p-3 font-mono text-xs text-[var(--color-code-fg)]">{buildHeadroomRunCommand()}</pre>
                       <Button size="sm" variant="secondary" onClick={() => copy(buildHeadroomRunCommand())}>{copied ? "Copied" : "Copy run command"}</Button>
                     </div>
                   </div>
@@ -874,10 +885,10 @@ export default function TokenSaverClient() {
                     <>
                       <span>{active ? "Active" : "Inactive"}</span>
                       <Toggle size="sm" checked={active} disabled={restartingProxy} ariaLabel={`${extra.name || extra.id || "Extra proxy"} active`} onChange={() => toggleExtraActive(extra, !active)} />
-                      <button type="button" onClick={() => handleRemoveExtra(extra)} disabled={removingExtra === extra} className="text-danger underline">{removingExtra === extra ? "Uninstalling…" : "Uninstall"}</button>
+                      <button type="button" onClick={() => handleRemoveExtra(extra)} disabled={removingExtra === extra} className="inline-flex min-h-11 items-center text-danger underline">{removingExtra === extra ? "Uninstalling…" : "Uninstall"}</button>
                     </>
                   ) : (
-                    <label className="flex items-center gap-2"><input type="checkbox" checked={pending} onChange={() => togglePendingExtra(extra)} /> Select to install</label>
+                    <label className="flex min-h-11 cursor-pointer items-center gap-2"><input type="checkbox" checked={pending} onChange={() => togglePendingExtra(extra)} /> Select to install</label>
                   )}
                 </div>
               );
@@ -885,7 +896,7 @@ export default function TokenSaverClient() {
             {pendingExtras.length > 0 && <Button size="sm" onClick={handleInstallExtras} disabled={extrasActionLoading}>{extrasActionLoading ? "Installing…" : `Install [proxy,${pendingExtras.join(",")}]`}</Button>}
             {extrasActionError && <p className="mt-2 text-xs text-danger">{extrasActionError}</p>}
             {restartingProxy && <p className="mt-2 text-xs text-text-muted">Restarting proxy…</p>}
-            {(extrasActionLoading || removingExtra) && installLog && <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap bg-[var(--color-code-bg)] p-2 text-[10px] leading-tight text-text-muted">{installLog}</pre>}
+            {(extrasActionLoading || removingExtra) && installLog && <pre tabIndex={0} aria-label="Install log" className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap bg-[var(--color-code-bg)] p-2 text-[10px] leading-tight text-[var(--color-code-fg)]">{installLog}</pre>}
             <p className="mt-2 text-xs text-text-muted">Installing adds the package; activate an installed extra with its toggle. The code extra enables AST compression. The ml extra enables Kompress-v2 and adds about 1 GB.</p>
           </div>
         )}
@@ -905,7 +916,7 @@ export default function TokenSaverClient() {
               {!pxpipeStatus.installed ? <Button size="sm" onClick={() => pxpipeAction("install")} disabled={pxpipeActionLoading || pxpipeStatus.installing}>{pxpipeActionLoading || pxpipeStatus.installing ? "Installing…" : "Install"}</Button> : pxpipeStatus.running ? <><Button size="sm" variant="secondary" onClick={() => pxpipeAction("restart")} disabled={pxpipeActionLoading}>Restart</Button><Button size="sm" variant="secondary" onClick={() => pxpipeAction("stop")} disabled={pxpipeActionLoading}>Stop</Button></> : <Button size="sm" onClick={() => pxpipeAction("start")} disabled={pxpipeActionLoading}>{pxpipeActionLoading ? "Starting…" : "Start"}</Button>}
               {pxpipeStatus.installed && <Button size="sm" variant="secondary" onClick={() => pxpipeAction("install")} disabled={pxpipeActionLoading}>Repair</Button>}
               <Button size="sm" variant="secondary" onClick={() => refreshPxpipeStatus().then(runPxpipeHealth)}>Re-check</Button>
-              <a href="/dashboard/pxpipe#logs" className="inline-flex min-h-9 items-center border border-border px-3 text-sm">Open logs</a>
+              <a href="/dashboard/pxpipe#logs" className="inline-flex min-h-11 items-center border border-border px-3 text-sm">Open logs</a>
             </div>
             {pxpipeActionError && <p className="text-sm text-danger">{pxpipeActionError}</p>}
           </div>

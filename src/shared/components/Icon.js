@@ -94,9 +94,25 @@ import Save from "lucide-react/dist/esm/icons/save";
 import ShieldCheck from "lucide-react/dist/esm/icons/shield-check";
 import Star from "lucide-react/dist/esm/icons/star";
 
+import CircleHelp from "lucide-react/dist/esm/icons/circle-help";
+import SlidersHorizontal from "lucide-react/dist/esm/icons/sliders-horizontal";
+import Globe from "lucide-react/dist/esm/icons/globe";
+import Users from "lucide-react/dist/esm/icons/users";
+import ListPlus from "lucide-react/dist/esm/icons/list-plus";
+import Cast from "lucide-react/dist/esm/icons/cast";
+import FolderOpen from "lucide-react/dist/esm/icons/folder-open";
+import ScanLine from "lucide-react/dist/esm/icons/scan-line";
+import WifiOff from "lucide-react/dist/esm/icons/wifi-off";
+import MonitorSmartphone from "lucide-react/dist/esm/icons/monitor-smartphone";
+import Brain from "lucide-react/dist/esm/icons/brain";
+import Brackets from "lucide-react/dist/esm/icons/brackets";
+import Brush from "lucide-react/dist/esm/icons/brush";
+import Mic from "lucide-react/dist/esm/icons/mic";
+import Clapperboard from "lucide-react/dist/esm/icons/clapperboard";
+import Music from "lucide-react/dist/esm/icons/music";
 
 const ICONS = {
-  add: Plus, api: Link2, account_circle: User, account_tree: GitBranch, arrow_downward: ArrowDown,
+  add: Plus, api: Link2, link: Link2, account_circle: User, account_tree: GitBranch, arrow_downward: ArrowDown,
   arrow_upward: ArrowUp, arrow_back: ArrowLeft, arrow_forward: ArrowRight,
   bar_chart: BarChart3, bolt: Bolt, business: Building2, cancel: XCircle, check: Check, check_circle: CheckCircle2,
   chevron_down: ChevronDown, chevron_left: ChevronLeft, chevron_right: ChevronRight,
@@ -117,6 +133,9 @@ const ICONS = {
   cloud_upload: Cloud, expand_less: ChevronDown, filter_alt_off: FilterX, health_and_safety: HeartPulse,
   hourglass_top: Hourglass, restart_alt: RotateCcw, rocket_launch: Rocket, schedule: Clock3,
   toggle_off: Square, toggle_on: CheckCircle2, triangle: Triangle, verified_user: BadgeCheck, volunteer_activism: Heart, wifi_tethering: RadioTower,
+  stop_circle: StopCircle, help: CircleHelp, tune: SlidersHorizontal, public: Globe, group: Users, sync: RefreshCw, playlist_add: ListPlus,
+  vpn_key: KeyRound, monitor: Monitor, cast: Cast, folder_open: FolderOpen, qr_code_scanner: ScanLine, wifi_off: WifiOff, devices: MonitorSmartphone,
+  neurology: Brain, data_array: Brackets, brush: Brush, image_search: Image, record_voice_over: Mic, mic: Mic, travel_explore: Globe, movie: Clapperboard, music_note: Music,
 };
 
 export default function Icon({ name, size = 18, strokeWidth = 1.75, className = "", ...props }) {

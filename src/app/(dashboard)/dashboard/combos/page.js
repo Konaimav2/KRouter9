@@ -225,7 +225,8 @@ export default function CombosPage() {
 
   if (loading) {
     return (
-      <div className="flex flex-col gap-8" aria-label="Loading routing configuration">
+      <div className="flex flex-col gap-8" role="status" aria-busy="true">
+        <span className="sr-only">Loading routing configuration</span>
         <CardSkeleton />
         <CardSkeleton />
         <CardSkeleton />
@@ -235,7 +236,7 @@ export default function CombosPage() {
   }
 
   return (
-    <div className="flex min-w-0 flex-col overflow-hidden border border-[var(--color-border-strong)] bg-[var(--color-surface)]" aria-label="Combo routing instrument">
+    <div className="flex min-w-0 flex-col overflow-hidden border border-[var(--color-border-strong)] bg-[var(--color-surface)]" role="region" aria-label="Combo routing instrument">
       <section className="border-b border-[var(--color-border-strong)]" aria-labelledby="route-mode-title">
         <header className="border-b border-[var(--color-border)] bg-[var(--color-surface-strong)] px-4 py-3"><h2 id="route-mode-title" className="font-semibold">Routing model</h2><p className="text-xs text-[var(--color-text-muted)]">One alias, three ways to route a request.</p></header>
         <div className="grid gap-px overflow-hidden border border-[var(--color-border)] bg-[var(--color-border)] md:grid-cols-3">
@@ -527,7 +528,7 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
           <span className="flex size-8 shrink-0 items-center justify-center border border-[var(--color-route-bidirectional)] font-mono text-xs tabular-nums text-[var(--color-primary)]">{String(combo.models.length).padStart(2, "0")}</span>
           <span className="min-w-0"><code className="block truncate font-mono text-sm font-semibold">{combo.name}</code><span className="text-xs text-[var(--color-text-muted)]">{combo.models.length} member{combo.models.length === 1 ? "" : "s"}</span></span>
         </div>
-        <div className="hidden items-center gap-2 lg:flex" aria-label="Ordered route preview">{combo.models.slice(0, 4).map((model, index) => <span key={`${model}-${index}`} className="flex min-w-0 items-center gap-2"><span className="flex size-7 shrink-0 items-center justify-center border border-[var(--route-line)] font-mono text-[10px] text-[var(--color-primary)]">{String(index + 1).padStart(2, "0")}</span><code className="max-w-28 truncate font-mono text-[11px]">{model}</code>{index < Math.min(combo.models.length, 4) - 1 ? <Icon name="arrow_forward" size={14} className="text-[var(--color-text-muted)]" /> : null}</span>)}</div>
+        <div className="hidden items-center gap-2 lg:flex" role="group" aria-label="Ordered route preview">{combo.models.slice(0, 4).map((model, index) => <span key={`${model}-${index}`} className="flex min-w-0 items-center gap-2"><span className="flex size-7 shrink-0 items-center justify-center border border-[var(--route-line)] font-mono text-[10px] text-[var(--color-primary)]">{String(index + 1).padStart(2, "0")}</span><code className="max-w-28 truncate font-mono text-[11px]">{model}</code>{index < Math.min(combo.models.length, 4) - 1 ? <Icon name="arrow_forward" size={14} className="text-[var(--color-text-muted)]" /> : null}</span>)}</div>
         <div className="flex items-center justify-end gap-1">
           <ActionButton icon={copied === `combo-${combo.id}` ? "check" : "copy"} label="Copy" onClick={() => onCopy(combo.name, `combo-${combo.id}`)} />
           <ActionButton icon={testing ? "progress_activity" : "play_arrow"} label={testing ? "Testing" : "Test"} onClick={testCombo} disabled={testing || combo.models.length === 0} spin={testing} />
@@ -541,8 +542,8 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
       {isFusion && (
         <div className="flex flex-wrap items-center gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface-strong)] px-4 py-2 text-xs">
           <Icon name="gavel" size={16} className="text-[var(--color-text-muted)]" /><span className="font-medium">Judge</span>
-          <button type="button" onClick={() => setShowJudgeSelect(true)} className="min-h-8 max-w-full truncate border border-dashed border-[var(--color-primary-border)] px-2 font-mono text-[var(--color-primary)]">{judge || `Auto — ${combo.models[0] || "first model"}`}</button>
-          {judge && <button type="button" onClick={() => onSetStrategy({ judgeModel: "" })} className="min-h-8 px-2 text-[var(--color-danger)]">Reset</button>}
+          <button type="button" onClick={() => setShowJudgeSelect(true)} className="min-h-11 max-w-full truncate border border-dashed border-[var(--color-primary-border)] px-2 font-mono text-[var(--color-primary)]">{judge || `Auto — ${combo.models[0] || "first model"}`}</button>
+          {judge && <button type="button" onClick={() => onSetStrategy({ judgeModel: "" })} className="min-h-11 px-2 text-[var(--color-danger)]">Reset</button>}
         </div>
       )}
 
@@ -560,7 +561,7 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
                 error={nameError}
               />
             </div>
-            <div className="grid grid-cols-3 overflow-hidden border border-[var(--color-border)]" aria-label="Routing strategy">{STRATEGY_OPTIONS.map((option) => <button key={option.value} type="button" aria-pressed={current === option.value} onClick={() => onSetStrategy({ fallbackStrategy: option.value })} className={`min-h-11 px-3 text-xs font-medium ${current === option.value ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]" : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]"}`}>{option.shortLabel}</button>)}</div>
+            <div className="grid grid-cols-3 overflow-hidden border border-[var(--color-border)]" role="group" aria-label="Routing strategy">{STRATEGY_OPTIONS.map((option) => <button key={option.value} type="button" aria-pressed={current === option.value} onClick={() => onSetStrategy({ fallbackStrategy: option.value })} className={`min-h-11 px-3 text-xs font-medium ${current === option.value ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]" : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]"}`}>{option.shortLabel}</button>)}</div>
             {draftModels.map((model, index) => (
               <div
                 key={`${model}-${index}`}
@@ -599,7 +600,7 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
               >
                 {dropPosition === index || (index === draftModels.length - 1 && dropPosition === draftModels.length) ? <span data-testid="combo-drop-indicator" aria-hidden="true" className={`pointer-events-none absolute inset-x-0 z-10 h-0.5 bg-[var(--color-primary)] ${dropPosition === index ? "top-0" : "bottom-0"}`} /> : null}
                 <div className="row-span-2 flex h-full flex-col items-center justify-center border-r border-[var(--route-line)] pr-3 font-mono text-xs tabular-nums text-[var(--color-primary)] sm:row-span-1">{String(index + 1).padStart(2, "0")}</div>
-                <div className="min-w-0">{editingIndex === index ? (<div className="flex flex-col gap-1"><div className="flex flex-wrap items-center gap-1 sm:flex-nowrap"><input ref={modelInputRef} autoFocus value={editingValue} onChange={(event) => { setEditingValue(event.target.value); setEditError(""); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); commitEdit(index); } else if (event.key === "Escape") { event.preventDefault(); cancelEdit(); } }} aria-label={`Model ID at position ${index + 1}`} aria-invalid={editError ? "true" : undefined} className="min-h-9 min-w-0 basis-full border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-2 font-mono text-xs sm:basis-0 sm:flex-1" /><IconButton icon="check" label={`Save model ID at position ${index + 1}`} onClick={() => commitEdit(index)} /><IconButton icon="close" label={`Cancel editing position ${index + 1}`} onClick={cancelEdit} /></div>{editError && <p role="alert" className="text-[11px] text-[var(--color-danger)]">{editError}</p>}</div>) : (<button type="button" onClick={() => startEdit(index)} disabled={editBlocked} aria-label={`Edit model ID ${model}`} className="block w-full cursor-text break-all text-left font-mono text-xs text-[var(--color-text)] hover:text-[var(--color-primary)] disabled:cursor-not-allowed disabled:hover:text-[var(--color-text)]">{model}</button>)}<div className="mt-1 flex flex-wrap items-center gap-2"><span className="inline-flex items-center gap-1 text-[11px] text-[var(--color-text-muted)]"><span className="size-2 rounded-full border border-[var(--color-text-subtle)]" />Not tested</span><CapacityBadges caps={getCaps?.(model)} /></div></div>
+                <div className="min-w-0">{editingIndex === index ? (<div className="flex flex-col gap-1"><div className="flex flex-wrap items-center gap-1 sm:flex-nowrap"><input ref={modelInputRef} autoFocus value={editingValue} onChange={(event) => { setEditingValue(event.target.value); setEditError(""); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); commitEdit(index); } else if (event.key === "Escape") { event.preventDefault(); cancelEdit(); } }} aria-label={`Model ID at position ${index + 1}`} aria-invalid={editError ? "true" : undefined} className="min-h-11 min-w-0 basis-full border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-2 font-mono text-xs sm:basis-0 sm:flex-1" /><IconButton icon="check" label={`Save model ID at position ${index + 1}`} onClick={() => commitEdit(index)} /><IconButton icon="close" label={`Cancel editing position ${index + 1}`} onClick={cancelEdit} /></div>{editError && <p role="alert" className="text-[11px] text-[var(--color-danger)]">{editError}</p>}</div>) : (<button type="button" onClick={() => startEdit(index)} disabled={editBlocked} aria-label={`Edit model ID ${model}`} className="flex min-h-11 w-full cursor-text items-center break-all text-left font-mono text-xs text-[var(--color-text)] hover:text-[var(--color-primary)] disabled:cursor-not-allowed disabled:hover:text-[var(--color-text)]">{model}</button>)}<div className="mt-1 flex flex-wrap items-center gap-2"><span className="inline-flex items-center gap-1 text-[11px] text-[var(--color-text-muted)]"><span className="size-2 rounded-full border border-[var(--color-text-subtle)]" />Not tested</span><CapacityBadges caps={getCaps?.(model)} /></div></div>
                 <div className="col-start-2 flex flex-wrap items-center gap-1 sm:col-start-auto">
                   <IconButton icon="edit" label={`Rename ${model}`} onClick={() => startEdit(index)} disabled={editBlocked} />
                   <IconButton icon="arrow_upward" label={`Move ${model} up`} onClick={() => moveModel(index, -1)} disabled={routeLocked || index === 0} />
@@ -668,8 +669,8 @@ function CapacityAdapterCap({ cap, entry, onChange, activeProviders, getCaps }) 
         <div className="flex flex-wrap items-center gap-3">
           <label className="flex min-h-11 items-center gap-2 text-xs"><Toggle checked={enabled} onChange={(value) => patch({ enabled: value })} ariaLabel="Combo enabled" size="sm" /><span>{enabled ? "Enabled" : "Disabled"}</span></label>
           <div className="grid grid-cols-2 overflow-hidden rounded-[var(--radius-sm)] border border-[var(--color-border)]">
-            <button type="button" disabled={!enabled} onClick={() => patch({ roundRobin: false })} className={`min-h-9 px-3 text-xs ${!roundRobin ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]" : "text-[var(--color-text-muted)]"}`}>Fallback</button>
-            <button type="button" disabled={!enabled} onClick={() => patch({ roundRobin: true })} className={`min-h-9 px-3 text-xs ${roundRobin ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]" : "text-[var(--color-text-muted)]"}`}>Round robin</button>
+            <button type="button" disabled={!enabled} onClick={() => patch({ roundRobin: false })} className={`min-h-11 px-3 text-xs ${!roundRobin ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]" : "text-[var(--color-text-muted)]"}`}>Fallback</button>
+            <button type="button" disabled={!enabled} onClick={() => patch({ roundRobin: true })} className={`min-h-11 px-3 text-xs ${roundRobin ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]" : "text-[var(--color-text-muted)]"}`}>Round robin</button>
           </div>
         </div>
       </div>
@@ -740,7 +741,8 @@ function ModelItem({ id, index, model, isFirst, isLast, onRename, onMoveUp, onMo
         {...attributes}
         {...listeners}
         type="button"
-        className="cursor-grab touch-none p-0.5 rounded text-text-muted hover:text-primary active:cursor-grabbing shrink-0"
+        aria-label="Drag to reorder"
+        className="hit-target cursor-grab touch-none p-0.5 rounded text-text-muted hover:text-primary active:cursor-grabbing shrink-0"
         title="Drag to reorder"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -774,19 +776,23 @@ function ModelItem({ id, index, model, isFirst, isLast, onRename, onMoveUp, onMo
       )}
 
       {/* Priority arrows */}
-      <div className="flex shrink-0 items-center gap-0.5">
+      <div className="flex shrink-0 items-center">
         <button
+          type="button"
           onClick={onMoveUp}
           disabled={isFirst}
-          className={`p-0.5 rounded ${isFirst ? "text-text-muted/20 cursor-not-allowed" : "text-text-muted hover:text-primary hover:bg-black/5 dark:hover:bg-white/5"}`}
+          aria-label={`Move up ${model}`}
+          className={`inline-flex size-11 shrink-0 items-center justify-center rounded ${isFirst ? "text-text-muted/20 cursor-not-allowed" : "text-text-muted hover:text-primary hover:bg-black/5 dark:hover:bg-white/5"}`}
           title="Move up"
         >
           <Icon name="arrow_upward" className="text-[12px]" />
         </button>
         <button
+          type="button"
           onClick={onMoveDown}
           disabled={isLast}
-          className={`p-0.5 rounded ${isLast ? "text-text-muted/20 cursor-not-allowed" : "text-text-muted hover:text-primary hover:bg-black/5 dark:hover:bg-white/5"}`}
+          aria-label={`Move down ${model}`}
+          className={`inline-flex size-11 shrink-0 items-center justify-center rounded ${isLast ? "text-text-muted/20 cursor-not-allowed" : "text-text-muted hover:text-primary hover:bg-black/5 dark:hover:bg-white/5"}`}
           title="Move down"
         >
           <Icon name="arrow_downward" className="text-[12px]" />
@@ -795,8 +801,10 @@ function ModelItem({ id, index, model, isFirst, isLast, onRename, onMoveUp, onMo
 
       {/* Remove */}
       <button
+        type="button"
         onClick={onRemove}
-        className="p-0.5 hover:bg-red-500/10 rounded text-text-muted hover:text-red-500 transition-colors duration-[var(--duration-base)] ease-[var(--ease-standard)] motion-reduce:transition-none"
+        aria-label={`Remove ${model}`}
+        className="inline-flex size-11 shrink-0 items-center justify-center rounded hover:bg-red-500/10 text-text-muted hover:text-red-500 transition-colors duration-[var(--duration-base)] ease-[var(--ease-standard)] motion-reduce:transition-none"
         title="Remove"
       >
         <Icon name="close" className="text-[12px]" />

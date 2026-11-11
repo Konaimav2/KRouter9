@@ -134,7 +134,7 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, index =
             onClick={onMoveUp}
             disabled={isFirst}
             aria-label={`Move ${connection.name || connection.email || connection.displayName || "connection"} up`}
-            className={`p-0.5 rounded ${isFirst ? "text-text-muted/30 cursor-not-allowed" : "hover:bg-sidebar text-text-muted hover:text-primary"}`}
+            className={`inline-flex size-11 items-center justify-center rounded ${isFirst ? "text-text-muted/30 cursor-not-allowed" : "hover:bg-surface-2 text-text-muted hover:text-primary"}`}
           >
             <Icon name="arrow_upward" size={15} />
           </button>
@@ -142,7 +142,7 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, index =
             onClick={onMoveDown}
             disabled={isLast}
             aria-label={`Move ${connection.name || connection.email || connection.displayName || "connection"} down`}
-            className={`p-0.5 rounded ${isLast ? "text-text-muted/30 cursor-not-allowed" : "hover:bg-sidebar text-text-muted hover:text-primary"}`}
+            className={`inline-flex size-11 items-center justify-center rounded ${isLast ? "text-text-muted/30 cursor-not-allowed" : "hover:bg-surface-2 text-text-muted hover:text-primary"}`}
           >
             <Icon name="arrow_downward" size={15} />
           </button>
@@ -207,7 +207,7 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, index =
             <div className="relative" ref={proxyDropdownRef}>
               <button
                 onClick={() => setShowProxyDropdown((v) => !v)}
-                className={`flex w-full flex-col items-center rounded px-2 py-1 transition-colors hover:bg-black/5 dark:hover:bg-white/5 ${hasAnyProxy ? "text-primary" : "text-text-muted hover:text-primary"}`}
+                className={`flex min-h-11 w-full min-w-11 flex-col items-center justify-center rounded px-2 py-1 transition-colors hover:bg-black/5 dark:hover:bg-white/5 ${hasAnyProxy ? "text-primary" : "text-text-muted hover:text-primary"}`}
                 disabled={updatingProxy}
               >
                 <Icon name={updatingProxy ? "progress_activity" : "lan"} size={18} className={updatingProxy ? "animate-spin" : ""} />
@@ -238,18 +238,18 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, index =
             <Tooltip text={autoPingTooltip}>
               <button
                 onClick={() => autoPing.onToggle(!autoPing.on)}
-                className={`flex w-full flex-col items-center rounded px-2 py-1 transition-colors hover:bg-black/5 dark:hover:bg-white/5 ${autoPing.on ? "text-primary" : "text-text-muted hover:text-primary"}`}
+                className={`flex min-h-11 w-full min-w-11 flex-col items-center justify-center rounded px-2 py-1 transition-colors hover:bg-black/5 dark:hover:bg-white/5 ${autoPing.on ? "text-primary" : "text-text-muted hover:text-primary"}`}
               >
                 <Icon name="bolt" size={18} />
                 <span className="text-[10px] leading-tight">Auto-ping</span>
               </button>
             </Tooltip>
           )}
-          <button onClick={onEdit} className="flex flex-col items-center rounded px-2 py-1 text-text-muted hover:bg-black/5 hover:text-primary dark:hover:bg-white/5">
+          <button onClick={onEdit} className="flex min-h-11 min-w-11 flex-col items-center justify-center rounded px-2 py-1 text-text-muted hover:bg-black/5 hover:text-primary dark:hover:bg-white/5">
             <Icon name="edit" size={18} />
             <span className="text-[10px] leading-tight">Edit</span>
           </button>
-          <button onClick={onDelete} className="flex flex-col items-center rounded px-2 py-1 text-red-700 dark:text-red-400 hover:bg-red-500/10">
+          <button onClick={onDelete} className="flex min-h-11 min-w-11 flex-col items-center justify-center rounded px-2 py-1 text-red-700 dark:text-red-400 hover:bg-red-500/10">
             <Icon name="delete" size={18} />
             <span className="text-[10px] leading-tight">Delete</span>
           </button>

@@ -3,7 +3,10 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Icon from "@/shared/components/Icon";
+import { getGatewayOrigin } from "@/shared/utils/gatewayOrigin";
 import { CLI_TOOLS } from "@/shared/constants/cliTools";
+import LoadFailedState from "@/shared/components/LoadFailedState";
+import { readKeyPresets } from "../components/cliEndpointPresets";
 import {
   getModelsByProviderId,
   PROVIDER_ID_TO_ALIAS,
@@ -58,7 +61,7 @@ function CopySetupValue({ label, value }) {
     <button
       type="button"
       onClick={copy}
-      className="shrink-0 rounded-[var(--radius-sm)] border border-[var(--button-border)] px-3 py-2 text-xs font-medium text-text-main hover:border-primary hover:text-primary"
+      className="inline-flex min-h-11 shrink-0 items-center rounded-[var(--radius-sm)] border border-[var(--button-border)] px-3 py-2 text-xs font-medium text-text-main hover:border-primary hover:text-primary"
       aria-label={`${label}: ${copied ? "copied" : "copy"}`}
     >
       {copied ? "Copied" : "Copy"}
@@ -77,7 +80,19 @@ export default function ToolDetailClient({ toolId, machineId }) {
   const [tailscaleEnabled, setTailscaleEnabled] = useState(false);
   const [tailscaleUrl, setTailscaleUrl] = useState("");
   const [apiKeys, setApiKeys] = useState([]);
+  const [keysLoadError, setKeysLoadError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
   const [setupKeyId, setSetupKeyId] = useState("");
+  // Resolved after mount so the visible base URL matches between SSR and the
+  // first client render, then shows the port the dashboard is served on.
+  const [gatewayOrigin, setGatewayOrigin] = useState("");
+
+  useEffect(() => { readKeyPresets(); }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setGatewayOrigin(getGatewayOrigin());
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -93,6 +108,8 @@ export default function ToolDetailClient({ toolId, machineId }) {
         if (provRes.ok) {
           const data = await provRes.json();
           setConnections(data.connections || []);
+        } else {
+          setKeysLoadError(`Providers could not be loaded (HTTP ${provRes.status}).`);
         }
         if (settingsRes.ok) {
           const data = await settingsRes.json();
@@ -112,9 +129,12 @@ export default function ToolDetailClient({ toolId, machineId }) {
         if (keysRes.ok) {
           const data = await keysRes.json();
           setApiKeys(data.keys || []);
+        } else {
+          setKeysLoadError((prev) => prev || `API keys could not be loaded (HTTP ${keysRes.status}).`);
         }
       } catch (error) {
         console.log("Error loading tool data:", error);
+        if (mounted) setKeysLoadError("Tool data could not be loaded. Check the gateway and try again.");
       } finally {
         if (mounted) setLoading(false);
       }
@@ -122,7 +142,7 @@ export default function ToolDetailClient({ toolId, machineId }) {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [reloadKey]);
 
   const getActiveProviders = () =>
     connections.filter((c) => c.isActive !== false);
@@ -201,8 +221,7 @@ export default function ToolDetailClient({ toolId, machineId }) {
   const getBaseUrl = () => {
     if (tunnelEnabled && tunnelPublicUrl) return tunnelPublicUrl;
     if (cloudEnabled && CLOUD_URL) return CLOUD_URL;
-    if (typeof window !== "undefined") return window.location.origin;
-    return "http://localhost:20128";
+    return gatewayOrigin || getGatewayOrigin();
   };
 
   const renderSetupLedger = () => {
@@ -230,9 +249,10 @@ export default function ToolDetailClient({ toolId, machineId }) {
         detail: "Select an existing KRouter9 key. The secret remains masked; paste the key from its secure source when the client asks for it.",
         control: (
           <select
+            aria-label="API key for this client"
             value={setupKeyId}
             onChange={(event) => setSetupKeyId(event.target.value)}
-            className="min-h-10 w-full border border-border bg-background px-3 text-sm text-text-main sm:max-w-md"
+            className="min-h-11 w-full border border-border bg-surface-2 px-3 text-sm text-text-main sm:max-w-md"
           >
             <option value="">Select a key ({apiKeys.length} available)</option>
             {apiKeys.map((key, index) => (
@@ -269,8 +289,8 @@ export default function ToolDetailClient({ toolId, machineId }) {
               <div className="min-w-0 space-y-2">
                 <div><h3 className="font-medium text-text-main">{step.title}</h3><p className="text-sm leading-6 text-text-muted">{step.detail}</p></div>
                 {step.control}
-                <div className="flex min-w-0 items-center gap-2 border border-border bg-background p-2">
-                  <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre text-xs text-text-main">{step.value}</code>
+                <div className="flex min-w-0 items-center gap-2 border border-border bg-surface-2 p-2">
+                  <code tabIndex={0} aria-label={`${step.title} value`} className="min-w-0 flex-1 overflow-x-auto whitespace-pre text-xs text-text-main">{step.value}</code>
                   <CopySetupValue label={step.title} value={step.value} />
                 </div>
               </div>
@@ -431,7 +451,7 @@ export default function ToolDetailClient({ toolId, machineId }) {
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-1 sm:px-0">
         <Link
           href="/dashboard/cli-tools"
-          className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-primary w-fit"
+          className="inline-flex min-h-11 items-center gap-1 text-sm text-text-muted hover:text-primary w-fit"
         >
           <Icon name="arrow_back" size={18} />
           Back to CLI Tools
@@ -445,7 +465,7 @@ export default function ToolDetailClient({ toolId, machineId }) {
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-1 sm:px-0">
       <Link
         href="/dashboard/cli-tools"
-        className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-primary w-fit"
+        className="inline-flex min-h-11 items-center gap-1 text-sm text-text-muted hover:text-primary w-fit"
       >
         <Icon name="arrow_back" size={18} />
         Back to CLI Tools
@@ -456,16 +476,24 @@ export default function ToolDetailClient({ toolId, machineId }) {
         </h1>
         <p className="text-sm text-text-muted">{tool.description}</p>
       </div>
+      {keysLoadError && !loading ? (
+        <LoadFailedState
+          title="Tool data unavailable"
+          message={keysLoadError}
+          onRetry={() => { setLoading(true); setKeysLoadError(""); setReloadKey((k) => k + 1); }}
+          className="mb-4"
+        />
+      ) : null}
       {loading ? (
         <section className="min-w-0 overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
           <header className="flex min-h-11 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-4 py-3">
             <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">01</span>
             <h2 className="font-semibold">Configuration</h2>
           </header>
-          <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] grid animate-pulse gap-3 px-4 py-4 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto]">
+          <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] grid gap-3 px-4 py-4 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto]">
             <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">01</span>
-            <span className="h-8 bg-[var(--color-surface-raised)]" />
-            <span className="h-10 w-24 bg-[var(--color-surface-raised)]" />
+            <span className="h-8 animate-pulse bg-[var(--color-surface-raised)]" />
+            <span className="h-10 w-24 animate-pulse bg-[var(--color-surface-raised)]" />
           </div>
         </section>
       ) : (

@@ -1,34 +1,37 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import Card from "@/shared/components/Card";
 import PricingModal from "@/shared/components/PricingModal";
+import LoadFailedState from "@/shared/components/LoadFailedState";
 
 export default function PricingSettingsPage() {
-  const router = useRouter();
   const [showModal, setShowModal] = useState(false);
   const [currentPricing, setCurrentPricing] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadPricing();
-  }, []);
+  const [loadError, setLoadError] = useState(false);
 
   const loadPricing = async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const response = await fetch("/api/pricing");
-      if (response.ok) {
-        const data = await response.json();
-        setCurrentPricing(data);
-      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      setCurrentPricing(data);
     } catch (error) {
       console.error("Failed to load pricing:", error);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    // Initial fetch on mount; loadPricing owns its loading/error state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadPricing();
+  }, []);
 
   const handlePricingUpdated = () => {
     loadPricing();
@@ -51,9 +54,9 @@ export default function PricingSettingsPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold">Pricing Settings</h1>
           <p className="text-text-muted mt-1">
@@ -62,11 +65,21 @@ export default function PricingSettingsPage() {
         </div>
         <button
           onClick={() => setShowModal(true)}
-          className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90 transition-colors"
+          type="button"
+          className="min-h-11 px-4 py-2 bg-primary text-[var(--color-on-primary)] rounded hover:bg-primary/90 transition-colors"
         >
           Edit Pricing
         </button>
       </div>
+
+      {loadError && (
+        <LoadFailedState
+          title="Couldn't load pricing"
+          message="The pricing request failed. Check the gateway and try again."
+          onRetry={loadPricing}
+          retrying={loading}
+        />
+      )}
 
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -75,7 +88,7 @@ export default function PricingSettingsPage() {
             Total Models
           </div>
           <div className="text-2xl font-bold mt-1">
-            {loading ? "..." : getModelCount()}
+            {loading ? "..." : loadError ? "—" : getModelCount()}
           </div>
         </Card>
         <Card className="p-4">
@@ -83,15 +96,15 @@ export default function PricingSettingsPage() {
             Providers
           </div>
           <div className="text-2xl font-bold mt-1">
-            {loading ? "..." : getProviders().length}
+            {loading ? "..." : loadError ? "—" : getProviders().length}
           </div>
         </Card>
         <Card className="p-4">
           <div className="text-text-muted text-sm uppercase font-semibold">
             Status
           </div>
-          <div className="text-2xl font-bold mt-1 text-success">
-            {loading ? "..." : "Active"}
+          <div className={`text-2xl font-bold mt-1 ${loadError ? "text-text-muted" : "text-success"}`}>
+            {loading ? "..." : loadError ? "Unavailable" : "Active"}
           </div>
         </Card>
       </div>
@@ -130,8 +143,9 @@ export default function PricingSettingsPage() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold">Current Pricing Overview</h2>
           <button
+            type="button"
             onClick={() => setShowModal(true)}
-            className="text-primary hover:underline text-sm"
+            className="min-h-11 text-primary hover:underline text-sm"
           >
             View Full Details
           </button>
@@ -139,6 +153,8 @@ export default function PricingSettingsPage() {
 
         {loading ? (
           <div className="text-center py-4 text-text-muted">Loading pricing data...</div>
+        ) : loadError ? (
+          <div className="text-text-muted">Pricing data is unavailable until the request succeeds.</div>
         ) : currentPricing ? (
           <div className="space-y-3">
             {Object.keys(currentPricing).slice(0, 5).map(provider => (

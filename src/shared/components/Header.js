@@ -14,8 +14,31 @@ import { MEDIA_PROVIDER_KINDS, AI_PROVIDERS } from "@/shared/constants/providers
 import { getProviderIconSrc } from "@/shared/utils/providerIcon";
 import { translate } from "@/i18n/runtime";
 
+const MEDIA_HUB_HREF = "/dashboard/media-providers/web";
+const MEDIA_COMBO_TITLE = "Media combo";
+// The media hub route segment "web" has no MEDIA_PROVIDER_KINDS entry; give it
+// a display label instead of the raw segment.
+const MEDIA_HUB_LABEL = "Web";
+const mediaKindLabel = (kindId, kindConfig) => kindConfig?.label || (kindId === "web" ? MEDIA_HUB_LABEL : kindId);
+
 const getPageInfo = (pathname) => {
   if (!pathname) return { title: "", description: "", breadcrumbs: [] };
+
+  // Media combo detail: /dashboard/media-providers/combo/[id]. Handled before the
+  // generic [kind]/[id] match: "combo" has no index route, and the id is a UUID
+  // that must never be shown. The header swaps in the combo name once loaded.
+  const mediaComboMatch = pathname.match(/\/media-providers\/combo\/([^/]+)$/);
+  if (mediaComboMatch) {
+    return {
+      title: MEDIA_COMBO_TITLE,
+      description: "",
+      comboId: decodeURIComponent(mediaComboMatch[1]),
+      breadcrumbs: [
+        { label: "Media", href: MEDIA_HUB_HREF },
+        { label: MEDIA_COMBO_TITLE, current: true },
+      ],
+    };
+  }
 
   // Media provider detail: /dashboard/media-providers/[kind]/[id]
   const mediaDetailMatch = pathname.match(/\/media-providers\/([^/]+)\/([^/]+)$/);
@@ -28,7 +51,7 @@ const getPageInfo = (pathname) => {
       title: provider?.name || providerId,
       description: "",
       breadcrumbs: [
-        { label: "Media Providers", href: `/dashboard/media-providers/${kindId}` },
+        { label: "Media", href: MEDIA_HUB_HREF },
         { label: kindConfig?.label || kindId, href: `/dashboard/media-providers/${kindId}` },
         { label: provider?.name || providerId, image: getProviderIconSrc(providerId) },
       ],
@@ -40,9 +63,10 @@ const getPageInfo = (pathname) => {
   if (mediaKindMatch) {
     const kindId = mediaKindMatch[1];
     const kindConfig = MEDIA_PROVIDER_KINDS.find((k) => k.id === kindId);
+    const label = mediaKindLabel(kindId, kindConfig);
     return {
-      title: kindConfig?.label || kindId,
-      description: `Manage your ${kindConfig?.label || kindId} providers`,
+      title: label,
+      description: `Manage your ${label} providers`,
       icon: kindConfig?.icon || "perm_media",
       breadcrumbs: [],
     };
@@ -110,6 +134,13 @@ const getPageInfo = (pathname) => {
       title: "MITM Proxy",
       description: "Intercept CLI tool traffic and route through KRouter9",
       icon: "security",
+      breadcrumbs: [],
+    };
+  if (pathname.includes("/pxpipe"))
+    return {
+      title: "PXPIPE",
+      description: "Image compression module status, savings and history",
+      icon: "image",
       breadcrumbs: [],
     };
   if (pathname.includes("/token-saver"))
@@ -188,7 +219,26 @@ export default function Header() {
 
   // Memoize page info to prevent unnecessary recalculations
   const pageInfo = useMemo(() => getPageInfo(pathname), [pathname]);
-  const { title, description, breadcrumbs } = pageInfo;
+  const { title, description, comboId } = pageInfo;
+  const [comboLabel, setComboLabel] = useState({ id: "", name: "" });
+
+  // Media combo pages: resolve the display name from the existing combo API.
+  useEffect(() => {
+    if (!comboId) return undefined;
+    let cancelled = false;
+    fetch(`/api/combos/${encodeURIComponent(comboId)}`, { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((combo) => {
+        if (!cancelled && typeof combo?.name === "string" && combo.name.trim()) setComboLabel({ id: comboId, name: combo.name.trim() });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [comboId]);
+
+  const comboName = comboId && comboLabel.id === comboId ? comboLabel.name : "";
+  const breadcrumbs = comboName
+    ? pageInfo.breadcrumbs.map((crumb) => (crumb.current ? { ...crumb, label: comboName, raw: true } : crumb))
+    : pageInfo.breadcrumbs;
 
   useEffect(() => {
     let cancelled = false;
@@ -268,12 +318,15 @@ export default function Header() {
         <div className="route-ribbon__context">
           {breadcrumbs.length > 0 ? (
             <nav aria-label="Breadcrumb" className="route-breadcrumb">
-              {breadcrumbs.map((crumb, index) => (
-                <div key={`${crumb.label}-${crumb.href || "current"}`} className="flex min-w-0 items-center gap-2">
-                  {index > 0 ? <span aria-hidden="true" className="text-[var(--color-text-subtle)]">/</span> : null}
-                  {crumb.href ? <Link href={crumb.href}>{translate(crumb.label)}</Link> : <h1>{translate(crumb.label)}</h1>}
-                </div>
-              ))}
+              {breadcrumbs.map((crumb, index) => {
+                const label = crumb.raw ? crumb.label : translate(crumb.label);
+                return (
+                  <div key={`${crumb.href || "current"}-${index}`} className={crumb.href ? "flex shrink-0 items-center gap-2" : "flex min-w-0 items-center gap-2"}>
+                    {index > 0 ? <span aria-hidden="true" className="text-[var(--color-text-subtle)]">/</span> : null}
+                    {crumb.href ? <Link href={crumb.href} className="inline-flex min-h-11 min-w-11 items-center justify-center whitespace-nowrap">{label}</Link> : <h1 className="min-w-0 truncate" title={label}>{label}</h1>}
+                  </div>
+                );
+              })}
             </nav>
           ) : title ? <h1 className="route-ribbon__title">{translate(title)}</h1> : null}
           {description ? <span className="sr-only">{translate(description)}</span> : null}
@@ -287,7 +340,7 @@ export default function Header() {
           {gatewayState === "offline" || gatewayState === "degraded" ? <button type="button" onClick={checkGateway}>Retry</button> : null}
         </div>
 
-        <div className="route-ribbon__actions" aria-label="Page and application actions">
+        <div className="route-ribbon__actions" role="group" aria-label="Page and application actions">
           <HeaderSearch />
           <Link href="/docs" className="ribbon-action"><Icon name="menu_book" className="text-[18px]" aria-hidden="true" /><span>Docs</span></Link>
           <button type="button" onClick={() => setChangelogOpen(true)} className="ribbon-action"><Icon name="history" className="text-[18px]" aria-hidden="true" /><span>Change Log</span></button>
@@ -321,13 +374,13 @@ function HeaderSearch() {
         onKeyDown={(e) => { if (e.key === "Escape") { setQuery(""); e.currentTarget.blur(); } }}
         placeholder={placeholder}
         aria-label={placeholder || "Search this page"}
-        className="h-10 w-full rounded-[var(--input-radius)] border border-[var(--input-border)] bg-[var(--input-bg)] pl-8 pr-8 text-sm focus:border-[var(--input-border-focus)] focus:outline-none"
+        className="h-11 w-full rounded-[var(--input-radius)] border border-[var(--input-border)] bg-[var(--input-bg)] pl-8 pr-8 text-sm focus:border-[var(--input-border-focus)] focus:outline-none"
       />
       {query && (
         <button
           type="button"
           onClick={() => setQuery("")}
-          className="absolute right-1 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main p-0.5 rounded"
+          className="hit-target absolute right-1 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main p-0.5 rounded"
           aria-label="Clear search"
         >
           <Icon name="close" className="text-[16px]" />

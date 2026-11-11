@@ -62,11 +62,12 @@ export default function UsageChart({ period = "7d", viewMode = "tokens", scopeQu
 
   return (
     <div className="flex min-w-0 flex-col gap-3 p-3 sm:p-4">
-      {loading && (loaded || data.length > 0) && <span role="status" className="text-xs text-[var(--text-muted)]">Refreshing…</span>}
-      {error && <div role="alert" className="text-sm text-[var(--danger)]">{error} <button type="button" className="underline" onClick={fetchData}>Retry</button></div>}
+      {loading && (loaded || data.length > 0) && <span role="status" className="text-xs text-[var(--color-text-muted)]">Refreshing…</span>}
+      {error && <div role="alert" className="text-sm text-[var(--color-danger)]">{error} <button type="button" className="inline-flex min-h-[var(--touch-min)] items-center px-2 underline" onClick={fetchData}>Retry</button></div>}
       {loading && !loaded && !data.length ? (
-        <div className="space-y-3 py-3" aria-label="Loading usage trend">
-          {Array.from({ length: 5 }, (_, index) => <div key={index} className="h-7 animate-pulse motion-reduce:animate-none bg-[var(--color-surface-strong)]" />)}
+        <div className="space-y-3 py-3" role="status" aria-busy="true">
+          <span className="sr-only">Loading usage trend</span>
+          {Array.from({ length: 5 }, (_, index) => <div key={index} aria-hidden="true" className="h-7 animate-pulse motion-reduce:animate-none bg-[var(--color-surface-strong)]" />)}
         </div>
       ) : !hasData ? (
         error ? null : (

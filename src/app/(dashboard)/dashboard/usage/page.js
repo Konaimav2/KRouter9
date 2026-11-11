@@ -38,7 +38,8 @@ const VALUE_MODES = [
 
 function UsagePageSkeleton() {
   return (
-    <div className="space-y-6" aria-label="Loading usage">
+    <div className="space-y-6" role="status" aria-busy="true">
+      <span className="sr-only">Loading usage</span>
       <div className="h-10 w-full opacity-100 starting:opacity-50 motion-reduce:transition-none transition-opacity duration-[var(--duration-base)] ease-[var(--ease-enter)] border border-[var(--ledger-border)] bg-[var(--color-surface-strong)] sm:w-96" />
       <section className="border border-border bg-surface">
         <div className="flex min-h-11 items-center gap-3 border-b border-border bg-surface-2 px-4 py-3"><span className="font-mono text-xs tabular-nums text-text-muted">01</span><span className="h-4 w-24 opacity-100 starting:opacity-50 motion-reduce:transition-none transition-opacity duration-[var(--duration-base)] ease-[var(--ease-enter)] bg-[var(--color-surface-strong)]" /></div>
@@ -120,8 +121,8 @@ function UsageContent() {
   };
 
   return (
-    <main className="flex min-w-0 flex-col gap-[var(--space-6)] px-1 sm:px-0">
-      <header className="flex flex-wrap items-center justify-between gap-[var(--space-3)]"><div><h1 className="text-[length:var(--text-xl)] font-semibold">Usage</h1><p className="text-sm text-[var(--text-muted)]">Live updates</p></div></header>
+    <div className="flex min-w-0 flex-col gap-[var(--space-6)] px-1 sm:px-0">
+      <header className="flex flex-wrap items-center justify-between gap-[var(--space-3)]"><div><h1 className="text-[length:var(--text-xl)] font-semibold">Usage</h1><p className="text-sm text-[var(--color-text-muted)]">Live updates</p></div></header>
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <SegmentedControl
           options={[
@@ -135,7 +136,7 @@ function UsageContent() {
           className="w-full sm:w-auto [&>button]:duration-[var(--duration-base)] [&>button]:ease-[var(--ease-standard)] [&>button:focus-visible]:transition-none"
         />
         {["overview", "keys"].includes(activeTab) && (
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end" aria-label="Usage scope controls">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end" role="group" aria-label="Usage scope controls">
             {activeTab === "overview" && <SegmentedControl options={VALUE_MODES} value={mode} onChange={handleModeChange} size="sm" className="w-full sm:w-auto [&>button]:duration-[var(--duration-base)] [&>button]:ease-[var(--ease-standard)] [&>button:focus-visible]:transition-none" />}
             <SegmentedControl options={PERIODS} value={customRange ? "" : period} onChange={handlePeriodChange} size="sm" className="w-full sm:w-auto [&>button]:duration-[var(--duration-base)] [&>button]:ease-[var(--ease-standard)] [&>button:focus-visible]:transition-none" />
           </div>
@@ -143,16 +144,16 @@ function UsageContent() {
       </div>
 
       {["overview", "keys"].includes(activeTab) && <form key={`${startDate}|${endDate}`} onSubmit={handleRangeSubmit} className="flex min-w-0 flex-wrap items-end gap-3 border border-border bg-surface p-3" aria-label="Custom usage range">
-        <div className="min-w-0 flex-1"><label htmlFor="usage-start" className="block text-sm font-medium">Start</label><input id="usage-start" name="startDate" type="datetime-local" defaultValue={localDateTime(startDate)} required aria-describedby="usage-range-help" className="mt-1 min-h-[var(--touch-h)] w-full min-w-0 rounded-[var(--radius-control)] border border-[var(--input-border)] bg-[var(--surface)] px-3 text-base" /></div>
-        <div className="min-w-0 flex-1"><label htmlFor="usage-end" className="block text-sm font-medium">End</label><input id="usage-end" name="endDate" type="datetime-local" defaultValue={localDateTime(endDate)} required aria-describedby="usage-range-help" className="mt-1 min-h-[var(--touch-h)] w-full min-w-0 rounded-[var(--radius-control)] border border-[var(--input-border)] bg-[var(--surface)] px-3 text-base" /></div>
-        <button type="submit" className="min-h-[var(--touch-h)] rounded-[var(--radius-control)] border border-[var(--input-border)] px-3 text-sm hover:bg-[var(--surface-hover)] active:bg-[var(--surface-active)]">Apply range</button>
-        <p id="usage-range-help" className="w-full text-sm text-[var(--text-muted)]">Local time · up to 60 days. {customRange ? "Custom range selected; choose a preset to reset." : "Choose Start and End, then apply."}</p>
-        {(formError || urlRangeError) && <p role="alert" className="w-full text-sm text-[var(--danger)]">{formError || urlRangeError} Apply a valid range or choose a preset.</p>}
+        <div className="min-w-0 flex-1"><label htmlFor="usage-start" className="block text-sm font-medium">Start</label><input id="usage-start" name="startDate" type="datetime-local" defaultValue={localDateTime(startDate)} required aria-describedby="usage-range-help" className="mt-1 min-h-[var(--touch-min)] w-full min-w-0 rounded-[var(--radius-control)] border border-[var(--input-border)] bg-[var(--color-surface)] px-3 text-base" /></div>
+        <div className="min-w-0 flex-1"><label htmlFor="usage-end" className="block text-sm font-medium">End</label><input id="usage-end" name="endDate" type="datetime-local" defaultValue={localDateTime(endDate)} required aria-describedby="usage-range-help" className="mt-1 min-h-[var(--touch-min)] w-full min-w-0 rounded-[var(--radius-control)] border border-[var(--input-border)] bg-[var(--color-surface)] px-3 text-base" /></div>
+        <button type="submit" className="min-h-[var(--touch-min)] rounded-[var(--radius-control)] border border-[var(--input-border)] px-3 text-sm hover:bg-[var(--color-surface-hover)] active:bg-[var(--color-primary-wash)]">Apply range</button>
+        <p id="usage-range-help" className="w-full text-sm text-[var(--color-text-muted)]">Local time · up to 60 days. {customRange ? "Custom range selected; choose a preset to reset." : "Choose Start and End, then apply."}</p>
+        {(formError || urlRangeError) && <p role="alert" className="w-full text-sm text-[var(--color-danger)]">{formError || urlRangeError} Apply a valid range or choose a preset.</p>}
       </form>}
       {activeTab === "overview" && !urlRangeError && <UsageDashboard period={period} mode={mode} scopeQuery={scopeQuery} />}
       {activeTab === "logs" && <UsageLogs />}
       {activeTab === "details" && <RequestDetailsTab />}
       {activeTab === "keys" && !urlRangeError && <PerKeyUsageSection period={period} scopeQuery={scopeQuery} />}
-    </main>
+    </div>
   );
 }

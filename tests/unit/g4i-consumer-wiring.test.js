@@ -20,11 +20,13 @@ const FILES = {
 };
 
 const src = (k) => fs.readFileSync(path.join(SRC, FILES[k]), "utf8");
-const gateCalls = (s) => s.match(/isKeyActionBlocked\(\{[^}]*\}\)/g) || [];
+// ui-fix Wave B: consumers gate with isRunBlocked (reveal state never blocks);
+// the loading/keysError threading contract carries over unchanged.
+const gateCalls = (s) => s.match(/isRunBlocked\(\{[^}]*\}\)/g) || [];
 
 describe("G4I RED: loading/keysError threaded into every key gate", () => {
   for (const k of Object.keys(FILES)) {
-    it(`${k}: isKeyActionBlocked receives loading + keysError`, () => {
+    it(`${k}: isRunBlocked receives loading + keysError`, () => {
       const calls = gateCalls(src(k));
       expect(calls.length).toBeGreaterThan(0);
       for (const c of calls) {
@@ -35,18 +37,15 @@ describe("G4I RED: loading/keysError threaded into every key gate", () => {
   }
 });
 
-describe("G4I RED: stale-reveal guard call sites", () => {
-  it("tts: both reveal sites route through resolveForSelection", () => {
-    const s = src("tts");
-    expect((s.match(/resolveForSelection\(id\)/g) || []).length).toBeGreaterThanOrEqual(2);
-    // Only remaining revealKeyById(id) is inside the helper definition.
-    expect(s.split("revealKeyById(id)").length - 1).toBe(1);
-  });
-
-  it("embedding: auto-pick routes through a seq-guarded resolver", () => {
-    const s = src("embedding");
-    expect(s).toMatch(/revealSeqRef/);
-    expect(s).toMatch(/resolveForSelection\(id\)/);
-    expect(s.split("revealKeyById(id)").length - 1).toBe(1);
-  });
+// Superseded by ui-fix Wave B: no consumer reveals on selection any more, so
+// the stale-reveal race moves into useOnDemandKey (cache keyed by id, cleared
+// by reset() on every selection change). Pin that wiring instead.
+describe("G4I: selection changes drop the on-demand cache", () => {
+  for (const k of ["tts", "embedding", "generic", "stt", "combo", "mitm"]) {
+    it(`${k}: no direct reveal; selection change calls onDemand.reset()`, () => {
+      const s = src(k);
+      expect(s).not.toMatch(/revealKeyById/);
+      expect(s).toMatch(/onDemand\.reset\(\)/);
+    });
+  }
 });

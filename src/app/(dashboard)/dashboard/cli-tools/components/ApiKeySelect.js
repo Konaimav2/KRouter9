@@ -2,34 +2,41 @@
 
 import Icon from "@/shared/components/Icon";
 import { useEffect, useMemo, useState } from "react";
-import { readKeyPresets, upsertKeyPreset, deleteKeyPreset, subscribeKeyPresets } from "./cliEndpointPresets";
+import { readKeyPresets, deleteKeyPreset, subscribeKeyPresets } from "./cliEndpointPresets";
 
 const CUSTOM_VALUE = "__custom__";
-const SAVE_VALUE = "__save_key__";
-
-// Resolve exactly ONE chosen key id to its raw secret via the guarded
-// single-record reveal endpoint. List responses carry maskedKey only —
-// raw secrets are never read from list payloads.
-async function revealKeyById(id) {
-  const res = await fetch(`/api/keys/${encodeURIComponent(id)}/reveal?confirm=true`, { cache: "no-store" });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || "Failed to reveal API key");
-  if (!data.key) throw new Error("Reveal returned no key");
-  return data.key;
-}
 
 function labelForKey(k) {
   return `${k.name || k.id} (${k.maskedKey || "masked"})`;
 }
 
-export default function ApiKeySelect({ value, onChange, apiKeys = [], cloudEnabled = false, className = "" }) {
+/**
+ * Key picker for CLI tool cards.
+ *
+ * Stored gateway keys are selected by id only: picking one calls
+ * `onKeyIdChange(id)` and never fetches or emits the raw secret. The card
+ * resolves the raw key lazily (useCliApiKey -> useOnDemandKey, i.e. the
+ * guarded single-record reveal endpoint) inside Copy/Apply/Start handlers.
+ * `value`/`onChange` carry only a key the user types into the Custom field;
+ * typed keys are never persisted. Saved presets are name + masked label only
+ * and act as reminders: choosing one opens the Custom field empty.
+ */
+export default function ApiKeySelect({
+  value,
+  onChange,
+  keyId = "",
+  onKeyIdChange,
+  apiKeys = [],
+  cloudEnabled = false,
+  className = "",
+  ariaLabel = "API key",
+  revealError = "",
+  onRetry,
+}) {
   const [savedKeys, setSavedKeys] = useState([]);
   // Custom mode is sticky once the user types, so an emptied input doesn't jump back to a dropdown option
   const [customMode, setCustomMode] = useState(false);
-  const [customInput, setCustomInput] = useState("");
-  const [selectedId, setSelectedId] = useState(null);
-  const [resolving, setResolving] = useState(false);
-  const [resolveError, setResolveError] = useState(null);
+  const [savedName, setSavedName] = useState("");
 
   useEffect(() => {
     const sync = () => setSavedKeys(readKeyPresets());
@@ -40,87 +47,78 @@ export default function ApiKeySelect({ value, onChange, apiKeys = [], cloudEnabl
   const options = useMemo(
     () => [
       ...apiKeys.map((k) => ({ value: k.id, label: labelForKey(k), keyId: k.id })),
-      ...savedKeys.map((p) => ({ value: `saved:${p.name}`, label: p.key, url: p.key, saved: true })),
-      { value: CUSTOM_VALUE, label: "Custom...", url: "" },
+      ...savedKeys.map((p) => ({ value: `saved:${p.name}`, label: `${p.name} (${p.label || "key not stored"})`, saved: true })),
+      { value: CUSTOM_VALUE, label: "Custom..." },
     ],
     [apiKeys, savedKeys]
   );
 
-  const selectKeyId = async (id) => {
-    setSelectedId(id);
+  const emitKeyId = (id) => {
+    if (onKeyIdChange) onKeyIdChange(id || "");
+  };
+
+  // Selection only: no reveal here, the card resolves the key at click time.
+  const selectKeyId = (id) => {
     setCustomMode(false);
-    setCustomInput("");
-    setResolveError(null);
-    setResolving(true);
-    try {
-      const raw = await revealKeyById(id);
-      onChange(raw);
-    } catch (e) {
-      onChange("");
-      setResolveError(e.message);
-    } finally {
-      setResolving(false);
-    }
+    setSavedName("");
+    onChange("");
+    emitKeyId(id);
   };
 
   // Derive the active option from selection — no sync effects needed when the parent updates it
-  const matched = selectedId ? options.find((o) => o.value === selectedId) : null;
-  const savedMatch = !matched && value ? options.find((o) => o.value === value || o.url === value) : null;
+  const matched = keyId ? options.find((o) => o.keyId === keyId) : null;
+  const savedMatch = !matched && savedName ? options.find((o) => o.value === `saved:${savedName}`) : null;
   const active = matched || savedMatch;
-  // No implicit selection: a raw secret is fetched only after the user picks a key.
+  // No implicit selection: nothing is chosen until the user picks a key.
   const mode = active ? active.value : (customMode || value ? CUSTOM_VALUE : "");
-  const inputValue = customMode ? customInput : (value || "");
+  const inputValue = value || "";
   const isSaved = typeof mode === "string" && mode.startsWith("saved:");
   const isCustom = mode === CUSTOM_VALUE;
-  const canSave = isCustom && (value || "").trim().length > 0;
   const noKeys = apiKeys.length === 0 && savedKeys.length === 0 && !customMode && !value;
 
   const handleSelect = (e) => {
     const next = e.target.value;
     if (!next) {
-      setSelectedId(null);
+      setCustomMode(false);
+      setSavedName("");
       onChange("");
-      return;
-    }
-    if (next === SAVE_VALUE) {
-      upsertKeyPreset((value || "").trim());
+      emitKeyId("");
       return;
     }
     if (next === CUSTOM_VALUE) {
       setCustomMode(true);
-      setCustomInput("");
-      setSelectedId(null);
+      setSavedName("");
       onChange("");
+      emitKeyId("");
       return;
     }
-    setCustomMode(false);
-    setCustomInput("");
     const opt = options.find((o) => o.value === next);
     if (!opt) return;
     if (opt.keyId) {
       selectKeyId(opt.keyId);
       return;
     }
-    setSelectedId(null);
-    onChange(opt.url ?? opt.value);
+    // Saved preset: a name only, so the user types the key again.
+    setCustomMode(true);
+    setSavedName(next.slice(6));
+    onChange("");
+    emitKeyId("");
   };
 
   const handleCustomInput = (e) => {
-    const v = e.target.value;
     setCustomMode(true);
-    setCustomInput(v);
-    setSelectedId(null);
-    onChange(v);
+    emitKeyId("");
+    onChange(e.target.value);
   };
 
   const handleDeleteSaved = () => {
     if (!isSaved) return;
     deleteKeyPreset(mode.slice(6));
     setCustomMode(false);
-    setCustomInput("");
-    setSelectedId(null);
+    setSavedName("");
     // Deleting a preset never reveals another secret; the user picks again.
     onChange("");
+    emitKeyId("");
   };
 
   if (noKeys) {
@@ -135,33 +133,42 @@ export default function ApiKeySelect({ value, onChange, apiKeys = [], cloudEnabl
     <div className={`flex flex-col gap-1.5 ${className}`}>
       <div className="flex items-center gap-2">
         <select
+          aria-label={ariaLabel}
           value={mode}
           onChange={handleSelect}
-          disabled={resolving}
           className="flex-1 min-w-0 px-2 py-2 bg-surface rounded text-xs border border-border focus:outline-none focus:ring-1 focus:ring-primary/50 sm:py-1.5"
         >
           <option value="">Select a key…</option>
           {options.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
-          {canSave && <option value={SAVE_VALUE}>+ Save current as...</option>}
         </select>
         {isSaved && (
-          <button type="button" onClick={handleDeleteSaved} className="p-1 text-text-muted hover:text-red-500 rounded transition-colors shrink-0" title="Delete saved key">
+          <button type="button" onClick={handleDeleteSaved} className="-my-2 inline-flex size-11 shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:text-red-500" title="Delete saved key" aria-label="Delete saved key">
             <Icon name="delete" className="text-[14px]" />
           </button>
         )}
       </div>
-      {resolving && <span className="text-[11px] text-text-muted">Resolving selected key…</span>}
-      {resolveError && <span className="text-[11px] text-red-500" role="alert">{resolveError}</span>}
-      {isCustom && (
-        <input
-          type="text"
-          value={inputValue}
-          onChange={handleCustomInput}
-          placeholder="sk-..."
-          className="w-full min-w-0 px-2 py-2 bg-surface rounded border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary/50 sm:py-1.5"
-        />
+      {revealError && (
+        <span role="alert" className="flex flex-wrap items-center gap-2 text-[11px] text-red-500">
+          <span className="break-words">{revealError}</span>
+          {onRetry && <button type="button" onClick={onRetry} className="min-h-11 px-1 underline hover:text-primary">Retry</button>}
+        </span>
+      )}
+      {(isCustom || isSaved) && (
+        <>
+          <input
+            type="text"
+            value={inputValue}
+            onChange={handleCustomInput}
+            aria-label={`${ariaLabel} value`}
+            placeholder={isSaved ? `Key for ${savedName}` : "sk-..."}
+            autoComplete="off"
+            spellCheck={false}
+            className="w-full min-w-0 px-2 py-2 bg-surface rounded border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary/50 sm:py-1.5"
+          />
+          <span className="text-[11px] text-text-muted">Typed keys are not saved. Add reusable keys on the Keys page.</span>
+        </>
       )}
     </div>
   );

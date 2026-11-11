@@ -7,24 +7,23 @@ import { getProviderIconSrc, markProviderIconMissing } from "@/shared/utils/prov
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import Image from "next/image";
 import ApiKeySelect from "./ApiKeySelect";
+import { useCliApiKey } from "./useCliApiKey";
+import { getGatewayOrigin } from "@/shared/utils/gatewayOrigin";
 
 export default function DefaultToolCard({ toolId, tool, isExpanded, onToggle, baseUrl, apiKeys, activeProviders = [], cloudEnabled = false, tunnelEnabled = false }) {
   const [copiedField, setCopiedField] = useState(null);
   const [showModelModal, setShowModelModal] = useState(false);
   const [modelValue, setModelValue] = useState("");
   
-  // Initialize state directly with computed value - no need for useEffect
-  const [selectedApiKey, setSelectedApiKey] = useState(() => 
-    apiKeys?.length > 0 ? apiKeys[0].key : ""
-  );
+  // Key id only: snippets show the masked token; the raw key is revealed
+  // lazily inside the Copy handler.
+  const apiKey = useCliApiKey({ apiKeys });
+  const fallbackKey = !cloudEnabled ? "sk_krouter9" : "your-api-key";
 
-  const replaceVars = (text) => {
-    const keyToUse = (selectedApiKey && selectedApiKey.trim()) 
-      ? selectedApiKey 
-      : (!cloudEnabled ? "sk_krouter9" : "your-api-key");
-    
+  const replaceVars = (text, keyToUse = apiKey.display(fallbackKey)) => {
+
     // Add /v1 suffix only if not already present (DRY - avoid duplicate)
-    const normalizedBaseUrl = baseUrl || "http://localhost:20128";
+    const normalizedBaseUrl = baseUrl || getGatewayOrigin();
     const baseUrlWithV1 = normalizedBaseUrl.endsWith("/v1") 
       ? normalizedBaseUrl 
       : `${normalizedBaseUrl}/v1`;
@@ -38,7 +37,13 @@ export default function DefaultToolCard({ toolId, tool, isExpanded, onToggle, ba
   const { copy: copyToClipboard } = useCopyToClipboard();
 
   const handleCopy = async (text, field) => {
-    await copyToClipboard(replaceVars(text), `toolcard-${field}`);
+    let keyToUse;
+    if (String(text).includes("{{apiKey}}")) {
+      const resolved = await apiKey.resolve({ fallback: fallbackKey, label: "copy", retry: () => handleCopy(text, field) });
+      if (!resolved.ok) return;
+      keyToUse = resolved.key;
+    }
+    await copyToClipboard(replaceVars(text, keyToUse), `toolcard-${field}`);
     setCopiedField(field);
     setTimeout(() => setCopiedField(null), 2000);
   };
@@ -51,7 +56,7 @@ export default function DefaultToolCard({ toolId, tool, isExpanded, onToggle, ba
 
   const renderApiKeySelector = () => (
     <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-2">
-      <ApiKeySelect value={selectedApiKey} onChange={setSelectedApiKey} apiKeys={apiKeys} cloudEnabled={cloudEnabled} className="flex-1" />
+      <ApiKeySelect {...apiKey.selectProps} apiKeys={apiKeys} cloudEnabled={cloudEnabled} className="flex-1" />
     </div>
   );
 
@@ -63,14 +68,14 @@ export default function DefaultToolCard({ toolId, tool, isExpanded, onToggle, ba
           value={modelValue}
           onChange={(e) => setModelValue(e.target.value)}
           placeholder="provider/model-id"
-          className="w-full sm:w-auto flex-1 px-3 py-2 bg-bg-secondary rounded-lg text-sm border border-border focus:outline-none focus:ring-1 focus:ring-primary/50"
+          className="w-full sm:w-auto flex-1 px-3 py-2 bg-surface-2 rounded-lg text-sm border border-border focus:outline-none focus:ring-1 focus:ring-primary/50"
         />
         <button
           onClick={() => setShowModelModal(true)}
           disabled={!hasActiveProviders}
           className={`shrink-0 px-3 py-2 rounded-lg border text-sm transition-colors ${
             hasActiveProviders
-              ? "bg-bg-secondary border-border text-text-main hover:border-primary cursor-pointer"
+              ? "bg-surface-2 border-border text-text-main hover:border-primary cursor-pointer"
               : "opacity-50 cursor-not-allowed border-border"
           }`}
         >
@@ -79,15 +84,19 @@ export default function DefaultToolCard({ toolId, tool, isExpanded, onToggle, ba
         {modelValue && (
           <>
             <button
+              type="button"
               onClick={() => handleCopy(modelValue, "model")}
-              className="shrink-0 px-3 py-2 bg-bg-secondary hover:bg-bg-tertiary rounded-lg border border-border transition-colors"
+              aria-label={copiedField === "model" ? "Model copied" : "Copy model"}
+              className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center px-3 py-2 bg-surface-2 hover:bg-surface-3 rounded-lg border border-border transition-colors"
             >
               <Icon name={copiedField === "model" ? "check" : "content_copy"} className="text-lg" />
             </button>
             <button
+              type="button"
               onClick={() => setModelValue("")}
-              className="p-2 text-text-muted hover:text-red-500 rounded transition-colors"
+              className="grid size-11 shrink-0 place-items-center text-text-muted hover:text-red-500 rounded transition-colors"
               title="Clear"
+              aria-label="Clear model"
             >
               <Icon name="close" className="text-lg" />
             </button>
@@ -164,13 +173,15 @@ export default function DefaultToolCard({ toolId, tool, isExpanded, onToggle, ba
               {item.type === "modelSelector" && renderModelSelector()}
               {item.value && (
                 <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-2">
-                  <code className="w-full sm:w-auto flex-1 px-3 py-2 bg-bg-secondary rounded-lg text-sm font-mono border border-border truncate">
+                  <code className="w-full sm:w-auto flex-1 px-3 py-2 bg-surface-2 rounded-lg text-sm font-mono border border-border truncate">
                     {replaceVars(item.value)}
                   </code>
                   {item.copyable && (
                     <button
+                      type="button"
                       onClick={() => handleCopy(item.value, `${item.step}-${item.title}`)}
-                      className="shrink-0 px-3 py-2 bg-bg-secondary hover:bg-bg-tertiary rounded-lg border border-border transition-colors"
+                      aria-label={copiedField === `${item.step}-${item.title}` ? `${item.title} copied` : `Copy ${item.title}`}
+                      className="shrink-0 px-3 py-2 bg-surface-2 hover:bg-surface-3 rounded-lg border border-border transition-colors"
                     >
                       <Icon name={copiedField === `${item.step}-${item.title}` ? "check" : "content_copy"} className="text-lg" />
                     </button>
@@ -187,13 +198,13 @@ export default function DefaultToolCard({ toolId, tool, isExpanded, onToggle, ba
               <span className="text-xs text-text-muted uppercase tracking-wide">{tool.codeBlock.language}</span>
               <button
                 onClick={() => handleCopy(tool.codeBlock.code, "codeblock")}
-                className="flex items-center gap-1 px-2 py-1 text-xs bg-bg-secondary hover:bg-bg-tertiary rounded border border-border transition-colors"
+                className="flex items-center gap-1 px-2 py-1 text-xs bg-surface-2 hover:bg-surface-3 rounded border border-border transition-colors"
               >
                 <Icon name={copiedField === "codeblock" ? "check" : "content_copy"} className="text-sm" />
                 {copiedField === "codeblock" ? "Copied!" : "Copy"}
               </button>
             </div>
-            <pre className="p-4 bg-bg-secondary rounded-lg border border-border overflow-x-auto" tabIndex={0} aria-label="Command">
+            <pre className="p-4 bg-surface-2 rounded-lg border border-border overflow-x-auto" tabIndex={0} aria-label="Command">
               <code className="text-sm font-mono whitespace-pre">{replaceVars(tool.codeBlock.code)}</code>
             </pre>
           </div>

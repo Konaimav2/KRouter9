@@ -7,6 +7,7 @@ import Image from "next/image";
 import BaseUrlSelect from "./BaseUrlSelect";
 import { rememberEndpoint } from "./cliEndpointPresets";
 import ApiKeySelect from "./ApiKeySelect";
+import { useCliApiKey } from "./useCliApiKey";
 
 const ENDPOINT = "/api/cli-tools/cowork-settings";
 
@@ -38,7 +39,8 @@ export default function CoworkToolCard({
   const [applying, setApplying] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [message, setMessage] = useState(null);
-  const [selectedApiKey, setSelectedApiKey] = useState("");
+  // Key id only; the raw key is revealed inside Apply / Copy handlers.
+  const apiKey = useCliApiKey({ apiKeys });
   const [selectedModels, setSelectedModels] = useState([]);
   const [showManualConfigModal, setShowManualConfigModal] = useState(false);
   const [customBaseUrl, setCustomBaseUrl] = useState("");
@@ -52,11 +54,6 @@ export default function CoworkToolCard({
   const [addMcpOpen, setAddMcpOpen] = useState(false);
   const [addMcpForm, setAddMcpForm] = useState({ name: "", url: "" });
 
-  useEffect(() => {
-    if (apiKeys?.length > 0 && !selectedApiKey) {
-      setSelectedApiKey(apiKeys[0].key);
-    }
-  }, [apiKeys, selectedApiKey]);
 
   useEffect(() => {
     if (initialStatus) setStatus(initialStatus);
@@ -134,9 +131,9 @@ export default function CoworkToolCard({
 
     setApplying(true);
     try {
-      const keyToUse = selectedApiKey?.trim()
-        || (apiKeys?.length > 0 ? apiKeys[0].key : null)
-        || (!cloudEnabled ? "sk_krouter9" : null);
+      const resolved = await apiKey.resolve({ fallback: !cloudEnabled ? "sk_krouter9" : null, label: "apply", retry: handleApply });
+      if (!resolved.ok) return;
+      const keyToUse = resolved.key;
 
       const res = await fetch(ENDPOINT, {
         method: "POST",
@@ -231,10 +228,9 @@ export default function CoworkToolCard({
     setPlugins(plugins.filter((p) => p.name !== name));
   };
 
-  const getManualConfigs = () => {
-    const keyToUse = (selectedApiKey && selectedApiKey.trim())
-      ? selectedApiKey
-      : (!cloudEnabled ? "sk_krouter9" : "<API_KEY_FROM_DASHBOARD>");
+  const manualFallbackKey = (!cloudEnabled ? "sk_krouter9" : "<API_KEY_FROM_DASHBOARD>");
+  // Preview shows the masked token; Copy passes the revealed key.
+  const getManualConfigs = (keyToUse = apiKey.display(manualFallbackKey)) => {
 
     const modelsToShow = selectedModels.length > 0 ? selectedModels : ["provider/model-id"];
     const cfg = {
@@ -329,7 +325,7 @@ export default function CoworkToolCard({
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[8rem_auto_1fr_auto] sm:items-center sm:gap-2">
                   <span className="text-xs font-semibold text-text-main sm:text-right sm:text-sm">API Key</span>
                   <Icon name="arrow_forward" className="hidden text-text-muted text-[14px] sm:inline" />
-                  <ApiKeySelect value={selectedApiKey} onChange={setSelectedApiKey} apiKeys={apiKeys} cloudEnabled={cloudEnabled} />
+                  <ApiKeySelect {...apiKey.selectProps} apiKeys={apiKeys} cloudEnabled={cloudEnabled} />
                 </div>
 
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[8rem_auto_1fr] sm:items-center sm:gap-2">
@@ -343,7 +339,7 @@ export default function CoworkToolCard({
                         selectedModels.map((m) => (
                           <span key={m} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-black/5 dark:bg-white/5 text-text-muted border border-transparent hover:border-border">
                             {m}
-                            <button onClick={() => handleRemoveModel(m)} className="ml-0.5 hover:text-red-500">
+                            <button type="button" aria-label={`Remove ${m}`} onClick={() => handleRemoveModel(m)} className="ml-0.5 hover:text-red-500">
                               <Icon name="close" className="text-[12px]" />
                             </button>
                           </span>
@@ -371,7 +367,7 @@ export default function CoworkToolCard({
                             <span className="text-[9px] px-1 py-0.5 rounded bg-black/5 dark:bg-white/5 text-text-muted whitespace-nowrap">+{p.toolNames.length - 6}</span>
                           )}
                         </div>
-                        <button onClick={() => removePlugin(p.name)} className="shrink-0 hover:text-red-500 ml-auto">
+                        <button type="button" aria-label={`Remove ${p.name}`} onClick={() => removePlugin(p.name)} className="shrink-0 hover:text-red-500 ml-auto">
                           <Icon name="close" className="text-[12px]" />
                         </button>
                       </div>
@@ -382,7 +378,7 @@ export default function CoworkToolCard({
                         <span className="text-xs font-medium min-w-0 truncate flex-shrink-0">{p.name}</span>
                         <span className="text-[8px] px-1 py-0.5 rounded bg-blue-500/10 text-blue-500 shrink-0">custom</span>
                         <span className="flex-1 text-[9px] text-text-muted truncate">{p.url}</span>
-                        <button onClick={() => setCustomPlugins(customPlugins.filter((x) => x.name !== p.name))} className="shrink-0 hover:text-red-500 ml-auto">
+                        <button type="button" aria-label={`Remove ${p.name}`} onClick={() => setCustomPlugins(customPlugins.filter((x) => x.name !== p.name))} className="shrink-0 hover:text-red-500 ml-auto">
                           <Icon name="close" className="text-[12px]" />
                         </button>
                       </div>
@@ -519,6 +515,10 @@ export default function CoworkToolCard({
         onClose={() => setShowManualConfigModal(false)}
         title="Claude Cowork - Manual Configuration"
         configs={getManualConfigs()}
+        resolveCopyContent={async (index) => {
+          const resolved = await apiKey.resolve({ fallback: manualFallbackKey, label: "copy" });
+          return resolved.ok ? getManualConfigs(resolved.key)[index]?.content : null;
+        }}
       />
 
       {comboModalOpen && (
@@ -560,7 +560,7 @@ export default function CoworkToolCard({
           <div className="bg-surface border border-border rounded-xl shadow-xl w-full max-w-sm mx-4 p-5 flex flex-col gap-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-sm">Add Custom MCP</h3>
-              <button onClick={() => setAddMcpOpen(false)} className="text-text-muted hover:text-text-main">
+              <button type="button" aria-label="Close" onClick={() => setAddMcpOpen(false)} className="grid size-11 place-items-center text-text-muted hover:text-text-main">
                 <Icon name="close" className="text-[18px]" />
               </button>
             </div>
@@ -597,7 +597,7 @@ export default function CoworkToolCard({
                   setCustomPlugins((prev) => [...prev.filter((x) => x.name !== name), { name, url: addMcpForm.url.trim(), transport: "sse", custom: true }]);
                   setAddMcpOpen(false);
                 }}
-                className="px-3 py-1.5 rounded bg-primary text-white text-xs font-medium hover:opacity-90 cursor-pointer"
+                className="px-3 py-1.5 rounded bg-primary text-[var(--color-on-primary)] text-xs font-medium hover:opacity-90 cursor-pointer"
               >Add</button>
             </div>
           </div>

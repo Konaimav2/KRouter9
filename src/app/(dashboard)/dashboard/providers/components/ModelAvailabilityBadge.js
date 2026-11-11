@@ -117,7 +117,9 @@ export default function ModelAvailabilityBadge() {
             </div>
             <button
               onClick={fetchStatus}
-              className="p-1 rounded-lg hover:bg-surface text-text-muted hover:text-text-main transition-colors"
+              type="button"
+              aria-label="Refresh model status"
+              className="grid size-11 place-items-center -m-2 rounded-lg hover:bg-surface text-text-muted hover:text-text-main transition-colors"
               title="Refresh"
             >
               <Icon name="refresh" size={14} />

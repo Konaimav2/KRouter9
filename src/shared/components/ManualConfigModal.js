@@ -6,11 +6,16 @@ import Modal from "./Modal";
 import Button from "./Button";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 
-export default function ManualConfigModal({ isOpen, onClose, title = "Manual Configuration", configs = [] }) {
+// `resolveCopyContent(index)` (optional) supplies the text actually copied,
+// e.g. the config with a lazily revealed key while the preview stays masked.
+// Resolving to null/undefined cancels the copy.
+export default function ManualConfigModal({ isOpen, onClose, title = "Manual Configuration", configs = [], resolveCopyContent }) {
   const { copy } = useCopyToClipboard();
   const [copiedIndex, setCopiedIndex] = useState(null);
 
-  const copyConfig = (text, index) => {
+  const copyConfig = async (shown, index) => {
+    const text = resolveCopyContent ? await resolveCopyContent(index) : shown;
+    if (text == null) return;
     copy(text, `manualconfig-${index}`);
     setCopiedIndex(index);
     setTimeout(() => setCopiedIndex(null), 2000);

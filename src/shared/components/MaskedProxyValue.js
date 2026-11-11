@@ -109,7 +109,7 @@ export default function MaskedProxyValue({
         <button
           type="button"
           onClick={handleCopy}
-          className="shrink-0 rounded px-1 py-0.5 text-[10px] text-primary hover:bg-black/5 dark:hover:bg-white/5"
+          className="inline-flex size-11 shrink-0 items-center justify-center rounded text-[10px] text-primary hover:bg-black/5 dark:hover:bg-white/5"
           title="Copy to clipboard"
         >
           <Icon name={copied ? "check" : "content_copy"} className="text-[14px] align-middle" />
@@ -141,7 +141,7 @@ export default function MaskedProxyValue({
           type="button"
           onClick={() => { setError(""); setConfirmOpen(true); }}
           disabled={loading}
-          className="shrink-0 rounded px-1 py-0.5 text-[10px] text-primary hover:bg-black/5 disabled:opacity-50 dark:hover:bg-white/5"
+          className="inline-flex size-11 shrink-0 items-center justify-center rounded text-[10px] text-primary hover:bg-black/5 disabled:opacity-50 dark:hover:bg-white/5"
           title="Reveal full URL (audit-logged)"
         >
           <Icon name="visibility" className="text-[14px] align-middle" />

@@ -34,16 +34,16 @@ function ModelItem({ index, model, isFirst, isLast, onEdit, onMoveUp, onMoveDown
           onClick={() => setEditing(true)} title="Click to edit">{model}</div>
       )}
       <div className="flex shrink-0 items-center gap-0.5">
-        <button onClick={onMoveUp} disabled={isFirst}
-          className={`p-0.5 rounded ${isFirst ? "text-text-muted/20 cursor-not-allowed" : "text-text-muted hover:text-primary hover:bg-black/5 dark:hover:bg-white/5"}`} title="Move up">
+        <button type="button" onClick={onMoveUp} disabled={isFirst} aria-label="Move up"
+          className={`grid size-11 place-items-center rounded ${isFirst ? "text-text-muted/20 cursor-not-allowed" : "text-text-muted hover:text-primary hover:bg-black/5 dark:hover:bg-white/5"}`} title="Move up">
           <Icon name="arrow_upward" className="text-[12px]" />
         </button>
-        <button onClick={onMoveDown} disabled={isLast}
-          className={`p-0.5 rounded ${isLast ? "text-text-muted/20 cursor-not-allowed" : "text-text-muted hover:text-primary hover:bg-black/5 dark:hover:bg-white/5"}`} title="Move down">
+        <button type="button" onClick={onMoveDown} disabled={isLast} aria-label="Move down"
+          className={`grid size-11 place-items-center rounded ${isLast ? "text-text-muted/20 cursor-not-allowed" : "text-text-muted hover:text-primary hover:bg-black/5 dark:hover:bg-white/5"}`} title="Move down">
           <Icon name="arrow_downward" className="text-[12px]" />
         </button>
       </div>
-      <button onClick={onRemove} className="p-0.5 hover:bg-red-500/10 rounded text-text-muted hover:text-red-500 transition-all" title="Remove">
+      <button type="button" onClick={onRemove} aria-label="Remove model" className="grid size-11 place-items-center hover:bg-red-500/10 rounded text-text-muted hover:text-red-500 transition-all" title="Remove">
         <Icon name="close" className="text-[12px]" />
       </button>
     </div>

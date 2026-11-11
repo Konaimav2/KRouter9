@@ -7,6 +7,14 @@ import { MITM_TOOLS } from "@/shared/constants/cliTools";
 import { getModelsByProviderId } from "@/shared/constants/models";
 import { isOpenAICompatibleProvider, isAnthropicCompatibleProvider } from "@/shared/constants/providers";
 import { MitmServerCard, MitmToolCard } from "@/app/(dashboard)/dashboard/cli-tools/components";
+import LoadFailedState from "@/shared/components/LoadFailedState";
+
+// Each loader throws on a non-2xx so a failed load never renders as "no data".
+async function loadJson(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url} failed (HTTP ${res.status})`);
+  return res.json();
+}
 
 export default function MitmPageClient() {
   const [connections, setConnections] = useState([]);
@@ -15,52 +23,36 @@ export default function MitmPageClient() {
   const [cloudEnabled, setCloudEnabled] = useState(false);
   const [expandedTool, setExpandedTool] = useState(null);
   const [mitmStatus, setMitmStatus] = useState({ running: false, certExists: false, dnsStatus: {}, hasCachedPassword: false });
+  const [loadError, setLoadError] = useState(false);
+  // Aliases and settings are secondary: a failure warns inline, never hides the page.
+  const [secondaryFailures, setSecondaryFailures] = useState([]);
+  const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
-    fetchConnections();
-    fetchApiKeys();
-    fetchAliases();
-    fetchCloudSettings();
+    loadAll();
   }, []);
 
-  const fetchConnections = async () => {
-    try {
-      const res = await fetch("/api/providers?mode=full");
-      if (res.ok) {
-        const data = await res.json();
-        setConnections(data.connections || []);
-      }
-    } catch { /* ignore */ }
+  const loadAll = async () => {
+    const [providers, keys, aliases, settings] = await Promise.allSettled([
+      loadJson("/api/providers?mode=full").then((data) => setConnections(data.connections || [])),
+      loadJson("/api/keys").then((data) => setApiKeys(data.keys || [])),
+      loadJson("/api/models/alias").then((data) => setModelAliases(data.aliases || {})),
+      loadJson("/api/settings").then((data) => setCloudEnabled(data.cloudEnabled || false)),
+    ]);
+    setLoadError([providers, keys].some((result) => result.status === "rejected"));
+    setSecondaryFailures([
+      aliases.status === "rejected" ? "model aliases" : null,
+      settings.status === "rejected" ? "settings" : null,
+    ].filter(Boolean));
   };
 
-  const fetchApiKeys = async () => {
+  const retryLoad = async () => {
+    setRetrying(true);
     try {
-      const res = await fetch("/api/keys");
-      if (res.ok) {
-        const data = await res.json();
-        setApiKeys(data.keys || []);
-      }
-    } catch { /* ignore */ }
-  };
-
-  const fetchAliases = async () => {
-    try {
-      const res = await fetch("/api/models/alias");
-      if (res.ok) {
-        const data = await res.json();
-        setModelAliases(data.aliases || {});
-      }
-    } catch { /* ignore */ }
-  };
-
-  const fetchCloudSettings = async () => {
-    try {
-      const res = await fetch("/api/settings");
-      if (res.ok) {
-        const data = await res.json();
-        setCloudEnabled(data.cloudEnabled || false);
-      }
-    } catch { /* ignore */ }
+      await loadAll();
+    } finally {
+      setRetrying(false);
+    }
   };
 
   const getActiveProviders = () => connections.filter(c => c.isActive !== false);
@@ -81,10 +73,24 @@ export default function MitmPageClient() {
       <section className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-warning)] bg-[var(--color-warning-wash)]">
         <div className="flex items-start gap-3 px-4 py-3">
           <AlertTriangle size={18} strokeWidth={1.75} className="mt-0.5 shrink-0 text-[var(--color-warning)]" aria-hidden="true" />
-          <div><h2 className="text-sm font-semibold text-[var(--color-warning)]">Traffic interception warning</h2><p className="mt-1 text-xs leading-relaxed text-[var(--color-text)]">MITM intercepts HTTPS traffic from IDE tools through a local certificate authority and redirects requests to your providers. This may violate a tool provider’s terms and can put the associated account at risk. Use only when you understand the impact.</p></div>
+          <div><h2 className="text-sm font-semibold text-[var(--color-text)]">Traffic interception warning</h2><p className="mt-1 text-xs leading-relaxed text-[var(--color-text)]">MITM intercepts HTTPS traffic from IDE tools through a local certificate authority and redirects requests to your providers. This may violate a tool provider’s terms and can put the associated account at risk. Use only when you understand the impact.</p></div>
         </div>
       </section>
 
+      {loadError ? (
+        <LoadFailedState
+          title="Couldn't load MITM data"
+          message="Providers or API keys could not be loaded, so server and tool routes are hidden instead of showing empty data. Retry to load them again."
+          onRetry={retryLoad}
+          retrying={retrying}
+        />
+      ) : <>
+      {secondaryFailures.length > 0 && (
+        <div data-testid="secondary-load-warning" role="status" className="flex items-start gap-2 rounded-[var(--radius-md)] border border-[var(--color-warning)] bg-[var(--color-warning-wash)] px-4 py-2 text-xs text-[var(--color-text)]">
+          <AlertTriangle size={14} strokeWidth={1.75} className="mt-0.5 shrink-0 text-[var(--color-warning)]" aria-hidden="true" />
+          <span>Couldn&apos;t load {secondaryFailures.join(" and ")}. Server and tool routes are shown; alias mapping and cloud options may use defaults until you reload.</span>
+        </div>
+      )}
       <LedgerBand number="01" title="Interception server" summary={mitmStatus.running ? "Server running" : "Server stopped"} icon={ShieldCheck}>
         <div className="p-3 sm:p-4"><MitmServerCard apiKeys={apiKeys} cloudEnabled={cloudEnabled} onStatusChange={setMitmStatus} /></div>
       </LedgerBand>
@@ -99,6 +105,7 @@ export default function MitmPageClient() {
           ))}
         </div>}
       </LedgerBand>
+      </>}
     </div>
   );
 }

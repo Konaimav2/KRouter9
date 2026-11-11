@@ -29,7 +29,7 @@ export default function Avatar({
 
   // Generate color from name
   const getColorFromName = (name) => {
-    if (!name) return "bg-primary";
+    if (!name) return "bg-primary text-[var(--color-on-primary)]";
     const colors = [
       "bg-red-500",
       "bg-orange-500",
@@ -50,7 +50,7 @@ export default function Avatar({
       "bg-rose-500",
     ];
     const index = name.charCodeAt(0) % colors.length;
-    return colors[index];
+    return `${colors[index]} text-white`;
   };
 
   if (src) {
@@ -58,7 +58,7 @@ export default function Avatar({
       <div
         className={cn(
           "rounded-full bg-cover bg-center bg-no-repeat",
-          "ring-2 ring-white dark:ring-surface-dark shadow-sm",
+          "ring-2 ring-white dark:ring-surface shadow-sm",
           sizes[size],
           className
         )}
@@ -72,8 +72,8 @@ export default function Avatar({
   return (
     <div
       className={cn(
-        "rounded-full flex items-center justify-center font-semibold text-white",
-        "ring-2 ring-white dark:ring-surface-dark shadow-sm",
+        "rounded-full flex items-center justify-center font-semibold",
+        "ring-2 ring-white dark:ring-surface shadow-sm",
         sizes[size],
         getColorFromName(name),
         className

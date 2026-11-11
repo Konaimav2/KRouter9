@@ -17,7 +17,7 @@ export default function ModelRow({ model, fullModel, alias, copied, onCopy, test
     : undefined;
 
   return (
-    <div className={`group min-w-0 max-w-full rounded-lg border px-3 py-2 ${borderColor} hover:bg-sidebar/50`}>
+    <div className={`group min-w-0 max-w-full rounded-lg border px-3 py-2 ${borderColor} hover:bg-surface-2/60`}>
       <div className="flex min-w-0 items-start gap-2 sm:items-center">
         <Icon
           name={testStatus === "ok" ? "check_circle" : testStatus === "error" ? "cancel" : "smart_toy"}
@@ -26,10 +26,10 @@ export default function ModelRow({ model, fullModel, alias, copied, onCopy, test
           style={iconColor ? { color: iconColor } : undefined}
         />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <code className="max-w-[72vw] truncate rounded bg-sidebar px-1.5 py-0.5 font-mono text-xs text-text-muted sm:max-w-[360px]">{displayModel}</code>
+          <code className="max-w-[72vw] truncate rounded bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-text-muted sm:max-w-[360px]">{displayModel}</code>
           <span className="flex min-w-0 items-center text-[9px] gap-1 pl-1">
-            {model.name && <span className="truncate text-[9px] italic text-text-muted/70">{model.name}</span>}
-            <CapacityBadges caps={caps} colorOverride="text-text-muted/70" size={12} />
+            {model.name && <span className="truncate text-[9px] italic text-text-muted">{model.name}</span>}
+            <CapacityBadges caps={caps} colorOverride="text-text-muted" size={12} />
           </span>
         </div>
         {onTest && (
@@ -38,7 +38,7 @@ export default function ModelRow({ model, fullModel, alias, copied, onCopy, test
               onClick={onTest}
               disabled={isTesting}
               aria-label={`Test ${displayModel}`}
-              className={`rounded p-0.5 text-text-muted transition-opacity hover:bg-sidebar hover:text-primary ${isTesting ? "opacity-100" : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100"}`}
+              className={`-my-2.5 inline-flex size-11 shrink-0 items-center justify-center rounded text-text-muted transition-opacity hover:bg-surface-2 hover:text-primary ${isTesting ? "opacity-100" : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"}`}
             >
               <Icon name={isTesting ? "progress_activity" : "science"} size={14} className={isTesting ? "animate-spin" : ""} />
             </button>
@@ -51,7 +51,7 @@ export default function ModelRow({ model, fullModel, alias, copied, onCopy, test
           <button
             onClick={() => onCopy(displayModel, `model-${model.id}`)}
             aria-label={`Copy ${displayModel}`}
-            className="rounded p-0.5 text-text-muted hover:bg-sidebar hover:text-primary"
+            className="-my-2.5 inline-flex size-11 shrink-0 items-center justify-center rounded text-text-muted hover:bg-surface-2 hover:text-primary"
           >
             <Icon name={copied === `model-${model.id}` ? "check" : "content_copy"} size={14} />
           </button>
@@ -63,7 +63,7 @@ export default function ModelRow({ model, fullModel, alias, copied, onCopy, test
           <button
             onClick={onDeleteAlias}
             aria-label={`Remove ${displayModel}`}
-            className="ml-auto rounded p-0.5 text-text-muted opacity-100 transition-opacity hover:bg-red-500/10 hover:text-red-500 sm:opacity-0 sm:group-hover:opacity-100"
+            className="ml-auto -my-2.5 inline-flex size-11 shrink-0 items-center justify-center rounded text-text-muted opacity-100 transition-opacity hover:bg-red-500/10 hover:text-red-500 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
             title="Remove custom model"
           >
             <Icon name="close" size={14} />
@@ -72,7 +72,7 @@ export default function ModelRow({ model, fullModel, alias, copied, onCopy, test
           <button
             onClick={onDisable}
             aria-label={`Disable ${displayModel}`}
-            className="ml-auto rounded p-0.5 text-text-muted opacity-100 transition-opacity hover:bg-red-500/10 hover:text-red-500 sm:opacity-0 sm:group-hover:opacity-100"
+            className="ml-auto -my-2.5 inline-flex size-11 shrink-0 items-center justify-center rounded text-text-muted opacity-100 transition-opacity hover:bg-red-500/10 hover:text-red-500 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
             title="Disable this model"
           >
             <Icon name="close" size={14} />

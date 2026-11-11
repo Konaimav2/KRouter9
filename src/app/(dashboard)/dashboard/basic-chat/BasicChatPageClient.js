@@ -35,6 +35,26 @@ const STORAGE_KEYS = {
   draft: "basic-chat.draft",
 };
 
+function readStoredChatState() {
+  const empty = { sessions: [], activeSessionId: "", activeProviderId: "", draft: "" };
+  try {
+    const storage = globalThis.localStorage;
+    if (!storage) return empty;
+    const saved = safeParse(storage.getItem(STORAGE_KEYS.sessions), []);
+    return {
+      sessions: Array.isArray(saved) ? saved.map((session) => ({
+        ...session,
+        messages: Array.isArray(session.messages) ? session.messages : [],
+      })) : [],
+      activeSessionId: storage.getItem(STORAGE_KEYS.activeSessionId) || "",
+      activeProviderId: storage.getItem(STORAGE_KEYS.activeProviderId) || "",
+      draft: storage.getItem(STORAGE_KEYS.draft) || "",
+    };
+  } catch {
+    return empty;
+  }
+}
+
 function createId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
   return `chat_${Date.now()}_${Math.random().toString(16).slice(2)}`;
@@ -138,29 +158,13 @@ export default function BasicChatPageClient() {
   const [providerGroups, setProviderGroups] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const [sessions, setSessions] = useState(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const saved = safeParse(globalThis.localStorage.getItem(STORAGE_KEYS.sessions), []);
-      return Array.isArray(saved) ? saved.map((session) => ({
-        ...session,
-        messages: Array.isArray(session.messages) ? session.messages : [],
-      })) : [];
-    } catch { return []; }
-  });
-  const [activeSessionId, setActiveSessionId] = useState(() => {
-    if (typeof window === "undefined") return "";
-    return globalThis.localStorage.getItem(STORAGE_KEYS.activeSessionId) || "";
-  });
-  const [activeProviderId, setActiveProviderId] = useState(() => {
-    if (typeof window === "undefined") return "";
-    return globalThis.localStorage.getItem(STORAGE_KEYS.activeProviderId) || "";
-  });
+  // SSR-safe initial values: the server and the first client render must match.
+  // Stored sessions/draft are read in the mount effect below (F5 hydration).
+  const [sessions, setSessions] = useState([]);
+  const [activeSessionId, setActiveSessionId] = useState("");
+  const [activeProviderId, setActiveProviderId] = useState("");
   const [activeModelId, setActiveModelId] = useState("");
-  const [draft, setDraft] = useState(() => {
-    if (typeof window === "undefined") return "";
-    return globalThis.localStorage.getItem(STORAGE_KEYS.draft) || "";
-  });
+  const [draft, setDraft] = useState("");
   const [attachments, setAttachments] = useState([]);
   const [composerExpanded, setComposerExpanded] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -218,9 +222,17 @@ export default function BasicChatPageClient() {
   }, [restoreFocus]);
 
   useEffect(() => {
-    // Hydration is an external browser lifecycle boundary.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // Hydration is an external browser lifecycle boundary: restore persisted
+    // state only after mount, in the same batch that flips isHydrated, so the
+    // persistence effect never writes the empty SSR defaults over stored data.
+    const stored = readStoredChatState();
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (stored.sessions.length) setSessions(stored.sessions);
+    if (stored.activeSessionId) setActiveSessionId(stored.activeSessionId);
+    if (stored.activeProviderId) setActiveProviderId(stored.activeProviderId);
+    if (stored.draft) setDraft(stored.draft);
     setIsHydrated(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
   useEffect(() => {
@@ -1031,7 +1043,7 @@ export default function BasicChatPageClient() {
   const modelSubLabel = activeModel ? activeModel.requestModel : "Choose from connected providers";
 
   return (
-    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--color-canvas)] text-[var(--color-text)]" aria-label="Playground routing instrument">
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--color-canvas)] text-[var(--color-text)]" role="region" aria-label="Playground routing instrument">
       <div className="relative mx-auto flex h-full min-h-0 w-full max-w-[var(--layout-content-max)] flex-1 flex-col lg:grid lg:grid-cols-[240px_minmax(0,1fr)]">
         <aside className="hidden min-h-0 border-r border-[var(--color-border)] bg-[var(--color-surface)] lg:flex lg:flex-col lg:row-span-2">
           <div className="border-b border-[var(--color-border)] p-3"><Button fullWidth icon="add" onClick={handleNewChat} disabled={!activeModel || newChatCooldown > 0}>{newChatCooldown > 0 ? `New chat (${newChatCooldown}s)` : "New chat"}</Button></div>
@@ -1042,8 +1054,8 @@ export default function BasicChatPageClient() {
               const isActive = session.id === activeSessionId;
               return <div key={session.id} className={`group mb-1 flex min-h-14 items-center gap-2 rounded-[var(--radius-sm)] px-3 ${isActive ? "bg-[var(--color-primary-wash)] before:bg-[var(--color-route-line-active)]" : ""}`}>
                 <button type="button" onClick={() => handleSelectSession(session.id)} className="min-w-0 flex-1 text-left"><span className="data-text mr-2 text-[10px] text-[var(--color-text-muted)]">{String(index + 1).padStart(2, "0")}</span><span className="truncate text-sm font-medium">{session.title}</span><span className="mt-0.5 block truncate text-[11px] text-[var(--color-text-muted)]">{session.providerName} · {session.modelName}</span></button>
-                <button type="button" onClick={(event) => beginRenameSession(session, event.currentTarget)} aria-label={`Rename ${session.title}`} className="grid size-8 place-items-center text-[var(--color-text-muted)]"><Icon name="edit" className="text-[16px]" /></button>
-                <button type="button" onClick={(event) => { deleteTriggerRef.current = event.currentTarget; setDeleteSessionId(session.id); }} aria-label={`Delete ${session.title}`} className="grid size-8 place-items-center text-[var(--color-danger)]"><Icon name="delete" className="text-[16px]" /></button>
+                <button type="button" onClick={(event) => beginRenameSession(session, event.currentTarget)} aria-label={`Rename ${session.title}`} className="grid size-11 place-items-center text-[var(--color-text-muted)]"><Icon name="edit" className="text-[16px]" /></button>
+                <button type="button" onClick={(event) => { deleteTriggerRef.current = event.currentTarget; setDeleteSessionId(session.id); }} aria-label={`Delete ${session.title}`} className="grid size-11 place-items-center text-[var(--color-danger)]"><Icon name="delete" className="text-[16px]" /></button>
               </div>;
             })}
           </div>
@@ -1060,7 +1072,7 @@ export default function BasicChatPageClient() {
                 <label className="flex min-h-11 items-center gap-2 border-b border-[var(--color-border)] px-3 text-xs text-[var(--color-text-muted)]"><input type="checkbox" checked={searchAllConfigured} onChange={(event) => setSearchAllConfigured(event.target.checked)} />Search all configured</label>
                 <div className="grid min-h-0 flex-1 grid-cols-[minmax(120px,34%)_minmax(0,1fr)]">
                   <nav aria-label="Model provider scopes" className="overflow-y-auto border-r border-[var(--color-border)] bg-[var(--color-surface-strong)] p-2 custom-scrollbar">{providerGroups.map((group, index) => <button key={group.providerId} type="button" onKeyDown={(event) => handleScopeKeyDown(event, index)} aria-pressed={!searchAllConfigured && pickerScope?.providerId === group.providerId} onClick={() => { setPickerScopeId(group.providerId); setSearchAllConfigured(false); }} className={`mb-1 flex min-h-11 w-full items-center justify-between gap-2 px-2 text-left text-sm ${pickerScope?.providerId === group.providerId && !searchAllConfigured ? "bg-[var(--color-primary-wash)] text-[var(--color-primary)]" : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]"}`}><span className="min-w-0 break-words">{group.providerName}</span><span className="font-mono text-[10px] tabular-nums">{group.models.length}</span></button>)}</nav>
-                  <div className="min-h-0 overflow-y-auto p-2 custom-scrollbar">{loadingData ? <div className="space-y-2" aria-label="Loading models">{Array.from({ length: 5 }, (_, index) => <div key={index} className="h-12 opacity-100 starting:opacity-50 motion-reduce:transition-none transition-opacity duration-[var(--duration-base)] ease-[var(--ease-enter)] bg-[var(--color-surface-strong)]" />)}</div> : !visibleGroups.some((group) => group.models.length > 0) ? <div className="p-4 text-sm text-[var(--color-text-muted)]"><p>{modelSearch ? "No models match this search." : "No picked models in this provider."}</p>{!modelSearch ? <Link href="/dashboard/providers" className="mt-3 inline-flex min-h-11 items-center text-[var(--color-primary)]">Open provider model policy</Link> : null}</div> : visibleGroups.map((group) => <section key={group.providerId} className="mb-3"><header className="flex items-center justify-between border-b border-[var(--color-border)] px-2 py-2"><h3 className="text-sm font-semibold">{group.providerName}</h3><span className="data-text text-[10px] text-[var(--color-text-muted)]">{group.models.length} picked</span></header>{group.models.map((model, index) => <button key={model.id} type="button" onClick={() => handleSelectModel(model.id)} className={`flex min-h-12 w-full items-center gap-3 px-2 py-2 text-left ${model.id === activeModelId ? "bg-[var(--color-primary-wash)] before:bg-[var(--color-route-line-active)]" : ""}`}><span className="data-text w-6 text-[10px] text-[var(--color-text-muted)]">{String(index + 1).padStart(2, "0")}</span><span className="min-w-0 flex-1"><span className="block break-words text-sm">{model.name}</span><span title={model.requestModel} className="data-text block truncate text-[10px] text-[var(--color-text-muted)]">{model.requestModel}</span></span><span className="text-[10px] text-[var(--color-text-muted)]">{model.source === "combo" ? "Route" : "Chat"}</span>{model.id === activeModelId ? <Icon name="check_circle" className="text-[18px] text-[var(--color-primary)]" /> : null}</button>)}</section>)}</div>
+                  <div className="min-h-0 overflow-y-auto p-2 custom-scrollbar">{loadingData ? <div className="space-y-2" role="status" aria-busy="true"><span className="sr-only">Loading models</span>{Array.from({ length: 5 }, (_, index) => <div key={index} className="h-12 opacity-100 starting:opacity-50 motion-reduce:transition-none transition-opacity duration-[var(--duration-base)] ease-[var(--ease-enter)] bg-[var(--color-surface-strong)]" />)}</div> : !visibleGroups.some((group) => group.models.length > 0) ? <div className="p-4 text-sm text-[var(--color-text-muted)]"><p>{modelSearch ? "No models match this search." : "No picked models in this provider."}</p>{!modelSearch ? <Link href="/dashboard/providers" className="mt-3 inline-flex min-h-11 items-center text-[var(--color-primary)]">Open provider model policy</Link> : null}</div> : visibleGroups.map((group) => <section key={group.providerId} className="mb-3"><header className="flex items-center justify-between border-b border-[var(--color-border)] px-2 py-2"><h3 className="text-sm font-semibold">{group.providerName}</h3><span className="data-text text-[10px] text-[var(--color-text-muted)]">{group.models.length} picked</span></header>{group.models.map((model, index) => <button key={model.id} type="button" onClick={() => handleSelectModel(model.id)} className={`flex min-h-12 w-full items-center gap-3 px-2 py-2 text-left ${model.id === activeModelId ? "bg-[var(--color-primary-wash)] before:bg-[var(--color-route-line-active)]" : ""}`}><span className="data-text w-6 text-[10px] text-[var(--color-text-muted)]">{String(index + 1).padStart(2, "0")}</span><span className="min-w-0 flex-1"><span className="block break-words text-sm">{model.name}</span><span title={model.requestModel} className="data-text block truncate text-[10px] text-[var(--color-text-muted)]">{model.requestModel}</span></span><span className="text-[10px] text-[var(--color-text-muted)]">{model.source === "combo" ? "Route" : "Chat"}</span>{model.id === activeModelId ? <Icon name="check_circle" className="text-[18px] text-[var(--color-primary)]" /> : null}</button>)}</section>)}</div>
                 </div>
               </div> : null}
             </div>
@@ -1156,7 +1168,7 @@ export default function BasicChatPageClient() {
                 {attachments.map((attachment) => (
                   <div key={attachment.id} className="flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-raised)] px-3 py-2">
                     <span className="text-xs text-[var(--color-text-muted)] max-w-[12rem] truncate">{attachment.name}</span>
-                    <button type="button" onClick={() => removeAttachment(attachment.id)} className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]" aria-label="Remove attachment">
+                    <button type="button" onClick={() => removeAttachment(attachment.id)} className="-my-2 -mr-2 grid size-11 place-items-center text-[var(--color-text-muted)] hover:text-[var(--color-text)]" aria-label="Remove attachment">
                       <Icon name="close" className="text-[18px]" />
                     </button>
                   </div>
@@ -1174,13 +1186,13 @@ export default function BasicChatPageClient() {
                   onKeyDown={handleKeyDown}
                   placeholder="Message AI"
                   rows={composerExpanded ? 10 : Math.min(6, Math.max(1, draft.split("\n").length))}
-                  className={`w-full resize-none bg-transparent px-2 text-[15px] leading-6 text-[var(--color-text)] outline-none placeholder:text-[var(--color-text-muted)] custom-scrollbar overflow-y-auto ${composerExpanded ? "max-h-[50vh]" : "max-h-[25vh]"}`}
+                  className={`min-h-11 w-full resize-none bg-transparent px-2 py-2.5 text-[15px] leading-6 text-[var(--color-text)] outline-none placeholder:text-[var(--color-text-muted)] custom-scrollbar overflow-y-auto ${composerExpanded ? "max-h-[50vh]" : "max-h-[25vh]"}`}
                 />
 
                 <div className="mt-2 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <div className="relative" data-attach-menu>
-                      <button type="button" onClick={() => setAttachMenuOpen((v) => !v)} disabled={!activeModel || loadingData} aria-label="Attach" className="p-2 text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition rounded-full hover:bg-[var(--color-surface-raised)]">
+                      <button type="button" onClick={() => setAttachMenuOpen((v) => !v)} disabled={!activeModel || loadingData} aria-label="Attach" className="grid size-11 place-items-center text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition rounded-full hover:bg-[var(--color-surface-raised)]">
                         <Icon name="add" className="text-[20px]" />
                       </button>
                       {attachMenuOpen ? (

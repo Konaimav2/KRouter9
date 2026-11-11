@@ -1,12 +1,13 @@
 "use client";
 
 import Icon from "@/shared/components/Icon";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card } from "@/shared/components";
 import { AI_PROVIDERS, getProviderAlias } from "@/shared/constants/providers";
 import { getModelsByProviderId, getModelKind } from "@/shared/constants/models";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
-import { revealKeyById, pickDefaultKeyId, labelForMaskedKey, isKeyActionBlocked } from "@/lib/maskedKeyClient";
+import { pickDefaultKeyId, labelForMaskedKey, isRunBlocked, maskedKeyToken } from "@/lib/maskedKeyClient";
+import { useOnDemandKey } from "@/shared/hooks/useOnDemandKey";
 import { TTS_PROVIDER_CONFIG } from "@/shared/constants/ttsProviders";
 import { translate } from "@/i18n/runtime";
 import { getTtsVoicesForModel } from "open-sse/config/ttsModels.js";
@@ -44,10 +45,8 @@ export function TtsExampleCard({ providerId }) {
   // Form state
   const [input, setInput]               = useState("Hello, this is a text to speech test.");
   const [style, setStyle]               = useState(""); // style/voice instructions (e.g. MiMo voicedesign)
-  const [apiKey, setApiKey]             = useState("");
   const [maskedKeys, setMaskedKeys]   = useState([]);
   const [selectedKeyId, setSelectedKeyId] = useState("");
-  const [resolvingKey, setResolvingKey] = useState(false);
   const [keyError, setKeyError]       = useState("");
   const [keysLoading, setKeysLoading] = useState(true);
   const [keysError, setKeysError] = useState("");
@@ -73,28 +72,13 @@ export function TtsExampleCard({ providerId }) {
   const [languageHint, setLanguageHint]     = useState("");
   // Number of stored provider connections (shown when no dashboard API key)
   const [connectionCount, setConnectionCount] = useState(0);
-  // Stale-reveal guard: bind each resolved credential to the selection it was
-  // issued for; ignore completions that arrive after a reselection.
-  const revealSeqRef = useRef(0);
-  const resolveForSelection = useCallback((id) => {
-    const seq = ++revealSeqRef.current;
-    setApiKey("");
-    if (!id) { setResolvingKey(false); return; }
-    setResolvingKey(true);
-    setKeyError("");
-    revealKeyById(id)
-      .then((raw) => { if (revealSeqRef.current === seq) setApiKey(raw); })
-      .catch((e) => {
-        if (revealSeqRef.current !== seq) return;
-        setApiKey("");
-        setKeyError(e.message || "Failed to resolve API key");
-      })
-      .finally(() => { if (revealSeqRef.current === seq) setResolvingKey(false); });
-  }, []);
+  // Stored keys stay masked: nothing is revealed on mount or selection. The
+  // raw key is fetched at Run/Copy click time, or shown after Reveal.
+  const onDemand = useOnDemandKey();
 
-  useEffect(() => {
-    setLocalEndpoint(window.location.origin);
-    fetch("/api/keys")
+  // API-key list load; Retry re-runs it after a failure (setState only in callbacks).
+  const fetchKeys = useCallback(() => {
+    return fetch("/api/keys")
       .then((r) => { if (!r.ok) throw new Error("Failed to load API keys"); return r.json(); })
       .then((d) => {
         const keys = d.keys || [];
@@ -104,9 +88,14 @@ export function TtsExampleCard({ providerId }) {
         const id = pickDefaultKeyId(keys);
         if (!id) return;
         setSelectedKeyId(id);
-        resolveForSelection(id);
       })
       .catch((e) => { setKeysLoading(false); setKeysError(e.message || "Failed to load API keys"); setKeyError(e.message || "Failed to load API keys"); });
+  }, []);
+  const retryKeys = () => { setKeysLoading(true); setKeysError(""); setKeyError(""); fetchKeys(); };
+
+  useEffect(() => {
+    setLocalEndpoint(window.location.origin);
+    fetchKeys();
     fetch("/api/providers?mode=full", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => { setConnectionCount((d.connections || []).filter((c) => c.provider === providerId && c.isActive !== false).length); })
@@ -144,7 +133,7 @@ export function TtsExampleCard({ providerId }) {
     // api-language (edge-tts, local-device, elevenlabs): NO default load, wait for user to pick language
     // config (nvidia, hyperbolic, deepgram, huggingface, cartesia, playht, coqui, tortoise, inworld, qwen):
     // use ttsConfig.models for model selector; voice is empty by default (backend uses provider default)
-  }, [providerId]);
+  }, [providerId, fetchKeys]);
 
   // Update voices when model changes (voicesPerModel providers)
   useEffect(() => {
@@ -222,7 +211,15 @@ export function TtsExampleCard({ providerId }) {
   // Explicit keyless mode: stored server-side connections satisfy auth without
   // a dashboard key, so settled-empty is usable in that mode only.
   const keyless = connectionCount > 0;
-  const keyBlocked = isKeyActionBlocked({ keys: maskedKeys, rawKey: apiKey, resolving: resolvingKey, error: keyError, loading: keysLoading, keysError }) || (maskedKeys.length === 0 && !apiKey && !keyless);
+  // The reveal limiter never blocks Run (isRunBlocked ignores reveal state).
+  const keyBlocked = isRunBlocked({ keys: maskedKeys, selectedId: selectedKeyId, loading: keysLoading, keysError }) || (maskedKeys.length === 0 && !keyless);
+  const selectedKey = maskedKeys.find((k) => k.id === selectedKeyId);
+  const revealedKey = onDemand.revealedFor(selectedKeyId);
+  // Resolve the stored key at click time; keyless mode sends no Authorization.
+  const withCredential = (action, label) => {
+    if (!selectedKeyId) return keyless ? action("") : undefined;
+    return onDemand.withKey(selectedKeyId, action, label);
+  };
   // For ElevenLabs/config-driven: prefer manual voiceId (if any), else fall back to selectedVoice
   const activeVoiceId = config.hasVoiceIdInput ? (voiceId || selectedVoice) : selectedVoice;
   const modelFull = (() => {
@@ -238,14 +235,23 @@ export function TtsExampleCard({ providerId }) {
     if (config.hasStyleInput && style.trim()) b.style = style.trim();
     return b;
   })();
-  const curlSnippet = `curl -X POST ${endpoint}/v1/audio/speech${responseFormat === "json" ? "?response_format=json" : ""} \\
+  const buildCurl = (token) => `curl -X POST ${endpoint}/v1/audio/speech${responseFormat === "json" ? "?response_format=json" : ""} \\
   -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer ${apiKey || "YOUR_KEY"}" \\
+  -H "Authorization: Bearer ${token}" \\
   -d '${JSON.stringify(ttsBody)}' \\
   ${responseFormat === "json" ? "" : "--output speech.mp3"}`;
 
-  const handleRun = async () => {
-    if (!input.trim() || !modelFull) return;
+  // Displayed text only ever carries the masked token.
+  const curlSnippet = buildCurl(maskedKeyToken(selectedKey));
+
+  const handleCopyCurl = () => withCredential((key) => copyCurl(buildCurl(key || "YOUR_KEY")), "copy");
+
+  const handleRun = () => {
+    if (!input.trim() || !modelFull) return undefined;
+    return withCredential(runWithKey, "run");
+  };
+
+  const runWithKey = async (apiKey) => {
     setRunning(true);
     setError("");
     setAudioUrl("");
@@ -293,7 +299,7 @@ export function TtsExampleCard({ providerId }) {
           {/* Endpoint + API Key as read-only text */}
           <Row label="Endpoint">
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-              <span className="w-full min-w-0 flex-1 px-3 py-1.5 text-sm font-mono text-text-main bg-sidebar rounded-lg truncate">
+              <span className="w-full min-w-0 flex-1 px-3 py-1.5 text-sm font-mono text-text-main bg-surface-2 rounded-lg truncate">
                 {endpoint}/v1/audio/speech
               </span>
               {tunnelEndpoint && (
@@ -310,28 +316,40 @@ export function TtsExampleCard({ providerId }) {
               )}
             </div>
           </Row>
-          {/* API Key (masked — raw resolves via guarded reveal only) */}
+          {/* API Key (masked; raw only on explicit Reveal or at Run/Copy time) */}
           <Row label="API Key">
-            <span className="px-3 py-1.5 text-sm font-mono text-text-main bg-sidebar rounded-lg truncate block">
-              {resolvingKey
-                ? <span className="text-text-muted italic">Resolving selected key…</span>
-                : (selectedKeyId
-                  ? labelForMaskedKey(maskedKeys.find((k) => k.id === selectedKeyId) || { id: selectedKeyId })
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="min-w-0 flex-1 px-3 py-1.5 text-sm font-mono text-text-main bg-surface-2 rounded-lg truncate block">
+                {selectedKeyId
+                  ? (revealedKey || labelForMaskedKey(selectedKey || { id: selectedKeyId }))
                   : (connectionCount > 0
                     ? <span className="text-text-muted italic">Using stored key(s) · {connectionCount} connection{connectionCount > 1 ? "s" : ""}</span>
-                    : <span className="text-text-muted italic">No key configured</span>))}
-            </span>
+                    : <span className="text-text-muted italic">No key configured</span>)}
+              </span>
+              {selectedKeyId && (
+                <button
+                  type="button"
+                  onClick={() => (revealedKey ? onDemand.hide() : onDemand.reveal(selectedKeyId))}
+                  aria-pressed={!!revealedKey}
+                  disabled={onDemand.pending === "reveal"}
+                  className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1 rounded-lg border border-border px-3 text-xs text-text-muted hover:text-primary transition-colors disabled:opacity-50"
+                >
+                  <Icon name={revealedKey ? "visibility_off" : "visibility"} size={14} />
+                  {revealedKey ? "Hide" : "Reveal"}
+                </button>
+              )}
+            </div>
           </Row>
           {maskedKeys.length > 1 && (
             <Row label="Key">
               <select
+                aria-label="Stored API key"
                 value={selectedKeyId}
                 onChange={(e) => {
-                  const id = e.target.value;
-                  setSelectedKeyId(id);
-                  resolveForSelection(id);
+                  onDemand.reset();
+                  setSelectedKeyId(e.target.value);
                 }}
-                className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+                className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary"
               >
                 {maskedKeys.map((k) => (
                   <option key={k.id} value={k.id}>{labelForMaskedKey(k)}</option>
@@ -339,15 +357,27 @@ export function TtsExampleCard({ providerId }) {
               </select>
             </Row>
           )}
-          {keyError && <p role="alert" className="text-xs text-red-500 break-words">{keyError}</p>}
+          {keyError && (
+          <div role="alert" className="flex flex-wrap items-center gap-2 text-xs text-danger">
+            <span className="break-words">{keyError}</span>
+            {keysError && <button type="button" onClick={retryKeys} className="inline-flex min-h-11 items-center px-2 font-semibold underline hover:text-primary">Retry</button>}
+          </div>
+        )}
+          {onDemand.error && (
+            <div role="alert" className="flex flex-wrap items-center gap-2 text-xs text-danger">
+              <span className="break-words">{onDemand.error}</span>
+              <button type="button" onClick={onDemand.retry} className="inline-flex min-h-11 items-center px-2 font-semibold underline hover:text-primary">Retry</button>
+            </div>
+          )}
 
           {/* Model selector — prefer PROVIDER_MODELS[kind=tts], else providerModels via modelKey */}
           {config.hasModelSelector && (config.modelKey || getModelsByProviderId(providerId).some(m => getModelKind(m) === "tts")) && (
             <Row label="Model">
               <select
+                aria-label="Model"
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
-                className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+                className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary"
               >
                 {(() => {
                   const ttsModels = getModelsByProviderId(providerId).filter(m => getModelKind(m) === "tts");
@@ -363,9 +393,10 @@ export function TtsExampleCard({ providerId }) {
           {config.hasLanguageHint && (
             <Row label="Language">
               <select
+                aria-label="Language hint"
                 value={languageHint}
                 onChange={(e) => setLanguageHint(e.target.value)}
-                className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+                className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary"
               >
                 <option value="">Auto-detect</option>
                 {(config.languageOptions || GOOGLE_TTS_LANGUAGES).map((l) =>
@@ -383,7 +414,7 @@ export function TtsExampleCard({ providerId }) {
               <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
                 <button
                   onClick={openModal}
-                  className="w-full min-w-0 flex-1 px-3 py-1.5 text-sm border border-border rounded-lg bg-background font-mono truncate text-left hover:border-primary/40 transition-colors"
+                  className="w-full min-w-0 flex-1 px-3 py-1.5 text-sm border border-border rounded-lg bg-surface-2 font-mono truncate text-left hover:border-primary/40 transition-colors"
                 >
                   {selectedLang
                     ? <span className="text-text-main">{languages.find((l) => l.code === selectedLang)?.name || selectedLang}</span>
@@ -439,19 +470,21 @@ export function TtsExampleCard({ providerId }) {
               <div className="flex flex-col gap-1">
                 <div className="relative">
                   <input
+                    aria-label="Voice ID"
                     value={voiceId}
                     onChange={(e) => {
                       setVoiceId(e.target.value);
                       setSelectedVoice(e.target.value);
                     }}
                     placeholder="e.g. CwhRBWXzGAHq8TQ4Fs17"
-                    className="w-full px-3 py-1.5 pr-7 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary font-mono"
+                    className="w-full px-3 py-1.5 pr-7 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary font-mono"
                   />
                   {voiceId && (
                     <button
                       type="button"
+                      aria-label="Clear voice ID"
                       onClick={() => { setVoiceId(""); setSelectedVoice(""); }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-primary transition-colors"
+                      className="hit-target absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-primary transition-colors"
                     >
                       <Icon name="close" size={14} />
                     </button>
@@ -465,13 +498,14 @@ export function TtsExampleCard({ providerId }) {
           {config.hasLanguageDropdown && (
             <Row label="Language">
               <select
+                aria-label="Language"
                 value={selectedVoice}
                 onChange={(e) => {
                   const m = getModelsByProviderId(providerId).filter((m) => getModelKind(m) === "tts").find((m) => m.id === e.target.value);
                   setSelectedVoice(e.target.value);
                   setSelectedVoiceName(m?.name || e.target.value);
                 }}
-                className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+                className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary"
               >
                 {getModelsByProviderId(providerId).filter((m) => getModelKind(m) === "tts").map((m) => (
                   <option key={m.id} value={m.id}>{m.name || m.id}</option>
@@ -484,15 +518,17 @@ export function TtsExampleCard({ providerId }) {
           <Row label="Input">
             <div className="relative">
               <input
+                aria-label="Input text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                className="w-full px-3 py-1.5 pr-7 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+                className="w-full px-3 py-1.5 pr-7 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary"
               />
               {input && (
                 <button
                   type="button"
+                  aria-label="Clear input text"
                   onClick={() => setInput("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-primary transition-colors"
+                  className="hit-target absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-primary transition-colors"
                 >
                   <Icon name="close" size={14} />
                 </button>
@@ -505,17 +541,19 @@ export function TtsExampleCard({ providerId }) {
             <Row label={translate("Style")}>
               <div className="relative">
                 <textarea
+                  aria-label={translate("Style")}
                   value={style}
                   onChange={(e) => setStyle(e.target.value)}
                   placeholder={translate("e.g. a warm, gentle voice, speaking slowly with a British accent")}
                   rows={2}
-                  className="w-full px-3 py-1.5 pr-7 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary resize-none"
+                  className="w-full px-3 py-1.5 pr-7 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary resize-none"
                 />
                 {style && (
                   <button
                     type="button"
+                    aria-label={translate("Clear style")}
                     onClick={() => setStyle("")}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-primary transition-colors"
+                    className="hit-target absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-primary transition-colors"
                   >
                     <Icon name="close" size={14} />
                   </button>
@@ -527,9 +565,10 @@ export function TtsExampleCard({ providerId }) {
           {/* Output Format */}
           <Row label="Output Format">
             <select
+              aria-label="Output format"
               value={responseFormat}
               onChange={(e) => setResponseFormat(e.target.value)}
-              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary"
             >
               <option value="mp3">MP3 (Binary)</option>
               <option value="json">JSON (Base64)</option>
@@ -542,7 +581,7 @@ export function TtsExampleCard({ providerId }) {
               <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">Request</span>
               <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
                 <button
-                  onClick={() => copyCurl(curlSnippet)}
+                  onClick={handleCopyCurl}
                   disabled={keyBlocked}
                   className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -552,17 +591,17 @@ export function TtsExampleCard({ providerId }) {
                 <button
                   onClick={handleRun}
                   disabled={running || !input.trim() || !modelFull || keyBlocked}
-                  className="flex w-full sm:w-auto items-center justify-center gap-1.5 px-3 py-1 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex w-full sm:w-auto items-center justify-center gap-1.5 px-3 py-1 rounded-lg bg-primary text-[var(--color-on-primary)] text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Icon name="play_arrow" size={14} style={running ? { animation: "spin 1s linear infinite" } : undefined} />
                   {running ? "Generating..." : "Run"}
                 </button>
               </div>
             </div>
-            <pre className="bg-sidebar rounded-lg px-3 py-2.5 text-xs font-mono text-text-main overflow-x-auto whitespace-pre-wrap break-all">{curlSnippet}</pre>
+            <pre tabIndex={0} aria-label="Example request" className="bg-code-bg rounded-lg px-3 py-2.5 text-xs font-mono text-code-fg overflow-x-auto whitespace-pre-wrap break-all">{curlSnippet}</pre>
           </div>
 
-          {error && <p className="text-xs text-red-500 break-words">{error}</p>}
+          {error && <p className="text-xs text-danger break-words">{error}</p>}
 
           {/* Audio player */}
           {audioUrl ? (
@@ -584,7 +623,7 @@ export function TtsExampleCard({ providerId }) {
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-1.5">
                     <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">JSON Response</span>
                   </div>
-                  <pre className="bg-sidebar rounded-lg px-3 py-2.5 text-xs font-mono text-text-main overflow-x-auto whitespace-pre-wrap break-all">
+                  <pre tabIndex={0} aria-label="JSON response" className="bg-code-bg rounded-lg px-3 py-2.5 text-xs font-mono text-code-fg overflow-x-auto whitespace-pre-wrap break-all">
                     {JSON.stringify({
                       format: jsonResponse.format,
                       audio: jsonResponse.audio ? `${jsonResponse.audio.substring(0, 100)}...` : ""
@@ -596,7 +635,7 @@ export function TtsExampleCard({ providerId }) {
           ) : (
             <div>
             <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">Response</span>
-            <pre className="mt-1.5 bg-sidebar rounded-lg px-3 py-2.5 text-xs font-mono text-text-main overflow-x-auto whitespace-pre-wrap break-all opacity-50">{DEFAULT_TTS_RESPONSE_EXAMPLE}</pre>
+            <pre tabIndex={0} aria-label="Example response" className="mt-1.5 bg-code-bg rounded-lg px-3 py-2.5 text-xs font-mono text-code-muted overflow-x-auto whitespace-pre-wrap break-all">{DEFAULT_TTS_RESPONSE_EXAMPLE}</pre>
           </div>
           )}
         </div>
@@ -615,7 +654,7 @@ export function TtsExampleCard({ providerId }) {
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0 rounded-t-xl">
               <h3 className="text-sm font-semibold">Select Language</h3>
-              <button onClick={() => setModalOpen(false)} className="text-text-muted hover:text-primary transition-colors">
+              <button type="button" aria-label="Close language picker" onClick={() => setModalOpen(false)} className="-my-2 -mr-2 inline-flex size-11 items-center justify-center text-text-muted hover:text-primary transition-colors">
                 <Icon name="close" size={20} />
               </button>
             </div>
@@ -624,16 +663,17 @@ export function TtsExampleCard({ providerId }) {
             <div className="px-4 py-2.5 border-b border-border shrink-0">
               <input
                 autoFocus
+                aria-label="Search language"
                 value={modalSearch}
                 onChange={(e) => setModalSearch(e.target.value)}
                 placeholder="Search language..."
-                className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+                className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary"
               />
             </div>
 
             {/* Language list */}
             <div className="overflow-y-auto flex-1 p-2">
-              {modalError && <p className="text-xs text-red-500 px-2 py-1">{modalError}</p>}
+              {modalError && <p className="text-xs text-danger px-2 py-1">{modalError}</p>}
               {modalLoading ? (
                 <p className="text-xs text-text-muted px-2 py-3">Loading...</p>
               ) : (
@@ -642,7 +682,7 @@ export function TtsExampleCard({ providerId }) {
                     <button
                       key={c.code}
                       onClick={() => handlePickLanguage(c)}
-                      className={`flex items-center justify-between w-full px-3 py-2 rounded-lg text-left hover:bg-sidebar transition-colors ${
+                      className={`flex items-center justify-between w-full px-3 py-2 rounded-lg text-left hover:bg-surface-2 transition-colors ${
                         selectedLang === c.code ? "bg-primary/10 text-primary" : ""
                       }`}
                     >

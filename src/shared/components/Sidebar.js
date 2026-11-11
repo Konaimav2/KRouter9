@@ -20,6 +20,7 @@ const ZONES = [
       ["/dashboard/endpoint", "Endpoint & Key", "api"],
       ["/dashboard/providers", "Providers", "dns"],
       ["/dashboard/combos", "Combos", "account_tree"],
+      ["/dashboard/media-providers/web", "Media", "perm_media"],
     ],
   },
   {
@@ -40,7 +41,6 @@ const ZONES = [
     icon: "settings",
     items: [
       ["/dashboard/proxy-pools", "Proxy Pools", "lan"],
-      ["/dashboard/media-providers/web", "Media", "perm_media"],
       ["/dashboard/skills", "Skills", "extension"],
       ["/dashboard/cli-tools", "CLI Tools", "terminal"],
       ["/dashboard/profile", "Settings", "settings"],
@@ -48,9 +48,23 @@ const ZONES = [
   },
 ];
 
+// Routes a destination owns beyond its own href: the media hub link stands for
+// every /media-providers/* page; mitm is reached from CLI Tools and pxpipe from
+// Token Saver, so those pages keep their parent zone and destination current;
+// /dashboard/settings/* pages are reached from Settings (profile).
+const DESTINATION_PREFIXES = {
+  "/dashboard/media-providers/web": ["/dashboard/media-providers"],
+  "/dashboard/cli-tools": ["/dashboard/cli-tools", "/dashboard/mitm"],
+  "/dashboard/token-saver": ["/dashboard/token-saver", "/dashboard/pxpipe"],
+  // Settings sub-pages (e.g. /dashboard/settings/pricing) belong to Settings.
+  "/dashboard/profile": ["/dashboard/profile", "/dashboard/settings"],
+};
+
 function isDestinationActive(pathname, href) {
-  if (href === "/dashboard/endpoint") return pathname === "/dashboard" || pathname.startsWith(href);
-  return pathname.startsWith(href);
+  if (!pathname) return false;
+  if (href === "/dashboard/endpoint" && pathname === "/dashboard") return true;
+  const prefixes = DESTINATION_PREFIXES[href] || [href];
+  return prefixes.some((prefix) => pathname.startsWith(prefix));
 }
 
 export default function Sidebar() {

@@ -75,7 +75,7 @@ export default function MediaProviderDetailPage() {
       <div>
         <Link
           href={`/dashboard/media-providers/${kind}`}
-          className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-primary transition-colors mb-4"
+          className="mb-2 inline-flex min-h-11 items-center gap-1 text-sm text-text-muted hover:text-primary transition-colors"
         >
           <Icon name="arrow_back" size={18} />
           {kindConfig.label}
@@ -101,7 +101,7 @@ export default function MediaProviderDetailPage() {
                   href={provider.notice.apiKeyUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                  className="inline-flex min-h-11 items-center gap-1 text-xs text-primary hover:underline"
                 >
                   <Icon name="open_in_new" size={14} />
                   Get API Key
@@ -148,7 +148,7 @@ export default function MediaProviderDetailPage() {
               href={provider.notice.apiKeyUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex justify-center rounded bg-blue-500 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-600 sm:py-0.5"
+              className="inline-flex min-h-11 items-center justify-center rounded bg-blue-500 px-3 text-xs font-medium text-white transition-colors hover:bg-blue-600"
             >
               Get API Key →
             </a>

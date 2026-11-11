@@ -212,7 +212,7 @@ export default function BulkImportGrokCliModal({ isOpen, onClose, onSuccess }) {
           className={`relative rounded border transition-colors ${
             isDragging
               ? "border-primary bg-primary/10 ring-2 ring-primary/30"
-              : "border-accent/30 bg-sidebar"
+              : "border-accent/30 bg-surface-2"
           }`}
         >
           <textarea
@@ -227,7 +227,7 @@ export default function BulkImportGrokCliModal({ isOpen, onClose, onSuccess }) {
           />
 
           {isDragging && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-sidebar/90 rounded pointer-events-none backdrop-blur-xs">
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface/90 rounded pointer-events-none backdrop-blur-xs">
               <Icon name="upload_file" size={30} className="mb-1 text-primary" />
               <span className="text-sm font-medium text-primary">
                 {translate("Drop .json files here")}
@@ -256,7 +256,7 @@ export default function BulkImportGrokCliModal({ isOpen, onClose, onSuccess }) {
               ✗ {result.failed} {translate("failed")}
             </div>
             {failedItems.length > 0 && (
-              <ul className="rounded border border-accent/20 bg-sidebar/50 p-2 text-xs font-mono max-h-40 overflow-y-auto">
+              <ul className="rounded border border-accent/20 bg-surface-2 p-2 text-xs font-mono max-h-40 overflow-y-auto">
                 {failedItems.map((item) => (
                   <li key={item.index} className="text-red-400">
                     [{item.index}] {item.error}

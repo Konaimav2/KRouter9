@@ -26,9 +26,11 @@ export default function HeaderLanguage() {
   return (
     <>
       <button
+        type="button"
         onClick={() => setOpen(true)}
-        className="flex items-center justify-center p-2 rounded-lg text-text-muted hover:text-text-main hover:bg-black/5 dark:hover:bg-white/5 transition-all"
+        className="ribbon-icon-action"
         title="Language"
+        aria-label="Language"
         data-i18n-skip="true"
       >
         <Icon name="translate" className="text-[20px] leading-none" />

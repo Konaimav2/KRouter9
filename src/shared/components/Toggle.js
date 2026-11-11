@@ -31,31 +31,40 @@ export default function Toggle({
         className
       )}
     >
+      {/* The switch button is the 44x44 hit box; the track inside keeps its visual size. */}
       <button
         type="button"
         role="switch"
         aria-checked={checked}
         aria-label={ariaLabel || label || title || "Toggle"}
+        title={title}
         disabled={disabled}
         onClick={handleClick}
         className={cn(
-          "relative inline-flex shrink-0 cursor-pointer rounded-full border border-[var(--color-border-strong)]",
-          "transition-colors duration-200 ease-in-out",
-          "focus:outline-none focus-visible:shadow-[var(--focus-ring)]",
-          checked ? "bg-[var(--color-primary)]" : "bg-[var(--color-surface-strong)]",
-          sizes[size].track,
+          "group/toggle relative -my-2.5 inline-flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center rounded-full",
           disabled && "cursor-not-allowed"
         )}
       >
         <span
+          aria-hidden="true"
           className={cn(
-            "pointer-events-none inline-block rounded-full bg-white shadow-sm",
-            "transform transition duration-200 ease-in-out",
-            checked ? sizes[size].translate : "translate-x-0.5",
-            sizes[size].thumb,
-            "mt-0.5"
+            "relative inline-flex shrink-0 rounded-full border border-[var(--color-border-strong)]",
+            "transition-colors duration-200 ease-in-out",
+            "group-focus-visible/toggle:shadow-[var(--focus-ring)]",
+            checked ? "bg-[var(--color-primary)]" : "bg-[var(--color-surface-strong)]",
+            sizes[size].track
           )}
-        />
+        >
+          <span
+            className={cn(
+              "pointer-events-none inline-block rounded-full bg-white shadow-sm",
+              "transform transition duration-200 ease-in-out",
+              checked ? sizes[size].translate : "translate-x-0.5",
+              sizes[size].thumb,
+              "mt-0.5"
+            )}
+          />
+        </span>
       </button>
       {(label || description) && (
         <div className="flex flex-col">

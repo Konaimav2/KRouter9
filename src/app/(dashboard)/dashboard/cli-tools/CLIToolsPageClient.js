@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { CLI_TOOLS, MITM_TOOLS } from "@/shared/constants/cliTools";
 import { MitmLinkCard } from "./components";
+import { readKeyPresets } from "./components/cliEndpointPresets";
 import ToolSummaryCard from "./components/ToolSummaryCard";
 import SetupWizardCard from "./components/SetupWizardCard";
 
@@ -10,11 +11,11 @@ const ALL_STATUSES_URL = "/api/cli-tools/all-statuses";
 
 function RowSkeleton({ number }) {
   return (
-    <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] grid animate-pulse gap-3 px-4 py-3 sm:grid-cols-[2.5rem_minmax(12rem,1fr)_minmax(12rem,1fr)_auto] sm:items-center">
+    <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] last:border-b-0 hover:bg-[var(--color-surface-hover)] grid gap-3 px-4 py-3 sm:grid-cols-[2.5rem_minmax(12rem,1fr)_minmax(12rem,1fr)_auto] sm:items-center">
       <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-[var(--color-primary)]">{String(number).padStart(2, "0")}</span>
-      <span className="h-8 bg-[var(--color-surface-raised)]" />
-      <span className="h-5 bg-[var(--color-surface-raised)]" />
-      <span className="h-10 w-24 bg-[var(--color-surface-raised)]" />
+      <span className="h-8 animate-pulse bg-[var(--color-surface-raised)]" />
+      <span className="h-5 animate-pulse bg-[var(--color-surface-raised)]" />
+      <span className="h-10 w-24 animate-pulse bg-[var(--color-surface-raised)]" />
     </div>
   );
 }
@@ -24,6 +25,9 @@ export default function CLIToolsPageClient({ machineId }) {
   const [toolStatuses, setToolStatuses] = useState({});
   const [statusError, setStatusError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
+
+  // Scrub legacy raw-key presets at page load, not only when a key select mounts.
+  useEffect(() => { readKeyPresets(); }, []);
 
   useEffect(() => {
     let mounted = true;

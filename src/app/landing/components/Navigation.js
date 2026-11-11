@@ -1,11 +1,12 @@
 "use client";
 import Icon from "@/shared/components/Icon";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
 
 export default function Navigation() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const router = useRouter();
+  const mobileMenuId = useId();
 
   return (
     <nav className="fixed top-0 z-50 w-full bg-[#181411]/80 backdrop-blur-md border-b border-[#3a2f27]">
@@ -13,9 +14,9 @@ export default function Navigation() {
         {/* Logo */}
         <button
           type="button"
-          className="flex items-center gap-3 cursor-pointer bg-transparent border-none p-0"
+          className="flex min-h-11 items-center gap-3 cursor-pointer bg-transparent border-none p-0"
           onClick={() => router.push("/")}
-          aria-label="Navigate to home"
+          aria-label="KRouter9 home"
         >
           <img
             src="/krouter9.png"
@@ -39,13 +40,17 @@ export default function Navigation() {
         <div className="flex items-center gap-4">
           <button 
             onClick={() => router.push("/dashboard")}
-            className="hidden sm:flex h-9 items-center justify-center rounded-lg px-4 bg-[#f97815] hover:bg-[#e0650a] transition-all text-[#181411] text-sm font-bold shadow-[0_0_15px_rgba(249,120,21,0.4)] hover:shadow-[0_0_20px_rgba(249,120,21,0.6)]"
+            className="hidden sm:flex h-11 items-center justify-center rounded-lg px-4 bg-[#f97815] hover:bg-[#e0650a] transition-all text-[#181411] text-sm font-bold shadow-[0_0_15px_rgba(249,120,21,0.4)] hover:shadow-[0_0_20px_rgba(249,120,21,0.6)]"
           >
             Get Started
           </button>
-          <button 
-            className="md:hidden text-white"
+          <button
+            type="button"
+            className="md:hidden inline-flex size-11 items-center justify-center rounded-lg text-white"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileMenuOpen}
+            aria-controls={mobileMenuId}
           >
             <Icon name={mobileMenuOpen ? "close" : "menu"} />
           </button>
@@ -54,7 +59,7 @@ export default function Navigation() {
 
       {/* Mobile menu dropdown */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-t border-[#3a2f27] bg-[#181411]/95 backdrop-blur-md">
+        <div id={mobileMenuId} className="md:hidden border-t border-[#3a2f27] bg-[#181411]/95 backdrop-blur-md">
           <div className="flex flex-col gap-4 p-6">
             <a className="text-gray-300 hover:text-white text-sm font-medium transition-colors" href="#features" onClick={() => setMobileMenuOpen(false)}>Features</a>
             <a className="text-gray-300 hover:text-white text-sm font-medium transition-colors" href="#how-it-works" onClick={() => setMobileMenuOpen(false)}>How it Works</a>
@@ -62,7 +67,7 @@ export default function Navigation() {
             <a className="text-gray-300 hover:text-white text-sm font-medium transition-colors" href="https://github.com/Konaimav2/KRouter9" target="_blank" rel="noopener noreferrer">GitHub</a>
             <button 
               onClick={() => router.push("/dashboard")}
-              className="h-9 rounded-lg bg-[#f97815] hover:bg-[#e0650a] text-[#181411] text-sm font-bold"
+              className="h-11 rounded-lg bg-[#f97815] hover:bg-[#e0650a] text-[#181411] text-sm font-bold"
             >
               Get Started
             </button>

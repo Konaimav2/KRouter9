@@ -52,7 +52,7 @@ export default function DonateModal({ isOpen, onClose }) {
           </h2>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-text-muted hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+            className="hit-target p-1.5 rounded-lg text-text-muted hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
             aria-label="Close"
           >
             <Icon name="close" className="text-[20px]" />

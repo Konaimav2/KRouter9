@@ -36,7 +36,7 @@ export default function DashboardLayout({ children }) {
           const [icon, color] = TOASTS[notification.type] || TOASTS.info;
           return (
             <div key={notification.id} className="relative overflow-hidden rounded-[var(--radius-control)] border border-[var(--toast-border)] bg-[var(--toast-bg)] px-4 py-3 shadow-[var(--shadow-tray)]" style={{ borderLeftColor: color }}>
-              <div className="flex items-start gap-3"><Icon name={icon} style={{ color }} /><div className="min-w-0 flex-1">{notification.title ? <p className="text-sm font-semibold">{notification.title}</p> : null}<p className="text-xs text-[var(--color-text-muted)]">{notification.message}</p></div>{notification.dismissible ? <button type="button" onClick={() => removeNotification(notification.id)} aria-label="Dismiss notification" className="grid size-8 place-items-center text-[var(--color-text-muted)]"><Icon name="close" className="text-[16px]" /></button> : null}</div>
+              <div className="flex items-start gap-3"><Icon name={icon} style={{ color }} /><div className="min-w-0 flex-1">{notification.title ? <p className="text-sm font-semibold">{notification.title}</p> : null}<p className="text-xs text-[var(--color-text-muted)]">{notification.message}</p></div>{notification.dismissible ? <button type="button" onClick={() => removeNotification(notification.id)} aria-label="Dismiss notification" className="grid size-11 -m-2 place-items-center text-[var(--color-text-muted)]"><Icon name="close" className="text-[16px]" /></button> : null}</div>
             </div>
           );
         })}

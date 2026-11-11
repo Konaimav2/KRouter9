@@ -7,6 +7,7 @@ import fs from "fs/promises";
 import path from "path";
 import os from "os";
 import { DEFAULT_PLUGINS } from "@/shared/constants/coworkPlugins";
+import { maskGatewayKey } from "@/lib/db/repos/apiKeysRepo.js";
 
 const execAsync = promisify(exec);
 
@@ -87,6 +88,22 @@ const readSettings = async () => {
   }
 };
 
+// Secret env keys: never returned raw by GET, never overwritten by a masked echo on POST.
+const SECRET_ENV_KEYS = ["ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"];
+const MASK_PLACEHOLDER = "????????";
+
+const maskSettings = (settings) => {
+  if (!settings?.env || typeof settings.env !== "object") return settings;
+  const env = { ...settings.env };
+  for (const k of SECRET_ENV_KEYS) {
+    if (typeof env[k] === "string" && env[k]) env[k] = maskGatewayKey(env[k]);
+  }
+  return { ...settings, env };
+};
+
+const looksMasked = (v) =>
+  typeof v === "string" && (v.includes("\u2022") || v === MASK_PLACEHOLDER);
+
 // GET - Check claude CLI and read current settings
 export async function GET() {
   try {
@@ -106,7 +123,8 @@ export async function GET() {
 
     return NextResponse.json({
       installed: true,
-      settings: settings,
+      settings: maskSettings(settings),
+      hasToken: !!settings?.env?.ANTHROPIC_AUTH_TOKEN,
       hasKRouter9: hasKRouter9,
       exaMcpEnabled: !!claudeJson?.mcpServers?.exa,
       settingsPath: getClaudeSettingsPath(),
@@ -146,6 +164,15 @@ export async function POST(request) {
     } catch (error) {
       if (error.code !== "ENOENT") {
         throw error;
+      }
+    }
+
+    // Ignore masked echoes of secrets (GET returns masked values); the file's
+    // real token is kept because env is merged below.
+    for (const k of SECRET_ENV_KEYS) {
+      const cur = currentSettings.env?.[k];
+      if (k in env && (looksMasked(env[k]) || (cur && env[k] === maskGatewayKey(cur)))) {
+        delete env[k];
       }
     }
 

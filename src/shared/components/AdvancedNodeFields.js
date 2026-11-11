@@ -19,9 +19,9 @@ export default function AdvancedNodeFields({ timeoutMs, onTimeoutMs, headersText
         hint="Max time to wait for response headers. Blank = inherit provider default."
       />
       <div className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-text-primary">Custom Headers</label>
+        <label className="text-sm font-medium text-text">Custom Headers</label>
         <textarea
-          className="min-h-24 w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-sm text-text-primary outline-none focus:border-primary"
+          className="min-h-24 w-full rounded-md border border-border bg-surface-2 px-3 py-2 font-mono text-sm text-text outline-none focus:border-primary"
           value={headersText}
           onChange={(e) => onHeadersText(e.target.value)}
           placeholder={"X-Example: value\nX-Another: value"}

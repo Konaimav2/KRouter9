@@ -96,7 +96,7 @@ export default function ManageKeyModal({ apiKey, onClose, onSaved, onRotated }) 
   const renderModelListEditor = (which, list, setList) => (
     <div className="rounded-md border border-border bg-surface-2 p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="text-sm font-medium text-text-primary">
+        <p className="text-sm font-medium text-text">
           {which === "blocked" ? "Blocked models" : "Allowed models"}
           <span className="ml-1 text-xs font-normal text-text-muted">({list.length})</span>
         </p>
@@ -112,7 +112,7 @@ export default function ManageKeyModal({ apiKey, onClose, onSaved, onRotated }) 
               type="button"
               onClick={() => setList((prev) => prev.filter((v) => v !== value))}
               title="Click to remove"
-              className="rounded-xl border border-primary bg-primary px-2 py-1 text-xs font-medium text-white transition-all hover:bg-primary-hover"
+              className="rounded-xl border border-primary bg-primary px-2 py-1 text-xs font-medium text-[var(--color-on-primary)] transition-all hover:bg-primary-hover"
             >
               <span className="flex items-center gap-1">
                 <Icon name="check" size={10} className="leading-none" />

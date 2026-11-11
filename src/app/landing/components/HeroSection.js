@@ -5,11 +5,11 @@ export default function HeroSection() {
   return (
     <section className="relative pt-32 pb-20 px-6 min-h-[90vh] flex flex-col items-center justify-center overflow-hidden">
       {/* Glow effect */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[500px] bg-[#f97815]/10 rounded-full blur-[120px] pointer-events-none"></div>
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[500px] bg-[#f97815]/6 rounded-full blur-[120px] pointer-events-none"></div>
       
       <div className="relative z-10 max-w-4xl w-full text-center flex flex-col items-center gap-8">
         {/* Version badge */}
-        <div className="inline-flex items-center gap-2 rounded-full border border-[#3a2f27] bg-[#23180f]/50 px-3 py-1 text-xs font-medium text-[#f97815]">
+        <div className="inline-flex items-center gap-2 rounded-full border border-[#3a2f27] bg-[#1e1610] px-3 py-1 text-xs font-medium text-[#f97815]">
           <span className="flex h-2 w-2 rounded-full bg-[#f97815] animate-pulse"></span>
           v1.0 is now live
         </div>

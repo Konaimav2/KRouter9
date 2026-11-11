@@ -2,12 +2,16 @@
 
 import Icon from "@/shared/components/Icon";
 import { useParams, notFound, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Card, Button, Input, Toggle, ModelSelectModal } from "@/shared/components";
 import ProviderIcon from "@/shared/components/ProviderIcon";
 import { AI_PROVIDERS, MEDIA_PROVIDER_KINDS } from "@/shared/constants/providers";
-import { revealKeyById, pickDefaultKeyId, isKeyActionBlocked } from "@/lib/maskedKeyClient";
+import LoadFailedState from "@/shared/components/LoadFailedState";
+import { pickDefaultKeyId, labelForMaskedKey, isRunBlocked, maskedKeyToken } from "@/lib/maskedKeyClient";
+import { useOnDemandKey } from "@/shared/hooks/useOnDemandKey";
+import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
+import { getGatewayOrigin } from "@/shared/utils/gatewayOrigin";
 
 // Parse "providerId/model" or just "providerId" → { providerId, model }
 function parseModelEntry(entry) {
@@ -51,6 +55,9 @@ export default function ComboDetailPage() {
   const router = useRouter();
   const [combo, setCombo] = useState(null);
   const [loading, setLoading] = useState(true);
+  // "not-found" (404) is distinct from "failed" (5xx / network): only the
+  // former routes to notFound().
+  const [loadState, setLoadState] = useState("loading");
   const [name, setName] = useState("");
   const [nameError, setNameError] = useState("");
   const [providers, setProviders] = useState([]);
@@ -60,14 +67,18 @@ export default function ComboDetailPage() {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
   const [testError, setTestError] = useState("");
-  const [apiKey, setApiKey] = useState("");
   const [maskedKeys, setMaskedKeys] = useState([]);
-  const [resolvingKey, setResolvingKey] = useState(false);
+  const [selectedKeyId, setSelectedKeyId] = useState("");
   const [keyError, setKeyError] = useState("");
   const [keysLoading, setKeysLoading] = useState(true);
   const [keysError, setKeysError] = useState("");
   const [connections, setConnections] = useState([]);
   const [modelAliases, setModelAliases] = useState({});
+  const [gatewayOrigin, setGatewayOrigin] = useState("");
+  // Stored keys stay masked: nothing is revealed on mount. The raw key is
+  // fetched at Run/Copy click time, or shown after an explicit Reveal.
+  const onDemand = useOnDemandKey();
+  const { copied: copiedCurl, copy: copyCurl } = useCopyToClipboard();
 
   const fetchAll = async () => {
     try {
@@ -86,25 +97,20 @@ export default function ComboDetailPage() {
         setMaskedKeys(keys);
         setKeysError("");
         setKeysLoading(false);
-        const keyId = pickDefaultKeyId(keys);
-        if (keyId) {
-          setResolvingKey(true);
-          setKeyError("");
-          try {
-            setApiKey(await revealKeyById(keyId));
-          } catch (e) {
-            setKeyError(e.message || "Failed to resolve API key");
-          } finally {
-            setResolvingKey(false);
-          }
-        }
+        setKeyError("");
+        setSelectedKeyId((current) => (current && keys.some((k) => k.id === current) ? current : (pickDefaultKeyId(keys) || "")));
       } else {
         setKeysLoading(false);
         setKeysError("Failed to load API keys");
         setKeyError("Failed to load API keys");
       }
       if (connsRes.ok) setConnections((await connsRes.json()).connections || []);
-      if (!comboRes.ok) { setCombo(null); setLoading(false); return; }
+      if (!comboRes.ok) {
+        setCombo(null);
+        setLoadState(comboRes.status === 404 ? "not-found" : "failed");
+        setLoading(false);
+        return;
+      }
       const c = await comboRes.json();
       setCombo(c);
       setName(c.name);
@@ -113,12 +119,39 @@ export default function ComboDetailPage() {
       setRoundRobin(s.comboStrategies?.[c.name]?.fallbackStrategy === "round-robin");
       const allLogs = logsRes.ok ? await logsRes.json() : [];
       setLogs(allLogs.filter((l) => typeof l === "string" && l.includes(c.name)).slice(0, 50));
-    } catch { /* noop */ }
+      setLoadState("ready");
+    } catch {
+      // Network failure: a retryable error state, never "not found".
+      setLoadState((state) => (state === "ready" ? state : "failed"));
+    }
     setLoading(false);
   };
 
+  const retryLoad = () => {
+    setLoading(true);
+    setLoadState("loading");
+    return fetchAll();
+  };
+
+  // Keys-only reload for the "Failed to load API keys" Retry.
+  const fetchKeys = useCallback(() => fetch("/api/keys", { cache: "no-store" })
+    .then((r) => { if (!r.ok) throw new Error("Failed to load API keys"); return r.json(); })
+    .then((k) => {
+      const keys = k.keys || [];
+      setMaskedKeys(keys);
+      setKeysError("");
+      setKeysLoading(false);
+      setKeyError("");
+      setSelectedKeyId((current) => (current && keys.some((item) => item.id === current) ? current : (pickDefaultKeyId(keys) || "")));
+    })
+    .catch((e) => { setKeysLoading(false); setKeysError(e.message || "Failed to load API keys"); setKeyError(e.message || "Failed to load API keys"); }), []);
+  const retryKeys = () => { setKeysLoading(true); setKeysError(""); setKeyError(""); fetchKeys(); };
+
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchAll(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Visible snippet origin resolves after mount (no hydration mismatch).
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setGatewayOrigin(getGatewayOrigin()); }, []);
 
   const validateName = (v) => {
     if (!v.trim()) { setNameError("Name is required"); return false; }
@@ -195,7 +228,12 @@ export default function ComboDetailPage() {
     if (res.ok) router.push(getListingHref(combo.kind));
   };
 
-  const handleTest = async () => {
+  const handleTest = () => {
+    if (!selectedKeyId) return undefined;
+    return onDemand.withKey(selectedKeyId, runTestWithKey, "run");
+  };
+
+  const runTestWithKey = async (apiKey) => {
     setTesting(true);
     setTestResult(null);
     setTestError("");
@@ -213,6 +251,7 @@ export default function ComboDetailPage() {
         const d = await res.json().catch(() => ({}));
         setTestError(d?.error?.message || d?.error || `HTTP ${res.status}`);
         setTestResult({ json: JSON.stringify(d, null, 2), latencyMs });
+        setTesting(false);
         return;
       }
       const ctype = res.headers.get("content-type") || "";
@@ -220,12 +259,14 @@ export default function ComboDetailPage() {
       if (ctype.startsWith("image/")) {
         const blob = await res.blob();
         setTestResult({ imageUrl: URL.createObjectURL(blob), latencyMs });
+        setTesting(false);
         return;
       }
       // Binary audio
       if (ctype.startsWith("audio/") || ctype === "application/octet-stream") {
         const blob = await res.blob();
         setTestResult({ audioUrl: URL.createObjectURL(blob), latencyMs });
+        setTesting(false);
         return;
       }
       // JSON — could be image (data[0].b64_json/url) or generic
@@ -255,18 +296,36 @@ export default function ComboDetailPage() {
   }
 
   if (loading) return <div className="text-text-muted text-sm">Loading...</div>;
+  if (!combo && loadState === "failed") {
+    return (
+      <LoadFailedState
+        title="Couldn't load this combo"
+        message="The combo request failed. Check the gateway and try again."
+        onRetry={retryLoad}
+      />
+    );
+  }
   if (!combo) return notFound();
 
   const kindLabel = KIND_LABELS[combo.kind] || MEDIA_PROVIDER_KINDS.find((k) => k.id === combo.kind)?.label || "Combo";
   const examplePath = EXAMPLE_PATHS[combo.kind];
   const exampleBody = combo.kind && EXAMPLE_BODIES[combo.kind] ? EXAMPLE_BODIES[combo.kind](combo.name) : null;
   // Settled-empty is not a manual-entry state here (no manual input): without
-  // a resolved credential the action stays blocked.
-  const listEmptyOk = maskedKeys.length > 0 || !!apiKey;
-  const keyBlocked = isKeyActionBlocked({ keys: maskedKeys, rawKey: apiKey, resolving: resolvingKey, error: keyError, loading: keysLoading, keysError }) || !listEmptyOk;
-  const curlExample = examplePath
-    ? `curl -X POST http://localhost:20128${examplePath} \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer ${apiKey || "YOUR_KEY"}" \\\n  -d '${JSON.stringify(exampleBody)}'`
-    : "";
+  // a stored key to resolve at click time the action stays blocked. The
+  // reveal limiter never blocks Run (isRunBlocked ignores reveal state).
+  const listEmptyOk = maskedKeys.length > 0;
+  const keyBlocked = isRunBlocked({ keys: maskedKeys, selectedId: selectedKeyId, loading: keysLoading, keysError }) || !listEmptyOk;
+  const selectedKey = maskedKeys.find((k) => k.id === selectedKeyId);
+  const revealedKey = onDemand.revealedFor(selectedKeyId);
+  const buildCurl = (token) => (examplePath
+    ? `curl -X POST ${gatewayOrigin || getGatewayOrigin()}${examplePath} \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer ${token}" \\\n  -d '${JSON.stringify(exampleBody)}'`
+    : "");
+  // Displayed text only ever carries the masked token.
+  const curlExample = buildCurl(maskedKeyToken(selectedKey));
+  const handleCopyCurl = () => {
+    if (!selectedKeyId) return undefined;
+    return onDemand.withKey(selectedKeyId, (key) => copyCurl(buildCurl(key)), "copy");
+  };
   const backHref = getListingHref(combo.kind);
 
   return (
@@ -274,7 +333,7 @@ export default function ComboDetailPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3 min-w-0">
-          <Link href={backHref} className="text-text-muted hover:text-primary">
+          <Link href={backHref} aria-label={`Back to ${kindLabel}`} className="-ml-2 inline-flex size-11 shrink-0 items-center justify-center rounded text-text-muted hover:text-primary">
             <Icon name="arrow_back" />
           </Link>
           <div className="size-10 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -285,7 +344,7 @@ export default function ComboDetailPage() {
             <code className="text-lg font-semibold font-mono">{combo.name}</code>
           </div>
         </div>
-        <Button variant="outline" icon="delete" onClick={handleDelete} className="text-red-500 border-red-200 hover:bg-red-50">
+        <Button variant="outline" icon="delete" onClick={handleDelete} className="text-danger border-red-200 hover:bg-red-50">
           Delete
         </Button>
       </div>
@@ -342,13 +401,13 @@ export default function ComboDetailPage() {
                     {model && <code className="text-[10px] text-text-muted font-mono truncate block">{model}</code>}
                   </div>
                   <div className="flex items-center gap-0.5">
-                    <button onClick={() => handleMove(idx, -1)} disabled={idx === 0} className={`p-1 rounded ${idx === 0 ? "text-text-muted/20" : "text-text-muted hover:text-primary hover:bg-black/5"}`} title="Move up">
+                    <button onClick={() => handleMove(idx, -1)} disabled={idx === 0} aria-label={`Move ${p?.name || providerId} up`} className={`inline-flex size-11 items-center justify-center rounded ${idx === 0 ? "text-text-muted/40" : "text-text-muted hover:text-primary hover:bg-black/5"}`} title="Move up">
                       <Icon name="arrow_upward" size={16} />
                     </button>
-                    <button onClick={() => handleMove(idx, 1)} disabled={idx === providers.length - 1} className={`p-1 rounded ${idx === providers.length - 1 ? "text-text-muted/20" : "text-text-muted hover:text-primary hover:bg-black/5"}`} title="Move down">
+                    <button onClick={() => handleMove(idx, 1)} disabled={idx === providers.length - 1} aria-label={`Move ${p?.name || providerId} down`} className={`inline-flex size-11 items-center justify-center rounded ${idx === providers.length - 1 ? "text-text-muted/40" : "text-text-muted hover:text-primary hover:bg-black/5"}`} title="Move down">
                       <Icon name="arrow_downward" size={16} />
                     </button>
-                    <button onClick={() => handleRemoveProvider(idx)} className="p-1 rounded text-text-muted hover:text-red-500 hover:bg-red-500/10" title="Remove">
+                    <button onClick={() => handleRemoveProvider(idx)} aria-label={`Remove ${p?.name || providerId}`} className="inline-flex size-11 items-center justify-center rounded text-text-muted hover:text-danger hover:bg-red-500/10" title="Remove">
                       <Icon name="close" size={16} />
                     </button>
                   </div>
@@ -364,17 +423,66 @@ export default function ComboDetailPage() {
         <Card>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
             <h2 className="text-lg font-semibold">Test Example</h2>
-            <Button size="sm" icon="play_arrow" onClick={handleTest} disabled={testing || providers.length === 0 || keyBlocked}>
-              {testing ? "Running..." : "Run"}
-            </Button>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Button size="sm" variant="outline" icon={copiedCurl ? "check" : "content_copy"} onClick={handleCopyCurl} disabled={keyBlocked}>
+                {copiedCurl ? "Copied" : "Copy"}
+              </Button>
+              <Button size="sm" icon="play_arrow" onClick={handleTest} disabled={testing || providers.length === 0 || keyBlocked}>
+                {testing ? "Running..." : "Run"}
+              </Button>
+            </div>
           </div>
-          <pre className="text-xs font-mono bg-black/[0.03] dark:bg-white/[0.03] p-3 rounded-lg overflow-x-auto whitespace-pre-wrap break-all">
+          {maskedKeys.length > 0 && (
+            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+              <span className="text-xs font-medium text-text-muted sm:w-20 sm:shrink-0">API Key</span>
+              {maskedKeys.length > 1 ? (
+                <select
+                  aria-label="Stored API key"
+                  value={selectedKeyId}
+                  onChange={(e) => { onDemand.reset(); setSelectedKeyId(e.target.value); }}
+                  className="w-full min-w-0 flex-1 px-3 py-1.5 text-sm border border-border rounded-lg bg-surface-2 focus:outline-none focus:border-primary"
+                >
+                  {maskedKeys.map((k) => (
+                    <option key={k.id} value={k.id}>{labelForMaskedKey(k)}</option>
+                  ))}
+                </select>
+              ) : (
+                <span className="min-w-0 flex-1 px-3 py-1.5 text-sm font-mono text-text-main bg-surface-2 rounded-lg truncate">{labelForMaskedKey(selectedKey || { id: selectedKeyId })}</span>
+              )}
+              {selectedKeyId && (
+                <button
+                  type="button"
+                  onClick={() => (revealedKey ? onDemand.hide() : onDemand.reveal(selectedKeyId))}
+                  aria-pressed={!!revealedKey}
+                  disabled={onDemand.pending === "reveal"}
+                  className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1 rounded-lg border border-border px-3 text-xs text-text-muted hover:text-primary transition-colors disabled:opacity-50"
+                >
+                  <Icon name={revealedKey ? "visibility_off" : "visibility"} size={14} />
+                  {revealedKey ? "Hide" : "Reveal"}
+                </button>
+              )}
+            </div>
+          )}
+          {revealedKey && (
+            <code className="mb-3 block break-all rounded-lg bg-code-bg px-3 py-1.5 text-xs font-mono text-code-fg">{revealedKey}</code>
+          )}
+          <pre tabIndex={0} aria-label="Example request" className="text-xs font-mono bg-code-bg text-code-fg p-3 rounded-lg overflow-x-auto whitespace-pre-wrap break-all">
             {curlExample}
           </pre>
-          {resolvingKey && <p className="text-xs text-text-muted">Resolving selected key…</p>}
-          {keyError && <p role="alert" className="text-xs text-red-500 break-words">{keyError}</p>}
+          {keyError && (
+            <div role="alert" className="flex flex-wrap items-center gap-2 text-xs text-danger">
+              <span className="break-words">{keyError}</span>
+              {keysError && <button type="button" onClick={retryKeys} className="inline-flex min-h-11 items-center px-2 font-semibold underline hover:text-primary">Retry</button>}
+            </div>
+          )}
+          {onDemand.error && (
+            <div role="alert" className="mt-2 flex flex-wrap items-center gap-2 text-xs text-danger">
+              <span className="break-words">{onDemand.error}</span>
+              <button type="button" onClick={onDemand.retry} className="inline-flex min-h-11 items-center px-2 font-semibold underline hover:text-primary">Retry</button>
+            </div>
+          )}
           {testError && (
-            <p className="mt-3 text-xs text-red-500 break-words">{testError}</p>
+            <p className="mt-3 text-xs text-danger break-words">{testError}</p>
           )}
           {testResult && (
             <div className="mt-3 flex flex-col gap-3">
@@ -404,7 +512,7 @@ export default function ComboDetailPage() {
                 </div>
               )}
               {testResult.json && (
-                <pre className="text-xs font-mono bg-black/[0.03] dark:bg-white/[0.03] p-3 rounded-lg overflow-auto max-h-[300px] whitespace-pre-wrap break-all">
+                <pre tabIndex={0} aria-label="Test response" className="text-xs font-mono bg-code-bg text-code-fg p-3 rounded-lg overflow-auto max-h-[300px] whitespace-pre-wrap break-all">
                   {testResult.json}
                 </pre>
               )}
@@ -419,7 +527,7 @@ export default function ComboDetailPage() {
         {logs.length === 0 ? (
           <p className="text-xs text-text-muted italic">No usage yet.</p>
         ) : (
-          <pre className="text-[11px] font-mono bg-black/[0.03] dark:bg-white/[0.03] p-3 rounded-lg overflow-auto max-h-[400px] whitespace-pre-wrap">
+          <pre tabIndex={0} aria-label="Usage logs" className="text-[11px] font-mono bg-code-bg text-code-fg p-3 rounded-lg overflow-auto max-h-[400px] whitespace-pre-wrap">
             {logs.join("\n")}
           </pre>
         )}

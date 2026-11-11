@@ -11,19 +11,20 @@ import Footer from "./components/Footer";
 export default function LandingPage() {
   const router = useRouter();
   return (
-    <div className="relative text-white font-sans overflow-x-hidden antialiased selection:bg-[#f97815] selection:text-white">
-      {/* Animated Background */}
-      <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none bg-[#181411]">
+    <div data-landing-root className="relative isolate min-h-[100dvh] bg-[#181411] text-white font-sans overflow-x-hidden antialiased selection:bg-[#f97815] selection:text-white">
+      {/* Animated Background: decorative only. The wrapper above owns the dark
+          surface so text and its background share one stacking context. */}
+      <div aria-hidden="true" className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
         {/* Grid pattern */}
-        <div className="absolute inset-0 opacity-[0.06]" style={{
+        <div className="absolute inset-0 opacity-[0.04]" style={{
           backgroundImage: `linear-gradient(to right, #f97815 1px, transparent 1px), linear-gradient(to bottom, #f97815 1px, transparent 1px)`,
           backgroundSize: '50px 50px'
         }}></div>
         
         {/* Animated gradient orbs */}
-        <div className="absolute top-0 left-1/4 w-[700px] h-[700px] bg-[#f97815]/12 rounded-full blur-[130px] animate-blob"></div>
-        <div className="absolute top-1/3 right-1/4 w-[600px] h-[600px] bg-purple-500/10 rounded-full blur-[130px] animate-blob" style={{ animationDelay: '2s', animationDuration: '22s' }}></div>
-        <div className="absolute bottom-0 left-1/2 w-[650px] h-[650px] bg-blue-500/8 rounded-full blur-[130px] animate-blob" style={{ animationDelay: '4s', animationDuration: '25s' }}></div>
+        <div className="absolute top-0 left-1/4 w-[700px] h-[700px] bg-[#f97815]/8 rounded-full blur-[130px] animate-blob"></div>
+        <div className="absolute top-1/3 right-1/4 w-[600px] h-[600px] bg-purple-500/6 rounded-full blur-[130px] animate-blob" style={{ animationDelay: '2s', animationDuration: '22s' }}></div>
+        <div className="absolute bottom-0 left-1/2 w-[650px] h-[650px] bg-blue-500/5 rounded-full blur-[130px] animate-blob" style={{ animationDelay: '4s', animationDuration: '25s' }}></div>
         
         {/* Vignette effect */}
         <div className="absolute inset-0" style={{
@@ -98,6 +99,16 @@ export default function LandingPage() {
         }
         .animate-blob {
           animation: blob 20s ease-in-out infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .animate-blob { animation: none; }
+        }
+        /* The landing is designed dark in every theme: the root canvas matches the
+           wrapper so overscroll and not-yet-rastered tiles never flash the light
+           dashboard canvas. */
+        html:has([data-landing-root]), html:has([data-landing-root]) body {
+          background: #181411;
+          color-scheme: dark;
         }
       `}</style>
     </div>

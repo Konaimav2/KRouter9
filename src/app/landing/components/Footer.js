@@ -16,11 +16,11 @@ export default function Footer() {
               />
               <h3 className="text-white text-lg font-bold">KRouter9</h3>
             </div>
-            <p className="text-gray-500 text-sm max-w-xs mb-6">
+            <p className="text-gray-400 text-sm max-w-xs mb-6">
               The unified endpoint for AI generation. Connect, route, and manage your AI providers with ease.
             </p>
             <div className="flex gap-4">
-              <a className="text-gray-400 hover:text-white transition-colors" href="https://github.com/Konaimav2/KRouter9" target="_blank" rel="noopener noreferrer">
+              <a className="text-gray-400 hover:text-white transition-colors" href="https://github.com/Konaimav2/KRouter9" target="_blank" rel="noopener noreferrer" aria-label="KRouter9 on GitHub (opens in a new tab)">
                 <Icon name="code" />
               </a>
             </div>
@@ -51,10 +51,10 @@ export default function Footer() {
         
         {/* Bottom */}
         <div className="border-t border-[#3a2f27] pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-gray-600 text-sm">© 2025 KRouter9. All rights reserved.</p>
+          <p className="text-gray-400 text-sm">© 2025 KRouter9. All rights reserved.</p>
           <div className="flex gap-6">
-            <a className="text-gray-600 hover:text-white text-sm transition-colors" href="https://github.com/Konaimav2/KRouter9" target="_blank" rel="noopener noreferrer">GitHub</a>
-            <a className="text-gray-600 hover:text-white text-sm transition-colors" href="https://www.npmjs.com/package/krouter9" target="_blank" rel="noopener noreferrer">NPM</a>
+            <a className="text-gray-400 hover:text-white text-sm transition-colors" href="https://github.com/Konaimav2/KRouter9" target="_blank" rel="noopener noreferrer">GitHub</a>
+            <a className="text-gray-400 hover:text-white text-sm transition-colors" href="https://www.npmjs.com/package/krouter9" target="_blank" rel="noopener noreferrer">NPM</a>
           </div>
         </div>
       </div>

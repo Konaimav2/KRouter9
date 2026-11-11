@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Card, Badge, Button, Toggle, AddCustomEmbeddingModal } from "@/shared/components";
 import ProviderIcon from "@/shared/components/ProviderIcon";
+import LoadFailedState from "@/shared/components/LoadFailedState";
 import { MEDIA_PROVIDER_KINDS, AI_PROVIDERS, getProvidersByKind } from "@/shared/constants/providers";
 
 // Kinds that support combos (currently disabled for image/tts — temporarily hidden).
@@ -57,7 +58,7 @@ function MediaProviderCard({ provider, kind, connections, isCustom, onToggle }) 
     <Link href={`/dashboard/media-providers/${kind}/${provider.id}`} className="group">
       <Card
         padding="xs"
-        className={`h-full hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors cursor-pointer ${allDisabled ? "opacity-50" : ""}`}
+        className={`h-full hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors cursor-pointer ${allDisabled ? "border-dashed bg-[var(--color-surface-strong)]" : ""}`}
       >
         <div className="flex min-w-0 items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
@@ -149,6 +150,9 @@ export default function MediaProviderKindPage() {
   const [customNodes, setCustomNodes] = useState([]);
   const [combos, setCombos] = useState([]);
   const [showAddCustomEmbedding, setShowAddCustomEmbedding] = useState(false);
+  // A failed load must not render every provider as "No connections".
+  const [loadError, setLoadError] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
   // webSearch/webFetch listing pages are merged into /web
   useEffect(() => {
@@ -161,24 +165,37 @@ export default function MediaProviderKindPage() {
   const isEmbedding = kind === "embedding";
   const supportsCombo = COMBO_KINDS.has(kind);
 
-  useEffect(() => {
+  const loadAll = async () => {
     if (!kindConfig) return;
-    fetch("/api/providers?mode=full", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => setConnections(d.connections || []))
-      .catch(() => {});
-    if (isEmbedding) {
-      fetch("/api/provider-nodes", { cache: "no-store" })
-        .then((r) => r.json())
-        .then((d) => setCustomNodes((d.nodes || []).filter((n) => n.type === "custom-embedding")))
-        .catch(() => {});
+    const loadJson = async (url) => {
+      const r = await fetch(url, { cache: "no-store" });
+      if (!r.ok) throw new Error(`${url} failed (HTTP ${r.status})`);
+      return r.json();
+    };
+    const results = await Promise.allSettled([
+      loadJson("/api/providers?mode=full").then((d) => setConnections(d.connections || [])),
+      isEmbedding
+        ? loadJson("/api/provider-nodes").then((d) => setCustomNodes((d.nodes || []).filter((n) => n.type === "custom-embedding")))
+        : null,
+      supportsCombo ? loadJson("/api/combos").then((d) => setCombos(d.combos || [])) : null,
+    ]);
+    setLoadError(results.some((result) => result.status === "rejected"));
+  };
+
+  const retryLoad = async () => {
+    setRetrying(true);
+    try {
+      await loadAll();
+    } finally {
+      setRetrying(false);
     }
-    if (supportsCombo) {
-      fetch("/api/combos", { cache: "no-store" })
-        .then((r) => r.json())
-        .then((d) => setCombos(d.combos || []))
-        .catch(() => {});
-    }
+  };
+
+  useEffect(() => {
+    // Initial API synchronization intentionally updates local view state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEmbedding, supportsCombo, kindConfig]);
 
   if (!kindConfig) return notFound();
@@ -247,6 +264,14 @@ export default function MediaProviderKindPage() {
         </div>
       )}
 
+      {loadError ? (
+        <LoadFailedState
+          title={`Couldn't load ${kindConfig.label} providers`}
+          message="Connections or combos could not be loaded, so provider status is hidden rather than shown as empty. Retry to load them again."
+          onRetry={retryLoad}
+          retrying={retrying}
+        />
+      ) : <>
       {supportsCombo && kindCombos.length > 0 && (
         <ComboList combos={kindCombos} />
       )}
@@ -278,6 +303,7 @@ export default function MediaProviderKindPage() {
           ))}
         </div>
       )}
+      </>}
 
       {isEmbedding && (
         <AddCustomEmbeddingModal

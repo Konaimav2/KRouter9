@@ -94,6 +94,7 @@ export default function EndpointPresetControl({
       <span className="w-32 shrink-0 text-sm font-semibold text-text-main text-right">Preset</span>
       <Icon name="arrow_forward" className="text-text-muted text-[14px]" />
       <select
+        aria-label="Endpoint preset"
         value={selectedName}
         onChange={(event) => handleSelect(event.target.value)}
         className="flex-1 px-2 py-1.5 bg-surface rounded text-xs border border-border focus:outline-none focus:ring-1 focus:ring-primary/50"
@@ -118,8 +119,9 @@ export default function EndpointPresetControl({
         <button
           type="button"
           onClick={handleDelete}
-          className="p-1 text-text-muted hover:text-red-500 rounded transition-colors"
+          className="-my-2 inline-flex size-11 shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:text-red-500"
           title="Delete selected preset"
+          aria-label={`Delete preset ${selectedPreset.name}`}
         >
           <Icon name="delete" className="text-[14px]" />
         </button>

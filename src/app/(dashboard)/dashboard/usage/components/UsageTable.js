@@ -159,18 +159,18 @@ export default function UsageTable({
 
   return (
     <div className="overflow-hidden">
-      <div className="p-4 border-b border-border bg-bg-subtle/50">
+      <div className="p-4 border-b border-border bg-surface-2/50">
         <h3 className="font-semibold">{title}</h3>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left">
-          <thead className="bg-bg-subtle/30 text-text-muted uppercase text-xs">
+          <thead className="bg-surface-2/30 text-text-muted uppercase text-xs">
             <tr>
               {columns.map((col) => (
-                <th key={col.field} aria-sort={sortBy === col.field ? (sortOrder === "asc" ? "ascending" : "descending") : "none"} className={`px-6 py-3 hover:bg-[var(--surface-hover)] ${col.align === "right" ? "text-right" : ""}`}><button type="button" className="min-h-[var(--control-h)] w-full text-inherit" onClick={() => onToggleSort(tableType, col.field)}>{col.label}{" "}<SortIcon field={col.field} currentSort={sortBy} currentOrder={sortOrder} /></button></th>
+                <th key={col.field} aria-sort={sortBy === col.field ? (sortOrder === "asc" ? "ascending" : "descending") : "none"} className={`px-6 py-3 hover:bg-[var(--color-surface-hover)] ${col.align === "right" ? "text-right" : ""}`}><button type="button" className="min-h-[var(--touch-min)] w-full text-inherit" onClick={() => onToggleSort(tableType, col.field)}>{col.label}{" "}<SortIcon field={col.field} currentSort={sortBy} currentOrder={sortOrder} /></button></th>
               ))}
               {valueColumns.map((col) => (
-                <th key={col.field} aria-sort={sortBy === col.field ? (sortOrder === "asc" ? "ascending" : "descending") : "none"} className="px-6 py-3 text-right hover:bg-[var(--surface-hover)]"><button type="button" className="min-h-[var(--control-h)] w-full text-inherit" onClick={() => onToggleSort(tableType, col.field)}>{col.label}{" "}<SortIcon field={col.field} currentSort={sortBy} currentOrder={sortOrder} /></button></th>
+                <th key={col.field} aria-sort={sortBy === col.field ? (sortOrder === "asc" ? "ascending" : "descending") : "none"} className="px-6 py-3 text-right hover:bg-[var(--color-surface-hover)]"><button type="button" className="min-h-[var(--touch-min)] w-full text-inherit" onClick={() => onToggleSort(tableType, col.field)}>{col.label}{" "}<SortIcon field={col.field} currentSort={sortBy} currentOrder={sortOrder} /></button></th>
               ))}
             </tr>
           </thead>
@@ -178,10 +178,10 @@ export default function UsageTable({
             {groupedData.map((group) => (
               <Fragment key={group.groupKey}>
                 {/* Group summary row */}
-                <tr className="group-summary hover:bg-[var(--surface-hover)] transition-colors">
+                <tr className="group-summary hover:bg-[var(--color-surface-hover)] transition-colors">
                   <td className="px-6 py-3">
                     <div className="flex items-center gap-2">
-                      <button type="button" aria-expanded={expanded.has(group.groupKey)} aria-label={`${expanded.has(group.groupKey) ? "Hide" : "Show"} ${group.groupKey} details`} onClick={() => toggleGroup(group.groupKey)} className="inline-flex min-h-[var(--control-h)] items-center gap-2 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"><ChevronRight aria-hidden="true" size={18} className={`text-[var(--text-muted)] transition-transform ${expanded.has(group.groupKey) ? "rotate-90" : ""}`} /><span className={`font-medium transition-colors ${group.summary.pending > 0 ? "text-[var(--primary)]" : ""}`}>{group.groupKey}</span></button>
+                      <button type="button" aria-expanded={expanded.has(group.groupKey)} aria-label={`${expanded.has(group.groupKey) ? "Hide" : "Show"} ${group.groupKey} details`} onClick={() => toggleGroup(group.groupKey)} className="inline-flex min-h-[var(--touch-min)] items-center gap-2 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"><ChevronRight aria-hidden="true" size={18} className={`text-[var(--color-text-muted)] transition-transform ${expanded.has(group.groupKey) ? "rotate-90" : ""}`} /><span className={`font-medium transition-colors ${group.summary.pending > 0 ? "text-[var(--color-primary)]" : ""}`}>{group.groupKey}</span></button>
                     </div>
                   </td>
                   {renderSummaryCells(group)}
@@ -191,7 +191,7 @@ export default function UsageTable({
                 {expanded.has(group.groupKey) && group.items.map((item) => (
                   <tr
                     key={`detail-${item.key}`}
-                    className="group-detail hover:bg-bg-subtle/20 transition-colors"
+                    className="group-detail hover:bg-surface-2/20 transition-colors"
                   >
                     {renderDetailCells(item)}
                     <ValueCells item={item} viewMode={viewMode} />

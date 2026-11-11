@@ -259,7 +259,7 @@ export default function SetupWizardCard({ tools = [] }) {
                     key={result.id}
                     type="button"
                     onClick={() => handleSelectScanResult(result.id, result)}
-                    className={`flex items-center justify-between gap-2 p-1.5 text-left text-xs transition-colors hover:bg-[var(--color-surface-hover)] ${
+                    className={`flex min-h-11 items-center justify-between gap-2 p-1.5 text-left text-xs transition-colors hover:bg-[var(--color-surface-hover)] ${
                       isSelected ? "bg-[var(--color-surface-raised)] font-medium" : ""
                     }`}
                   >
@@ -424,7 +424,7 @@ export default function SetupWizardCard({ tools = [] }) {
             suppressHydrationWarning
             tabIndex={0}
             aria-label="Command"
-            className="flex min-h-[48px] flex-1 items-center overflow-x-auto rounded border border-[var(--color-border)] bg-[var(--color-code-bg)] px-3 py-3 font-mono text-xs text-[var(--color-text)]"
+            className="flex min-h-[48px] flex-1 items-center overflow-x-auto rounded border border-[var(--color-border)] bg-[var(--color-code-bg)] px-3 py-3 font-mono text-xs text-[var(--color-code-fg)]"
           >
             <code>{!origin ? "Resolving gateway URL…" : snippet || "No copy-paste snippet is declared for this client."}</code>
           </pre>

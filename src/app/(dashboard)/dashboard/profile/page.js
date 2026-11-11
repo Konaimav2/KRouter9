@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Button, Toggle, Input } from "@/shared/components";
 import Icon from "@/shared/components/Icon";
+import LoadFailedState from "@/shared/components/LoadFailedState";
 import Modal, { ConfirmModal } from "@/shared/components/Modal";
 import LanguageSwitcher from "@/shared/components/LanguageSwitcher";
 import { useTheme } from "@/shared/hooks/useTheme";
@@ -45,6 +46,9 @@ export default function ProfilePage() {
   const [isShuttingDown, setIsShuttingDown] = useState(false);
   const [settings, setSettings] = useState({ fallbackStrategy: "fill-first" });
   const [loading, setLoading] = useState(true);
+  // Settings that failed to load must not render as saved defaults.
+  const [loadError, setLoadError] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const [passwords, setPasswords] = useState({
     current: "",
     new: "",
@@ -126,9 +130,12 @@ export default function ProfilePage() {
     }
   }, []);
 
-  useEffect(() => {
+  const loadSettings = () =>
     fetch("/api/settings")
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error(`Settings load failed (HTTP ${res.status})`);
+        return res.json();
+      })
       .then((data) => {
         setSettings(data);
         setOidcForm({
@@ -161,13 +168,28 @@ export default function ProfilePage() {
           outboundProxyUrl: "",
           outboundNoProxy: data?.outboundNoProxy || "",
         });
+        setLoadError(false);
         setLoading(false);
       })
       .catch((err) => {
         console.error("Failed to fetch settings:", err);
-        setLoading(false);
+        // Keep settings-bound controls disabled (loading stays true) until a
+        // load succeeds, so defaults are never saved over real settings.
+        setLoadError(true);
       });
+
+  useEffect(() => {
+    loadSettings();
   }, []);
+
+  const retryLoadSettings = async () => {
+    setRetrying(true);
+    try {
+      await loadSettings();
+    } finally {
+      setRetrying(false);
+    }
+  };
 
   const updateOutboundProxy = async (e) => {
     e.preventDefault();
@@ -940,6 +962,15 @@ export default function ProfilePage() {
 
   return (
     <div className="mx-auto w-full max-w-[72rem] px-1 sm:px-0">
+      {loadError && (
+        <LoadFailedState
+          className="mb-4"
+          title="Couldn't load settings"
+          message="Saved settings could not be loaded, so settings controls stay disabled. Retry to load them again."
+          onRetry={retryLoadSettings}
+          retrying={retrying}
+        />
+      )}
       <div className="mb-4 lg:hidden">
         <label
           htmlFor="settings-section"
@@ -1570,7 +1601,7 @@ export default function ProfilePage() {
                           target="_blank"
                           rel="noopener noreferrer"
                           download="krouter9-sp-metadata.xml"
-                          className="mt-2 inline-flex min-h-9 items-center gap-2 text-[var(--color-primary)] underline"
+                          className="mt-2 inline-flex min-h-11 items-center gap-2 text-[var(--color-primary)] underline"
                         >
                           <Icon name="download" size={16} />
                           Download XML

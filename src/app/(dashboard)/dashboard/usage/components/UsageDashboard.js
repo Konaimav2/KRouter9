@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Badge from "@/shared/components/Badge";
+import LoadFailedState from "@/shared/components/LoadFailedState";
 import { CircleCheck, CircleX } from "lucide-react";
 import { AI_PROVIDERS, FREE_PROVIDERS } from "@/shared/constants/providers";
 import OverviewCards from "./OverviewCards";
@@ -93,20 +94,20 @@ function RecentRequests({ requests = [] }) {
     <div className="min-h-[320px] border border-[var(--ledger-border)] bg-[var(--ledger-bg)] xl:h-[480px]">
       <div className="flex min-h-11 items-center gap-3 border-b border-border bg-surface-2 px-4 py-3"><span className="font-mono text-xs tabular-nums text-text-muted">LIVE</span><h3 className="text-sm font-semibold">Recent requests</h3></div>
       {!requests.length ? (
-        <div className="grid h-[260px] place-items-center px-6 text-center text-sm text-[var(--text-muted)]">No data yet — send a request through <code>/v1</code>.</div>
+        <div className="grid h-[260px] place-items-center px-6 text-center text-sm text-[var(--color-text-muted)]">No data yet — send a request through <code>/v1</code>.</div>
       ) : (
         <div className="max-h-[430px] overflow-auto custom-scrollbar" tabIndex={0} role="region" aria-label="Usage breakdown table">
           <table className="w-full min-w-[430px] border-collapse text-xs">
-            <thead className="sticky top-0 z-10 bg-[var(--table-header-bg)] text-[var(--text-muted)]"><tr><th className="px-3 py-2 text-left">Status</th><th className="px-3 py-2 text-left">Model / provider</th><th className="px-3 py-2 text-left">Key</th><th className="px-3 py-2 text-left">Error</th><th className="px-3 py-2 text-right">In / out</th><th className="px-3 py-2 text-right">Time</th></tr></thead>
+            <thead className="sticky top-0 z-10 bg-[var(--table-header-bg)] text-[var(--color-text-muted)]"><tr><th className="px-3 py-2 text-left">Status</th><th className="px-3 py-2 text-left">Model / provider</th><th className="px-3 py-2 text-left">Key</th><th className="px-3 py-2 text-left">Error</th><th className="px-3 py-2 text-right">In / out</th><th className="px-3 py-2 text-right">Time</th></tr></thead>
             <tbody>{requests.map((request, index) => {
               const status = statusInfo(request);
               return <tr key={`${request.timestamp}-${index}`} className="border-t border-[var(--ledger-rule)] hover:bg-[var(--table-row-hover)]">
-                <td className={`px-3 py-2 font-medium ${status.success ? "text-[var(--success)]" : "text-[var(--danger)]"}`}><span className="inline-flex items-center gap-1.5">{status.success ? <CircleCheck aria-hidden="true" size={14} /> : <CircleX aria-hidden="true" size={14} />} {status.text}</span></td>
-                <td className="max-w-[180px] px-3 py-2"><span className="font-mono tabular-nums block truncate text-[var(--text)]">{request.model}</span><span className="block truncate text-[var(--text-muted)]">{request.provider || "Unknown provider"}</span></td>
-                <td className="max-w-[140px] px-3 py-2 font-mono text-[var(--text-muted)]">{request.keyName || request.apiKeyMasked || "—"}</td>
-                <td className="max-w-[180px] truncate px-3 py-2 text-[var(--danger)]">{request.errorExcerpt || request.error || "—"}</td>
-                <td className="font-mono tabular-nums px-3 py-2 text-right"><span className="text-[var(--success)]">← {fmt(request.promptTokens)}</span> / <span className="text-[var(--danger)]">{fmt(request.completionTokens)} →</span></td>
-                <td className="px-3 py-2 text-right text-[var(--text-muted)]"><TimeAgo timestamp={request.timestamp} /></td>
+                <td className={`px-3 py-2 font-medium ${status.success ? "text-[var(--color-success)]" : "text-[var(--color-danger)]"}`}><span className="inline-flex items-center gap-1.5">{status.success ? <CircleCheck aria-hidden="true" size={14} /> : <CircleX aria-hidden="true" size={14} />} {status.text}</span></td>
+                <td className="max-w-[180px] px-3 py-2"><span className="font-mono tabular-nums block truncate text-[var(--color-text)]">{request.model}</span><span className="block truncate text-[var(--color-text-muted)]">{request.provider || "Unknown provider"}</span></td>
+                <td className="max-w-[140px] px-3 py-2 font-mono text-[var(--color-text-muted)]">{request.keyName || request.apiKeyMasked || "—"}</td>
+                <td className="max-w-[180px] truncate px-3 py-2 text-[var(--color-danger)]">{request.errorExcerpt || request.error || "—"}</td>
+                <td className="font-mono tabular-nums px-3 py-2 text-right"><span className="text-[var(--color-success)]">← {fmt(request.promptTokens)}</span> / <span className="text-[var(--color-danger)]">{fmt(request.completionTokens)} →</span></td>
+                <td className="px-3 py-2 text-right text-[var(--color-text-muted)]"><TimeAgo timestamp={request.timestamp} /></td>
               </tr>;
             })}</tbody>
           </table>
@@ -167,7 +168,7 @@ function groupData(data, field, sortBy, sortOrder) {
 }
 
 function LoadingBands() {
-  return <div className="space-y-6" aria-label="Loading usage">{["Overview", "Route activity", "Trend", "Breakdown"].map((title) => <section key={title} className="border border-border bg-surface"><header className="border-b border-border bg-surface-2 px-4 py-3"><h2 className="font-semibold">{title}</h2></header><div aria-label={`Loading ${title.toLowerCase()}`} className={`${title === "Overview" ? "h-24" : "h-72"} animate-pulse motion-reduce:animate-none bg-[var(--surface-hover)]`} /></section>)}</div>;
+  return <div className="space-y-6" role="status" aria-busy="true"><span className="sr-only">Loading usage</span>{["Overview", "Route activity", "Trend", "Breakdown"].map((title) => <section key={title} className="border border-border bg-surface"><header className="border-b border-border bg-surface-2 px-4 py-3"><h2 className="font-semibold">{title}</h2></header><div aria-hidden="true" className={`${title === "Overview" ? "h-24" : "h-72"} animate-pulse motion-reduce:animate-none bg-[var(--color-surface-hover)]`} /></section>)}</div>;
 }
 
 export default function UsageDashboard({ period, mode, scopeQuery }) {
@@ -240,11 +241,11 @@ export default function UsageDashboard({ period, mode, scopeQuery }) {
     if (!stats) return null;
     const commonSummary = (count) => {
       function SummaryCells(group) {
-        return <>{Array.from({ length: count }, (_, index) => <td key={index} className="px-6 py-3 text-[var(--text-muted)]">—</td>)}<td className="px-6 py-3 text-right">{fmt(group.summary.requests)}</td><td className="px-6 py-3 text-right text-[var(--text-muted)]">{fmtTime(group.summary.lastUsed)}</td></>;
+        return <>{Array.from({ length: count }, (_, index) => <td key={index} className="px-6 py-3 text-[var(--color-text-muted)]">—</td>)}<td className="px-6 py-3 text-right">{fmt(group.summary.requests)}</td><td className="px-6 py-3 text-right text-[var(--color-text-muted)]">{fmtTime(group.summary.lastUsed)}</td></>;
       }
       return SummaryCells;
     };
-    const detail = (item, first) => <><td className="px-6 py-3 font-medium">{first}</td>{tableView !== "model" && <td className="px-6 py-3 font-mono tabular-nums">{item.rawModel}</td>}<td className="px-6 py-3"><Badge variant={item.pending > 0 ? "primary" : "neutral"} size="sm">{item.provider}</Badge></td>{tableView === "account" && <td className="px-6 py-3">{item.accountName}</td>}<td className="px-6 py-3 text-right">{fmt(item.requests)}</td><td className="px-6 py-3 text-right text-[var(--text-muted)]">{fmtTime(item.lastUsed)}</td></>;
+    const detail = (item, first) => <><td className="px-6 py-3 font-medium">{first}</td>{tableView !== "model" && <td className="px-6 py-3 font-mono tabular-nums">{item.rawModel}</td>}<td className="px-6 py-3"><Badge variant={item.pending > 0 ? "primary" : "neutral"} size="sm">{item.provider}</Badge></td>{tableView === "account" && <td className="px-6 py-3">{item.accountName}</td>}<td className="px-6 py-3 text-right">{fmt(item.requests)}</td><td className="px-6 py-3 text-right text-[var(--color-text-muted)]">{fmtTime(item.lastUsed)}</td></>;
     if (tableView === "account") return { columns: ACCOUNT_COLUMNS, groups: groupData(sortData(stats.byAccount, {}, sortBy, sortOrder), "accountName", sortBy, sortOrder), summary: commonSummary(2), detail: (item) => detail(item, item.accountName), empty: "No account-specific usage recorded yet." };
     if (tableView === "apiKey") return { columns: API_KEY_COLUMNS, groups: groupData(sortData(stats.byApiKey, {}, sortBy, sortOrder), "keyName", sortBy, sortOrder), summary: commonSummary(2), detail: (item) => detail(item, item.keyName), empty: "No API key usage recorded yet." };
     if (tableView === "endpoint") return { columns: ENDPOINT_COLUMNS, groups: groupData(sortData(stats.byEndpoint, {}, sortBy, sortOrder), "endpoint", sortBy, sortOrder), summary: commonSummary(2), detail: (item) => detail(item, item.endpoint), empty: "No endpoint usage recorded yet." };
@@ -266,14 +267,14 @@ export default function UsageDashboard({ period, mode, scopeQuery }) {
   }, [config, mode]);
 
   if (loading && !stats) return <LoadingBands />;
-  if (!stats) return <div className="border border-[var(--danger)] bg-[var(--danger-wash)] p-4 text-sm"><strong>Usage unavailable.</strong> {statsError}<button type="button" onClick={fetchStats} className="ml-3 underline">Retry</button></div>;
+  if (!stats) return <LoadFailedState title="Usage unavailable" message={statsError || "Usage statistics could not be loaded. Retry to load them again."} onRetry={fetchStats} retrying={fetching} />;
 
   return <div className="space-y-[var(--space-6)]">
-    {(statsError || streamError) && <div className="border border-[var(--warning)] bg-[var(--warning-wash)] p-3 text-sm text-[var(--warning)]">{statsError || "Live updates disconnected. Displayed aggregate data may be stale."} <button type="button" onClick={fetchStats} className="font-semibold underline">Refresh</button></div>}
-    <section className="border border-border bg-surface"><header className="flex min-h-11 items-center gap-3 border-b border-border bg-surface-2 px-4 py-3"><h2 className="font-semibold">Overview</h2>{fetching && <span role="status" className="ml-auto text-xs text-[var(--text-muted)]">Refreshing…</span>}</header><OverviewCards stats={stats} viewMode={mode} density="compact" /></section>
-    <section className="border border-border bg-surface"><header className="flex min-h-11 items-center gap-3 border-b border-border bg-surface-2 px-4 py-3"><h2 className="font-semibold">Route activity</h2><span className="ml-auto font-mono tabular-nums text-xs text-[var(--text-muted)]">{stats.activeRequests?.length || 0} active</span></header><div className="grid min-w-0 gap-0 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]"><ProviderTopology providers={providers} activeRequests={stats.activeRequests || []} lastProvider={stats.recentRequests?.[0]?.provider || ""} errorProvider={stats.errorProvider || ""} /><RecentRequests requests={stats.recentRequests || []} /></div></section>
-    <section className="border border-border bg-surface"><header className="flex min-h-11 items-center gap-3 border-b border-border bg-surface-2 px-4 py-3"><h2 className="font-semibold">Trend</h2><span className="ml-auto font-mono tabular-nums text-xs text-[var(--text-muted)]">{mode === "tokens" ? "Tokens" : "USD"}</span></header><UsageChart period={period} viewMode={mode} scopeQuery={query} /></section>
-    <section className="border border-border bg-surface"><header className="flex min-h-11 items-center gap-3 border-b border-border bg-surface-2 px-4 py-3 flex-wrap"><h2 className="font-semibold">Breakdown</h2><div className="ml-auto flex items-center gap-2"><label htmlFor="usage-breakdown" className="sr-only">Break down usage by</label><select id="usage-breakdown" value={tableView} onChange={(event) => { setTableView(event.target.value); const params = new URLSearchParams(searchParams.toString()); params.set("table", event.target.value); router.replace(`?${params.toString()}`, { scroll: false }); }} className="h-9 rounded-[var(--radius-control)] border border-[var(--input-border)] bg-[var(--surface)] px-3 text-sm">{TABLE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div></header>{config && breakdownMetric.hasRows && breakdownMetric.metric === 0 ? (
+    {(statsError || streamError) && <div className="border border-[var(--color-warning)] bg-[var(--color-warning-wash)] p-3 text-sm text-[var(--color-warning)]">{statsError || "Live updates disconnected. Displayed aggregate data may be stale."} <button type="button" onClick={fetchStats} className="inline-flex min-h-[var(--touch-min)] items-center px-2 font-semibold underline">Refresh</button></div>}
+    <section className="border border-border bg-surface"><header className="flex min-h-11 items-center gap-3 border-b border-border bg-surface-2 px-4 py-3"><h2 className="font-semibold">Overview</h2>{fetching && <span role="status" className="ml-auto text-xs text-[var(--color-text-muted)]">Refreshing…</span>}</header><OverviewCards stats={stats} viewMode={mode} density="compact" /></section>
+    <section className="border border-border bg-surface"><header className="flex min-h-11 items-center gap-3 border-b border-border bg-surface-2 px-4 py-3"><h2 className="font-semibold">Route activity</h2><span className="ml-auto font-mono tabular-nums text-xs text-[var(--color-text-muted)]">{stats.activeRequests?.length || 0} active</span></header><div className="grid min-w-0 gap-0 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]"><ProviderTopology providers={providers} activeRequests={stats.activeRequests || []} lastProvider={stats.recentRequests?.[0]?.provider || ""} errorProvider={stats.errorProvider || ""} /><RecentRequests requests={stats.recentRequests || []} /></div></section>
+    <section className="border border-border bg-surface"><header className="flex min-h-11 items-center gap-3 border-b border-border bg-surface-2 px-4 py-3"><h2 className="font-semibold">Trend</h2><span className="ml-auto font-mono tabular-nums text-xs text-[var(--color-text-muted)]">{mode === "tokens" ? "Tokens" : "USD"}</span></header><UsageChart period={period} viewMode={mode} scopeQuery={query} /></section>
+    <section className="border border-border bg-surface"><header className="flex min-h-11 items-center gap-3 border-b border-border bg-surface-2 px-4 py-3 flex-wrap"><h2 className="font-semibold">Breakdown</h2><div className="ml-auto flex items-center gap-2"><label htmlFor="usage-breakdown" className="sr-only">Break down usage by</label><select id="usage-breakdown" value={tableView} onChange={(event) => { setTableView(event.target.value); const params = new URLSearchParams(searchParams.toString()); params.set("table", event.target.value); router.replace(`?${params.toString()}`, { scroll: false }); }} className="h-11 rounded-[var(--radius-control)] border border-[var(--input-border)] bg-[var(--color-surface)] px-3 text-sm">{TABLE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div></header>{config && breakdownMetric.hasRows && breakdownMetric.metric === 0 ? (
               <div className="flex flex-col items-center gap-1 px-4 py-10 text-center text-sm text-[var(--color-text-muted)]">
                 <span className="font-medium text-[var(--color-text)]">
                   {mode === "costs" ? "No measured cost for this period" : "No token counts for this period"}
@@ -284,6 +285,6 @@ export default function UsageDashboard({ period, mode, scopeQuery }) {
                     : "Widen the period or clear the scope filter."}
                 </span>
               </div>
-            ) : config && <UsageTable title="" columns={config.columns} groupedData={config.groups} tableType={tableView} sortBy={sortBy} sortOrder={sortOrder} onToggleSort={toggleSort} viewMode={mode} storageKey={`usage-ledger:${tableView}`} renderSummaryCells={config.summary} renderDetailCells={config.detail} emptyMessage={config.empty} />}{tableView === "apiKey" && config?.groups?.length > 0 && <div className="border-t border-[var(--ledger-rule)] p-3 text-xs text-[var(--text-muted)]">Deep-link a key group without copying credentials: {config.groups.slice(0, 3).map((group, index) => <Fragment key={group.groupKey}>{index ? " · " : ""}<Link className="text-[var(--primary)] underline" href={`?tab=overview&table=apiKey&key=${encodeURIComponent(group.groupKey)}`}>{group.groupKey}</Link></Fragment>)}</div>}</section>
+            ) : config && <UsageTable title="" columns={config.columns} groupedData={config.groups} tableType={tableView} sortBy={sortBy} sortOrder={sortOrder} onToggleSort={toggleSort} viewMode={mode} storageKey={`usage-ledger:${tableView}`} renderSummaryCells={config.summary} renderDetailCells={config.detail} emptyMessage={config.empty} />}{tableView === "apiKey" && config?.groups?.length > 0 && <div className="border-t border-[var(--ledger-rule)] p-3 text-xs text-[var(--color-text-muted)]">Deep-link a key group without copying credentials: {config.groups.slice(0, 3).map((group, index) => <Fragment key={group.groupKey}>{index ? " · " : ""}<Link className="text-[var(--color-primary)] underline" href={`?tab=overview&table=apiKey&key=${encodeURIComponent(group.groupKey)}`}>{group.groupKey}</Link></Fragment>)}</div>}</section>
   </div>;
 }
