@@ -7,6 +7,7 @@ import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, v
 import { CSS } from "@dnd-kit/utilities";
 import { restrictToVerticalAxis, restrictToParentElement } from "@dnd-kit/modifiers";
 import { Button, Modal, Input, CardSkeleton, ModelSelectModal, ConfirmModal, CapacityBadges, Toggle } from "@/shared/components";
+import { useNotificationStore } from "@/store/notificationStore";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import { useModelCaps } from "@/shared/hooks/useModelCaps";
 import { isOpenAICompatibleProvider, isAnthropicCompatibleProvider } from "@/shared/constants/providers";
@@ -60,6 +61,12 @@ export default function CombosPage() {
   const [fetchError, setFetchError] = useState("");
   const [actionError, setActionError] = useState("");
   const { copied, copy } = useCopyToClipboard();
+  const notify = useNotificationStore();
+  // Coalesces capacity-adapter success toasts: one toast 1.5 s after the last successful PATCH.
+  const adapterToastTimerRef = useRef(null);
+  const adapterToastIdRef = useRef(null);
+
+  useEffect(() => () => clearTimeout(adapterToastTimerRef.current), []);
 
   useEffect(() => {
     // Initial load intentionally synchronizes remote state after mount.
@@ -112,7 +119,16 @@ export default function CombosPage() {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setActionError("");
+      clearTimeout(adapterToastTimerRef.current);
+      adapterToastTimerRef.current = setTimeout(() => {
+        adapterToastTimerRef.current = null;
+        // Keep exactly one live adapter toast, however slowly the user edits.
+        if (adapterToastIdRef.current != null) notify.removeNotification(adapterToastIdRef.current);
+        adapterToastIdRef.current = notify.success("Capacity adapter saved");
+      }, 1500);
     } catch (error) {
+      clearTimeout(adapterToastTimerRef.current);
+      adapterToastTimerRef.current = null;
       setCapacityAdapter(previous);
       setActionError(`Could not save the capacity adapter: ${error.message}. The previous setting is still active.`);
     }
@@ -128,6 +144,7 @@ export default function CombosPage() {
       if (res.ok) {
         await fetchData();
         setShowCreateModal(false);
+        notify.success(`Combo “${data?.name}” created`);
         return { ok: true };
       }
       const err = await res.json();
@@ -149,22 +166,30 @@ export default function CombosPage() {
         // comboStrategies is keyed by combo name — migrate the entry on rename
         // so the renamed route keeps its strategy instead of going stale.
         const nextName = data?.name;
+        let migrationError = "";
         if (nextName && oldName && nextName !== oldName && comboStrategies[oldName]) {
           const updated = { ...comboStrategies };
           updated[nextName] = updated[oldName];
           delete updated[oldName];
           try {
-            await fetch("/api/settings", {
+            const migRes = await fetch("/api/settings", {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ comboStrategies: updated }),
             });
+            if (!migRes.ok) migrationError = `HTTP ${migRes.status}`;
           } catch (error) {
             console.log("Error migrating combo strategy:", error);
+            migrationError = "network error";
           }
-          setComboStrategies(updated);
+          if (!migrationError) setComboStrategies(updated);
         }
         await fetchData();
+        if (migrationError) {
+          notify.warning(`Combo “${nextName}” saved, but its routing strategy could not be moved (${migrationError}). Re-select the strategy.`);
+        } else {
+          notify.success(`Combo “${data?.name || oldName}” saved`);
+        }
         return { ok: true };
       }
       const err = await res.json();
@@ -188,9 +213,20 @@ export default function CombosPage() {
           const res = await fetch(`/api/combos/${id}`, { method: "DELETE" });
           if (res.ok) {
             setCombos(combos.filter(c => c.id !== id));
+            notify.success(`Combo “${name}” deleted`);
+          } else {
+            let reason = `HTTP ${res.status}`;
+            try {
+              const err = await res.json();
+              if (err?.error) reason = err.error;
+            } catch {
+              // Non-JSON body: keep the HTTP status as the reason.
+            }
+            notify.error(`Could not delete combo “${name}”: ${reason}`);
           }
         } catch (error) {
           console.log("Error deleting combo:", error);
+          notify.error(`Could not delete combo “${name}”: network error. Check the gateway and retry.`);
         }
       }
     });
@@ -218,6 +254,7 @@ export default function CombosPage() {
 
       setComboStrategies(updated);
       setActionError("");
+      notify.success("Combo strategy saved");
     } catch (error) {
       setActionError(`Could not save the combo strategy: ${error.message}. The previous strategy is still active.`);
     }
@@ -483,7 +520,7 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
       setDraftModels(modelsToSave);
       cancelEdit();
       setNameError("");
-      setAnnouncement(`${nameChanged ? trimmedName : combo.name} saved with ${modelsToSave.length} ordered members`);
+      // The toast (aria-live region in DashboardLayout) is the single save announcement.
       onToggleExpanded(false);
     } catch {
       setSaveError("Network error. Check the gateway and retry.");
@@ -561,7 +598,7 @@ function ComboCard({ combo, getCaps, activeProviders = [], copied, onCopy, onDel
                 error={nameError}
               />
             </div>
-            <div className="grid grid-cols-3 overflow-hidden border border-[var(--color-border)]" role="group" aria-label="Routing strategy">{STRATEGY_OPTIONS.map((option) => <button key={option.value} type="button" aria-pressed={current === option.value} onClick={() => onSetStrategy({ fallbackStrategy: option.value })} className={`min-h-11 px-3 text-xs font-medium ${current === option.value ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]" : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]"}`}>{option.shortLabel}</button>)}</div>
+            <div className="grid grid-cols-3 overflow-hidden border border-[var(--color-border)]" role="group" aria-label="Routing strategy">{STRATEGY_OPTIONS.map((option) => <button key={option.value} type="button" aria-pressed={current === option.value} onClick={() => { if (current === option.value) return; onSetStrategy({ fallbackStrategy: option.value }); }} className={`min-h-11 px-3 text-xs font-medium ${current === option.value ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]" : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]"}`}>{option.shortLabel}</button>)}</div>
             {draftModels.map((model, index) => (
               <div
                 key={`${model}-${index}`}
@@ -669,8 +706,8 @@ function CapacityAdapterCap({ cap, entry, onChange, activeProviders, getCaps }) 
         <div className="flex flex-wrap items-center gap-3">
           <label className="flex min-h-11 items-center gap-2 text-xs"><Toggle checked={enabled} onChange={(value) => patch({ enabled: value })} ariaLabel="Combo enabled" size="sm" /><span>{enabled ? "Enabled" : "Disabled"}</span></label>
           <div className="grid grid-cols-2 overflow-hidden rounded-[var(--radius-sm)] border border-[var(--color-border)]">
-            <button type="button" disabled={!enabled} onClick={() => patch({ roundRobin: false })} className={`min-h-11 px-3 text-xs ${!roundRobin ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]" : "text-[var(--color-text-muted)]"}`}>Fallback</button>
-            <button type="button" disabled={!enabled} onClick={() => patch({ roundRobin: true })} className={`min-h-11 px-3 text-xs ${roundRobin ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]" : "text-[var(--color-text-muted)]"}`}>Round robin</button>
+            <button type="button" disabled={!enabled} onClick={() => { if (!roundRobin) return; patch({ roundRobin: false }); }} className={`min-h-11 px-3 text-xs ${!roundRobin ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]" : "text-[var(--color-text-muted)]"}`}>Fallback</button>
+            <button type="button" disabled={!enabled} onClick={() => { if (roundRobin) return; patch({ roundRobin: true }); }} className={`min-h-11 px-3 text-xs ${roundRobin ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]" : "text-[var(--color-text-muted)]"}`}>Round robin</button>
           </div>
         </div>
       </div>

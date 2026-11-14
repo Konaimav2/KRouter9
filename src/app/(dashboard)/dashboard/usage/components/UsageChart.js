@@ -145,11 +145,12 @@ export default function UsageChart({ period = "7d", viewMode = "tokens", scopeQu
           </AreaChart>
         </ResponsiveContainer>
       )}
-    {hasData && (
-        <div className="overflow-x-auto border-t border-border pt-3" tabIndex={0} role="region" aria-label="Usage trend data table">
-          <table className="w-full min-w-[420px] text-xs"><thead><tr><th className="p-2 text-left">Period</th><th className="p-2 text-right">{chartMode === "tokens" ? "Tokens" : "Cost (USD)"}</th></tr></thead><tbody>{data.map((point, index) => <tr key={`${point.label}-${index}`} className="border-t border-border"><td className="p-2">{point.label}</td><td className="p-2 text-right font-mono tabular-nums">{chartMode === "tokens" ? fmtTokens(point.tokens) : fmtCost(point.cost)}</td></tr>)}</tbody></table>
-        </div>
-      )}
+      {hasData && (() => {
+        const metric = chartMode === "tokens" ? "tokens" : "cost";
+        const peak = data.reduce((best, point) => (Number(point[metric]) > Number(best[metric]) ? point : best), data[0]);
+        const peakValue = chartMode === "tokens" ? fmtTokens(peak[metric]) : fmtCost(peak[metric]);
+        return <p className="sr-only">{`Usage trend, ${data.length} points. Peak ${chartMode === "tokens" ? "tokens" : "cost"} ${peakValue} at ${peak.label}.`}</p>;
+      })()}
     </div>
   );
 }

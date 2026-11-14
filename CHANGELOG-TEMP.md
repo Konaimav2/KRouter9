@@ -6,6 +6,17 @@ version and this file is removed.
 
 ---
 
+## Unreleased — combo save feedback and Usage Trend cleanup (2026-11-13)
+
+- Combos now confirm what you do with a toast: creating a combo, saving a route (including a rename),
+  deleting a combo, and saving a strategy or capacity adapter. A failed delete shows an error toast,
+  including when the network drops. If a rename succeeds but its routing strategy can't be moved,
+  you get a warning instead of "saved".
+- Capacity adapter edits show a single "saved" toast no matter how many changes you make in a row.
+  Clicking the strategy that is already selected no longer sends a save.
+- Usage and analytics: the data table under the Trend chart is gone. Screen readers still get a short
+  summary of the chart.
+
 ## Unreleased — dashboard accessibility and reliability pass (2026-11-11)
 
 - API keys stay masked everywhere in the dashboard (CLI tool cards, media examples, MITM) and are
